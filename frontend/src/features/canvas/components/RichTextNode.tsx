@@ -36,8 +36,11 @@ export const RichTextNode = memo(function RichTextNode({
 
   const handleDragEnd = (event: KonvaEventObject<DragEvent>) => {
     const target = event.target
-
-    moveNode(node.id, target.x(), target.y())
+    moveNode({
+      id: node.id,
+      x: target.x(),
+      y: target.y(),
+    })
   }
   return (
     <Group

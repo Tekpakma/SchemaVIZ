@@ -21,7 +21,7 @@ export const renderTagEditorStyle = {
   whiteSpace: 'normal',
 } satisfies CSSProperties
 
-const renderTagCss = `
+export const renderTagCss = `
 .canvas-render-tag-root {
   box-sizing: border-box;
   width: 100%;

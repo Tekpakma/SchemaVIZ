@@ -7,7 +7,7 @@ import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { ActiveCanvasNodeProvider, useActiveCanvasNodeId } from '../canvas/components/activeCanvasNodeContext'
 import { useCanvasEditingNodeId, useCanvasNode } from '@/store/canvasStore'
 import { LexicalCommitPlugin } from './LexicalCommitPlugin'
-import { renderTagEditorStyle } from './exportRenderTagHtml'
+import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
 
 
 export function LexicalOverlay() {
@@ -53,11 +53,13 @@ export function LexicalOverlay() {
         boxShadow: '0 6px 18px rgba(0, 0, 0, 0.12)',
       }}
     >
+      <style>{renderTagCss}</style>
       <LexicalComposer initialConfig={initialConfig}>
         <RichTextPlugin
           contentEditable={
             <ContentEditable
               autoFocus
+              className="canvas-render-tag-root"
               style={renderTagEditorStyle}
             />
           }
