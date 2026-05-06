@@ -5,7 +5,7 @@ import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { ActiveCanvasNodeProvider, useActiveCanvasNodeId } from '../canvas/components/activeCanvasNodeContext'
-import { useCanvasEditingNodeId, useCanvasNode } from '@/store/canvasStore'
+import { useCanvasEditingNodeId, useCanvasNode, useCanvasViewport } from '@/store/canvasStore'
 import { LexicalCommitPlugin } from './LexicalCommitPlugin'
 import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
 
@@ -13,6 +13,7 @@ import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
 export function LexicalOverlay() {
   const nodeId = useActiveCanvasNodeId()
   const node = useCanvasNode(nodeId)
+  const viewport = useCanvasViewport()
 
   const initialConfig = useMemo(
     () => ({
@@ -41,10 +42,12 @@ export function LexicalOverlay() {
       style={{
         position: 'absolute',
         boxSizing: 'border-box',
-        left: node.x,
-        top: node.y,
+        left: 0,
+        top: 0,
         width: node.width,
         height: node.height,
+        transform: `translate(${viewport.x + node.x * viewport.scale}px, ${viewport.y + node.y * viewport.scale}px) scale(${viewport.scale})`,
+        transformOrigin: 'top left',
         zIndex: 10,
         background: 'white',
         outline: '2px solid #2563eb',

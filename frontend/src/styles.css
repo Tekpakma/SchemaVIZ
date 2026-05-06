@@ -7,6 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --app-navbar-height: 48px;
   --sea-ink: #173a40;
   --sea-ink-soft: #416166;
   --lagoon: #4fb8b2;
@@ -163,6 +164,12 @@ body,
   min-height: 100%;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+}
+
 body {
   margin: 0;
   color: var(--sea-ink);
@@ -176,6 +183,21 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--app-navbar-height) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-navbar {
+  height: var(--app-navbar-height);
+}
+
+.app-main {
+  min-height: 0;
+  overflow: hidden;
 }
 
 body::before {

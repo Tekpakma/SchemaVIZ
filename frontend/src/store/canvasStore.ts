@@ -8,7 +8,14 @@ type CanvasState = {
   nodes: Record<NodeId, CanvasNode>
   selectedNodeId: NodeId | null
   editingNodeId: NodeId | null
+  viewport: CanvasViewport
   actions: CanvasActions
+}
+
+export type CanvasViewport = {
+  x: number
+  y: number
+  scale: number
 }
 
 export type MoveNodePayload = {
@@ -29,11 +36,13 @@ export type CommitNodeTextPayload = {
   html: string
   contentHeight: number
 }
+
 type CanvasActions = {
   addNode: (node: CanvasNode) => void
   selectNode: (id: NodeId | null) => void
   startEditing: (id: NodeId) => void
   stopEditing: () => void
+  setViewport: (viewport: CanvasViewport) => void
   moveNode: (payload: MoveNodePayload) => void
   resizeNode: (payload: ResizeNodePayload) => void
   commitNodeText: (payload: CommitNodeTextPayload) => void
@@ -44,6 +53,11 @@ const useCanvasStore = create<CanvasState>()(
       nodes: {},
       selectedNodeId: null,
       editingNodeId: null,
+      viewport: {
+        x: 0,
+        y: 0,
+        scale: 1,
+      },
       actions: {
         addNode: (node) =>
           set(
@@ -80,6 +94,17 @@ const useCanvasStore = create<CanvasState>()(
             },
             false,
             'canvas/stopEditing',
+          ),
+
+        setViewport: ({ x, y, scale }) =>
+          set(
+            (state) => {
+              state.viewport.x = x
+              state.viewport.y = y
+              state.viewport.scale = scale
+            },
+            false,
+            'canvas/setViewport',
           ),
 
         moveNode: ({ id, x, y }) =>
@@ -145,3 +170,5 @@ export const useSelectedNodeId = () =>
   useCanvasStore((state) => state.selectedNodeId)
 export const useCanvasEditingNodeId = () =>
   useCanvasStore((state) => state.editingNodeId)
+export const useCanvasViewport = () =>
+  useCanvasStore((state) => state.viewport)
