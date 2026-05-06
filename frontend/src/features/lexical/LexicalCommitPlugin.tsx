@@ -5,6 +5,7 @@ import {
   BLUR_COMMAND,
   COMMAND_PRIORITY_EDITOR,
   COMMAND_PRIORITY_HIGH,
+  INSERT_LINE_BREAK_COMMAND,
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
 } from 'lexical'
@@ -79,10 +80,15 @@ export function LexicalCommitPlugin() {
       editor.registerCommand(
         KEY_ENTER_COMMAND,
         (event) => {
-          if (!event || (!event.metaKey && !event.ctrlKey)) return false
+          if (!event) return false
+
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault()
+            return commit()
+          }
 
           event.preventDefault()
-          return commit()
+          return editor.dispatchCommand(INSERT_LINE_BREAK_COMMAND, false)
         },
         COMMAND_PRIORITY_HIGH,
       ),

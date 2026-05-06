@@ -6,6 +6,9 @@ export const renderTagAccuracy = 'balanced'
 
 export const renderTagEditorStyle = {
   boxSizing: 'border-box',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
   width: '100%',
   height: '100%',
   minHeight: '100%',
@@ -16,7 +19,8 @@ export const renderTagEditorStyle = {
   fontSize: 12,
   lineHeight: 1.2,
   color: 'rgb(0, 0, 0)',
-  overflow: 'hidden',
+  textAlign: 'center',
+  overflow: 'visible',
   overflowWrap: 'break-word',
   whiteSpace: 'normal',
 } satisfies CSSProperties
@@ -25,13 +29,13 @@ export const renderTagCss = `
 .canvas-render-tag-root {
   box-sizing: border-box;
   width: 100%;
-  min-height: 100%;
   margin: 0;
   padding: 10px;
   font-family: sans-serif;
   font-size: 12px;
   line-height: 1.2;
   color: rgb(0, 0, 0);
+  text-align: center;
   white-space: normal;
   overflow-wrap: break-word;
 }
@@ -56,7 +60,7 @@ export const renderTagCss = `
 }
 
 .canvas-editor-paragraph {
-  margin: 1em 0;
+  margin: 0;
 }
 
 .canvas-editor-bold {

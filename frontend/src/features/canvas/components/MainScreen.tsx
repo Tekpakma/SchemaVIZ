@@ -1,5 +1,5 @@
 import { Stage, Layer } from 'react-konva'
-import { RichTextNode } from './RichTextNode'
+import { RichTextNode, RichTextNodeText } from './RichTextNode'
 import { useCanvasNodeIds } from '@/store/canvasStore'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
@@ -39,6 +39,11 @@ export function MainScreen() {
         <Layer>
           {nodeIds.map((id) => (
             <RichTextNode key={id} nodeId={id} />
+          ))}
+        </Layer>
+        <Layer listening={false}>
+          {nodeIds.map((id) => (
+            <RichTextNodeText key={id} nodeId={id} />
           ))}
         </Layer>
       </Stage>

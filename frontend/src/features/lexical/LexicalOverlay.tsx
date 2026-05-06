@@ -1,14 +1,34 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
-import { ActiveCanvasNodeProvider, useActiveCanvasNodeId } from '../canvas/components/activeCanvasNodeContext'
-import { useCanvasEditingNodeId, useCanvasNode, useCanvasViewport } from '@/store/canvasStore'
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import {
+  ActiveCanvasNodeProvider,
+  useActiveCanvasNodeId,
+} from '../canvas/components/activeCanvasNodeContext'
+import {
+  useCanvasEditingNodeId,
+  useCanvasNode,
+  useCanvasViewport,
+} from '@/store/canvasStore'
+import { CANVAS_NODE_SURFACE_CSS_VALUE } from '@/features/canvas/themeColors'
 import { LexicalCommitPlugin } from './LexicalCommitPlugin'
 import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
+import { TEST_IDS } from '#/constants'
 
+
+function LexicalAutoFocusPlugin() {
+  const [editor] = useLexicalComposerContext()
+
+  useEffect(() => {
+    editor.focus()
+  }, [editor])
+
+  return null
+}
 
 export function LexicalOverlay() {
   const nodeId = useActiveCanvasNodeId()
@@ -39,21 +59,14 @@ export function LexicalOverlay() {
 
   return (
     <div
+      className="absolute top-0 left-0 z-10 box-border overflow-visible rounded-lg"
+      data-testid={TEST_IDS.LEXICAL_OVERLAY}
       style={{
-        position: 'absolute',
-        boxSizing: 'border-box',
-        left: 0,
-        top: 0,
+        background: CANVAS_NODE_SURFACE_CSS_VALUE,
         width: node.width,
         height: node.height,
         transform: `translate(${viewport.x + node.x * viewport.scale}px, ${viewport.y + node.y * viewport.scale}px) scale(${viewport.scale})`,
         transformOrigin: 'top left',
-        zIndex: 10,
-        background: 'white',
-        outline: '2px solid #2563eb',
-        borderRadius: 8,
-        overflow: 'hidden',
-        boxShadow: '0 6px 18px rgba(0, 0, 0, 0.12)',
       }}
     >
       <style>{renderTagCss}</style>
@@ -71,13 +84,12 @@ export function LexicalOverlay() {
         />
 
         <HistoryPlugin />
-
+        <LexicalAutoFocusPlugin />
         <LexicalCommitPlugin />
       </LexicalComposer>
     </div>
   )
 }
-
 
 export function LexicalOverlayWrapper() {
   const editingNodeId = useCanvasEditingNodeId()

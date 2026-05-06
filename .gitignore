@@ -14,3 +14,6 @@ todos.json
 mcp-todos.json
 backend/db.sqlite3*
 *.pyc
+.playwright-cli/
+playwright-report/
+test-results/

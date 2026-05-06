@@ -17,7 +17,7 @@ export const DEFAULT_CANVAS_NODE: CanvasNode = {
   height: 120,
   lexicalJson: '',
   html: `
-        <div style="font-family: sans-serif; padding: 10px;">
+        <div style="font-family: sans-serif; padding: 10px; text-align: center;">
           <b style="color: #2563eb;">SERVER_01</b>
           <div style="font-size: 11px; margin-top: 4px;">CPU Usage</div>
           <div style="color: gray; font-size: 10px;">Value: 42%</div>
