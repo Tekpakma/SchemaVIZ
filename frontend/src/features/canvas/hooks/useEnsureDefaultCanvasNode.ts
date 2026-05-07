@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
-import { DEFAULT_CANVAS_NODE } from '../constants'
+import { DEFAULT_CANVAS_NODES } from '../constants'
 
 /**
  * Seeds the canvas with an initial rich-text node when it is empty.
@@ -11,7 +11,8 @@ export function useEnsureDefaultCanvasNode() {
 
   useEffect(() => {
     if (nodeIds.length > 0) return
-
-    addNode(DEFAULT_CANVAS_NODE)
+    DEFAULT_CANVAS_NODES.forEach((DEFAULT_CANVAS_NODE) =>
+      addNode(DEFAULT_CANVAS_NODE),
+    )
   }, [addNode, nodeIds.length])
 }

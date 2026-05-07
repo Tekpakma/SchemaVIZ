@@ -33,19 +33,22 @@ function normalizeRect(start: Point, end: Point): MarqueeSelectionRect {
   }
 }
 
-function containsNode(rect: MarqueeSelectionRect, nodeRect: MarqueeSelectionRect) {
+function intersectsNode(
+  rect: MarqueeSelectionRect,
+  nodeRect: MarqueeSelectionRect,
+) {
   return (
-    nodeRect.x >= rect.x &&
-    nodeRect.y >= rect.y &&
-    nodeRect.x + nodeRect.width <= rect.x + rect.width &&
-    nodeRect.y + nodeRect.height <= rect.y + rect.height
+    nodeRect.x < rect.x + rect.width &&
+    nodeRect.x + nodeRect.width > rect.x &&
+    nodeRect.y < rect.y + rect.height &&
+    nodeRect.y + nodeRect.height > rect.y
   )
 }
 
 /**
  * Provides Shift+left-drag marquee selection in canvas world coordinates.
  * The hook converts pointer positions through the current viewport and selects
- * nodes whose full frame is contained in the dragged rectangle.
+ * nodes whose frame intersects the dragged rectangle.
  */
 export function useCanvasMarqueeSelection() {
   const nodes = useCanvasNodes()
@@ -73,7 +76,7 @@ export function useCanvasMarqueeSelection() {
 
       Object.values(nodes).forEach((node) => {
         if (
-          containsNode(rect, {
+          intersectsNode(rect, {
             x: node.x,
             y: node.y,
             width: node.width,

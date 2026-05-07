@@ -1,5 +1,6 @@
 import { Stage, Layer, Rect } from 'react-konva'
 import { RichTextNode, RichTextNodeText } from './RichTextNode'
+import { SelectedNodeToolbar } from './SelectedNodeToolbar'
 import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
@@ -96,6 +97,7 @@ export function MainScreen() {
           )}
         </Layer>
       </Stage>
+      <SelectedNodeToolbar />
       {<LexicalOverlayWrapper />}
     </div>
   )
