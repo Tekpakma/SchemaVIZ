@@ -135,7 +135,7 @@ export function MainScreen() {
           onZoomOut={zoomOut}
         />
         <SelectedNodeToolbar />
-        {<LexicalOverlayWrapper />}
+        <LexicalOverlayWrapper />
       </div>
     </CanvasHelperLinesProvider>
   )
