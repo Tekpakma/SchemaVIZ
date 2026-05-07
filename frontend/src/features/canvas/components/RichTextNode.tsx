@@ -16,43 +16,77 @@ import type { LayoutResult } from 'render-tag'
 import type { NodeId } from '@/features/canvas/model/types'
 import { memo, useMemo } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
+import { getCanvasNodeShapeDefinition } from '../nodeShapes'
+import { getRenderTagTextBounds } from '@/features/rendering/renderTagTextBounds'
 
 type RichTextNodeProps = {
   nodeId: NodeId
 }
 
-type LayoutTreeNode =
-  | LayoutResult['layoutRoot']
-  | LayoutResult['layoutRoot']['children'][number]
-
-function getTextBounds(layoutResult: LayoutResult) {
-  let top = Number.POSITIVE_INFINITY
-  let bottom = Number.NEGATIVE_INFINITY
-
-  const visit = (layoutNode: LayoutTreeNode) => {
-    if (layoutNode.type === 'text') {
-      if (!layoutNode.text.trim()) return
-
-      const lineHeight =
-        layoutNode.style.lineHeight || layoutNode.style.fontSize * 1.2
-
-      top = Math.min(top, layoutNode.y - lineHeight * 0.8)
-      bottom = Math.max(bottom, layoutNode.y + lineHeight * 0.2)
-      return
-    }
-
-    layoutNode.children.forEach(visit)
-  }
-
-  visit(layoutResult.layoutRoot)
-
-  if (!Number.isFinite(top) || !Number.isFinite(bottom)) return null
-
-  return {
-    top,
-    bottom,
-  }
+type RichTextNodeSurfaceProps = {
+  width: number
+  height: number
+  fill: string
+  cornerRadius: number
 }
+
+type RichTextNodeContentProps = {
+  x: number
+  y: number
+  width: number
+  height: number
+  layoutResult: LayoutResult
+}
+
+const RichTextNodeSurface = memo(function RichTextNodeSurface({
+  width,
+  height,
+  fill,
+  cornerRadius,
+}: RichTextNodeSurfaceProps) {
+  return (
+    <Rect
+      width={width}
+      height={height}
+      fill={fill}
+      cornerRadius={cornerRadius}
+      listening
+    />
+  )
+})
+
+const RichTextNodeContent = memo(function RichTextNodeContent({
+  x,
+  y,
+  width,
+  height,
+  layoutResult,
+}: RichTextNodeContentProps) {
+  const textBounds = getRenderTagTextBounds(layoutResult)
+  const contentOffsetY = textBounds
+    ? height / 2 - (textBounds.top + textBounds.bottom) / 2
+    : 0
+
+  return (
+    <Group x={x} y={y + contentOffsetY} listening={false}>
+      <Shape
+        width={width}
+        height={layoutResult.height}
+        listening={false}
+        sceneFunc={({ _context: ctx }) => {
+          ctx.save()
+          drawLayout({
+            layout: layoutResult,
+            ctx,
+            width,
+            pixelRatio: 1,
+          })
+          ctx.restore()
+        }}
+      />
+    </Group>
+  )
+})
 
 export const RichTextNode = memo(function RichTextNode({
   nodeId,
@@ -72,6 +106,8 @@ export const RichTextNode = memo(function RichTextNode({
   )
 
   if (!node || editingNodeId === node.id) return null
+
+  const shapeDefinition = getCanvasNodeShapeDefinition(node)
 
   const handleClick = () => {
     selectNode(node.id)
@@ -101,12 +137,11 @@ export const RichTextNode = memo(function RichTextNode({
       onDragMove={handleDragMove}
       onDragEnd={handleDragMove}
     >
-      <Rect
+      <RichTextNodeSurface
         width={node.width}
         height={node.height}
         fill={fill}
-        cornerRadius={8}
-        listening
+        cornerRadius={shapeDefinition.cornerRadius}
       />
     </Group>
   )
@@ -125,28 +160,13 @@ export const RichTextNodeText = memo(function RichTextNodeText({
 
   if (!node || !layoutResult || editingNodeId === node.id) return null
 
-  const textBounds = getTextBounds(layoutResult)
-  const contentOffsetY = textBounds
-    ? node.height / 2 - (textBounds.top + textBounds.bottom) / 2
-    : 0
-
   return (
-    <Group x={node.x} y={node.y + contentOffsetY} listening={false}>
-      <Shape
-        width={node.width}
-        height={layoutResult.height}
-        listening={false}
-        sceneFunc={({ _context: ctx }) => {
-          ctx.save()
-          drawLayout({
-            layout: layoutResult,
-            ctx,
-            width: node.width,
-            pixelRatio: 1,
-          })
-          ctx.restore()
-        }}
-      />
-    </Group>
+    <RichTextNodeContent
+      x={node.x}
+      y={node.y}
+      width={node.width}
+      height={node.height}
+      layoutResult={layoutResult}
+    />
   )
 })

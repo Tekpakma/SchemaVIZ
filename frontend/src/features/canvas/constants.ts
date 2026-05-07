@@ -1,4 +1,8 @@
 import type { CanvasNode } from './model/types'
+import {
+  DEFAULT_CANVAS_NODE_SHAPE,
+  DEFAULT_CANVAS_NODE_SHAPE_NAME,
+} from './nodeShapes'
 
 export const CANVAS_INITIAL_STAGE_SIZE = {
   width: 800,
@@ -11,10 +15,11 @@ export const CANVAS_SCALE_STEP = 1.06
 
 export const DEFAULT_CANVAS_NODE: CanvasNode = {
   id: 'node-1',
+  shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
   x: 80,
   y: 80,
-  width: 220,
-  height: 120,
+  width: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.width,
+  height: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.height,
   lexicalJson: '',
   html: `
         <div style="font-family: sans-serif; padding: 10px; text-align: center;">

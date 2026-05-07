@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 import type { CanvasNode, NodeId } from '@/features/canvas/model/types'
 import { useShallow } from 'zustand/react/shallow'
+import { getCanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
 
 type CanvasState = {
   nodes: Record<NodeId, CanvasNode>
@@ -126,8 +127,10 @@ const useCanvasStore = create<CanvasState>()(
               const node = state.nodes[id]
               if (!node) return
 
-              node.width = width
-              node.height = height
+              const shapeDefinition = getCanvasNodeShapeDefinition(node)
+
+              node.width = Math.max(shapeDefinition.minSize.width, width)
+              node.height = Math.max(shapeDefinition.minSize.height, height)
               node.version += 1
             },
             false,

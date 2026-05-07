@@ -1,7 +1,10 @@
 export type NodeId = string
 
+export type CanvasNodeShapeName = 'box'
+
 export type CanvasNode = {
   id: NodeId
+  shape: CanvasNodeShapeName
 
   x: number
   y: number
