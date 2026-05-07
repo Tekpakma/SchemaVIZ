@@ -4,6 +4,7 @@ import {
   RichTextNodeControls,
   RichTextNodeText,
 } from './RichTextNode'
+import { CanvasViewportPanel } from './CanvasViewportPanel'
 import { SelectedNodeToolbar } from './SelectedNodeToolbar'
 import { SelectedNodesFrame } from './SelectedNodesFrame'
 import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
@@ -19,8 +20,15 @@ export function MainScreen() {
   const { ref: stageContainerRef, size } = useCanvasStageSize()
   const nodeIds = useCanvasNodeIds()
   const { selectNode } = useCanvasActions()
-  const { viewport, handleStageDragMove, handleWheel } =
-    useCanvasViewportControls()
+  const {
+    viewport,
+    canZoomIn,
+    canZoomOut,
+    handleStageDragMove,
+    handleWheel,
+    zoomIn,
+    zoomOut,
+  } = useCanvasViewportControls(size)
   const {
     isSelecting,
     selectionRect,
@@ -110,6 +118,12 @@ export function MainScreen() {
           ))}
         </Layer>
       </Stage>
+      <CanvasViewportPanel
+        canZoomIn={canZoomIn}
+        canZoomOut={canZoomOut}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+      />
       <SelectedNodeToolbar />
       {<LexicalOverlayWrapper />}
     </div>

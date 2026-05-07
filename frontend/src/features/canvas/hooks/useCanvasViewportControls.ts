@@ -7,14 +7,41 @@ import {
   CANVAS_SCALE_STEP,
 } from '../constants'
 
+type StageSize = {
+  width: number
+  height: number
+}
+
+type ScreenPoint = {
+  x: number
+  y: number
+}
+
 function clampScale(scale: number) {
   return Math.min(CANVAS_MAX_SCALE, Math.max(CANVAS_MIN_SCALE, scale))
+}
+
+function getZoomedViewport(
+  viewport: { x: number; y: number; scale: number },
+  screenPoint: ScreenPoint,
+  nextScale: number,
+) {
+  const pointInWorld = {
+    x: (screenPoint.x - viewport.x) / viewport.scale,
+    y: (screenPoint.y - viewport.y) / viewport.scale,
+  }
+
+  return {
+    x: screenPoint.x - pointInWorld.x * nextScale,
+    y: screenPoint.y - pointInWorld.y * nextScale,
+    scale: nextScale,
+  }
 }
 
 /**
  * Provides pan and pointer-centered zoom controls for the canvas viewport.
  */
-export function useCanvasViewportControls() {
+export function useCanvasViewportControls(stageSize: StageSize) {
   const viewport = useCanvasViewport()
   const { setViewport } = useCanvasActions()
 
@@ -32,16 +59,7 @@ export function useCanvasViewportControls() {
           : viewport.scale / CANVAS_SCALE_STEP,
       )
 
-      const pointerInWorld = {
-        x: (pointer.x - viewport.x) / viewport.scale,
-        y: (pointer.y - viewport.y) / viewport.scale,
-      }
-
-      setViewport({
-        x: pointer.x - pointerInWorld.x * nextScale,
-        y: pointer.y - pointerInWorld.y * nextScale,
-        scale: nextScale,
-      })
+      setViewport(getZoomedViewport(viewport, pointer, nextScale))
     },
     [setViewport, viewport],
   )
@@ -59,9 +77,37 @@ export function useCanvasViewportControls() {
     [setViewport, viewport.scale],
   )
 
+  const zoomAtStageCenter = useCallback(
+    (nextScale: number) => {
+      setViewport(
+        getZoomedViewport(
+          viewport,
+          {
+            x: stageSize.width / 2,
+            y: stageSize.height / 2,
+          },
+          clampScale(nextScale),
+        ),
+      )
+    },
+    [setViewport, stageSize.height, stageSize.width, viewport],
+  )
+
+  const zoomIn = useCallback(() => {
+    zoomAtStageCenter(viewport.scale * CANVAS_SCALE_STEP)
+  }, [viewport.scale, zoomAtStageCenter])
+
+  const zoomOut = useCallback(() => {
+    zoomAtStageCenter(viewport.scale / CANVAS_SCALE_STEP)
+  }, [viewport.scale, zoomAtStageCenter])
+
   return {
     viewport,
+    canZoomIn: viewport.scale < CANVAS_MAX_SCALE,
+    canZoomOut: viewport.scale > CANVAS_MIN_SCALE,
     handleStageDragMove,
     handleWheel,
+    zoomIn,
+    zoomOut,
   }
 }
