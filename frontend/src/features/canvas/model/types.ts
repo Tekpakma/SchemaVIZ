@@ -1,10 +1,13 @@
 export type NodeId = string
 
-export type CanvasNodeShapeName = 'box'
+export type CanvasNodeShapeName = 'box' | 'group'
 
-export type CanvasNode = {
+export type CanvasNode<
+  TShape extends CanvasNodeShapeName = CanvasNodeShapeName,
+> = {
   id: NodeId
-  shape: CanvasNodeShapeName
+  shape: TShape
+  parentGroupId?: NodeId
 
   x: number
   y: number
@@ -19,7 +22,11 @@ export type CanvasNode = {
 }
 
 export type CanvasState = {
-  nodes: Record<NodeId, CanvasNode>
+  nodesById: Record<NodeId, CanvasNode>
+  nodeOrder: Array<NodeId>
+  childIdsByGroupId: Record<NodeId, Array<NodeId>>
   selectedNodeId: NodeId | null
+  selectedNodeIds: Array<NodeId>
+  isMarqueeSelecting: boolean
   editingNodeId: NodeId | null
 }

@@ -25,6 +25,18 @@ export const CANVAS_NODE_SHAPES = {
     },
     cornerRadius: 8,
   },
+  group: {
+    name: 'group',
+    defaultSize: {
+      width: 320,
+      height: 220,
+    },
+    minSize: {
+      width: 180,
+      height: 120,
+    },
+    cornerRadius: 10,
+  },
 } satisfies Record<CanvasNodeShapeName, CanvasNodeShapeDefinition>
 
 export const DEFAULT_CANVAS_NODE_SHAPE_NAME: CanvasNodeShapeName = 'box'

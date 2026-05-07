@@ -1,6 +1,11 @@
 import { Stage, Layer, Rect } from 'react-konva'
-import { RichTextNode, RichTextNodeText } from './RichTextNode'
+import {
+  RichTextNode,
+  RichTextNodeControls,
+  RichTextNodeText,
+} from './RichTextNode'
 import { SelectedNodeToolbar } from './SelectedNodeToolbar'
+import { SelectedNodesFrame } from './SelectedNodesFrame'
 import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
@@ -81,6 +86,9 @@ export function MainScreen() {
             <RichTextNodeText key={id} nodeId={id} />
           ))}
         </Layer>
+        <Layer>
+          <SelectedNodesFrame />
+        </Layer>
         <Layer listening={false}>
           {selectionRect && (
             <Rect
@@ -95,6 +103,11 @@ export function MainScreen() {
               listening={false}
             />
           )}
+        </Layer>
+        <Layer>
+          {nodeIds.map((id) => (
+            <RichTextNodeControls key={id} nodeId={id} />
+          ))}
         </Layer>
       </Stage>
       <SelectedNodeToolbar />

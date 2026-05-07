@@ -51,3 +51,5 @@ export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
     version: 1,
   },
 ]
+
+export const DEFAULT_CANVAS_NODE = DEFAULT_CANVAS_NODES[0] as CanvasNode

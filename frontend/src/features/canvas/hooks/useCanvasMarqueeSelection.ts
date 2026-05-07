@@ -1,10 +1,12 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { NodeId } from '../model/types'
 import {
   useCanvasActions,
+  useCanvasNodeIds,
   useCanvasNodes,
   useCanvasViewport,
+  useIsMarqueeSelecting,
 } from '@/store/canvasStore'
 
 type Point = {
@@ -33,16 +35,14 @@ function normalizeRect(start: Point, end: Point): MarqueeSelectionRect {
   }
 }
 
-function intersectsNode(
-  rect: MarqueeSelectionRect,
-  nodeRect: MarqueeSelectionRect,
-) {
-  return (
-    nodeRect.x < rect.x + rect.width &&
-    nodeRect.x + nodeRect.width > rect.x &&
-    nodeRect.y < rect.y + rect.height &&
-    nodeRect.y + nodeRect.height > rect.y
-  )
+function hasSameIds(left: Array<NodeId>, right: Array<NodeId>) {
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false
+  }
+
+  return true
 }
 
 /**
@@ -52,9 +52,12 @@ function intersectsNode(
  */
 export function useCanvasMarqueeSelection() {
   const nodes = useCanvasNodes()
+  const nodeIds = useCanvasNodeIds()
   const viewport = useCanvasViewport()
-  const { selectNodes } = useCanvasActions()
+  const isMarqueeSelecting = useIsMarqueeSelecting()
+  const { selectNodesFromMarquee, setMarqueeSelecting } = useCanvasActions()
   const [selection, setSelection] = useState<MarqueeSelectionState | null>(null)
+  const lastSelectedIdsRef = useRef<Array<NodeId>>([])
 
   const getPointerInWorld = useCallback(
     (event: KonvaEventObject<MouseEvent>): Point | null => {
@@ -73,23 +76,33 @@ export function useCanvasMarqueeSelection() {
   const selectNodesInRect = useCallback(
     (rect: MarqueeSelectionRect) => {
       const selectedIds: Array<NodeId> = []
+      const rectRight = rect.x + rect.width
+      const rectBottom = rect.y + rect.height
 
-      Object.values(nodes).forEach((node) => {
+      // TODO: Consider a quadtree or uniform grid index once canvases reach
+      // thousands of nodes; marquee selection is currently a linear scan.
+      for (const nodeId of nodeIds) {
+        const node = nodes[nodeId]
+        if (!node) continue
+
+        const nodeRight = node.x + node.width
+        const nodeBottom = node.y + node.height
         if (
-          intersectsNode(rect, {
-            x: node.x,
-            y: node.y,
-            width: node.width,
-            height: node.height,
-          })
+          node.x < rectRight &&
+          nodeRight > rect.x &&
+          node.y < rectBottom &&
+          nodeBottom > rect.y
         ) {
           selectedIds.push(node.id)
         }
-      })
+      }
 
-      selectNodes(selectedIds)
+      if (hasSameIds(selectedIds, lastSelectedIdsRef.current)) return
+
+      lastSelectedIdsRef.current = selectedIds
+      selectNodesFromMarquee(selectedIds)
     },
-    [nodes, selectNodes],
+    [nodeIds, nodes, selectNodesFromMarquee],
   )
 
   const handleMarqueeMouseDown = useCallback(
@@ -107,11 +120,13 @@ export function useCanvasMarqueeSelection() {
         start,
         rect,
       })
-      selectNodes([])
+      lastSelectedIdsRef.current = []
+      setMarqueeSelecting(true)
+      selectNodesFromMarquee([])
 
       return true
     },
-    [getPointerInWorld, selectNodes],
+    [getPointerInWorld, selectNodesFromMarquee, setMarqueeSelecting],
   )
 
   const handleMarqueeMouseMove = useCallback(
@@ -133,10 +148,12 @@ export function useCanvasMarqueeSelection() {
 
   const handleMarqueeMouseUp = useCallback(() => {
     setSelection(null)
-  }, [])
+    lastSelectedIdsRef.current = []
+    setMarqueeSelecting(false)
+  }, [setMarqueeSelecting])
 
   return {
-    isSelecting: Boolean(selection),
+    isSelecting: isMarqueeSelecting,
     selectionRect: selection?.rect ?? null,
     handleMarqueeMouseDown,
     handleMarqueeMouseMove,

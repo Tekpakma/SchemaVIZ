@@ -31,6 +31,9 @@ type RichTextNodeSurfaceProps = {
   width: number
   height: number
   fill: string
+  opacity?: number
+  stroke?: string
+  dash?: Array<number>
   cornerRadius: number
 }
 
@@ -46,6 +49,9 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
   width,
   height,
   fill,
+  opacity,
+  stroke,
+  dash,
   cornerRadius,
 }: RichTextNodeSurfaceProps) {
   return (
@@ -53,6 +59,10 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
       width={width}
       height={height}
       fill={fill}
+      opacity={opacity}
+      stroke={stroke}
+      dash={dash}
+      strokeScaleEnabled={false}
       cornerRadius={cornerRadius}
       listening
     />
@@ -97,13 +107,10 @@ export const RichTextNode = memo(function RichTextNode({
 }: RichTextNodeProps) {
   const node = useCanvasNode(nodeId)
   const editingNodeId = useCanvasEditingNodeId()
-  const selectedNodeId = useSelectedNodeId()
   const selectedNodeIds = useSelectedNodeIds()
-  const { startEditing, selectNode, moveNode, updateNodeFrame } =
-    useCanvasActions()
+  const { startEditing, selectNode, moveNode } = useCanvasActions()
   const { resolvedTheme } = useTheme()
   const isSelected = selectedNodeIds.includes(nodeId)
-  const isSingleSelected = isSelected && selectedNodeId === nodeId
 
   const fill = useMemo(
     () =>
@@ -114,6 +121,77 @@ export const RichTextNode = memo(function RichTextNode({
     [resolvedTheme],
   )
 
+  const shapeDefinition = node ? getCanvasNodeShapeDefinition(node) : null
+
+  if (!node || !shapeDefinition || editingNodeId === node.id) return null
+
+  const isGroup = node.shape === 'group'
+
+  const handleClick = () => {
+    selectNode(node.id)
+  }
+
+  const handleDoubleClick = () => {
+    if (isGroup) return
+
+    startEditing(node.id)
+  }
+
+  const handleDragMove = (event: KonvaEventObject<DragEvent>) => {
+    const target = event.target
+    moveNode({
+      id: node.id,
+      x: target.x(),
+      y: target.y(),
+    })
+  }
+
+  return (
+    <Group
+      x={node.x}
+      y={node.y}
+      draggable
+      onClick={handleClick}
+      onTap={handleClick}
+      onDblClick={handleDoubleClick}
+      onDblTap={handleDoubleClick}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragMove}
+    >
+      <RichTextNodeSurface
+        width={node.width}
+        height={node.height}
+        fill={fill}
+        opacity={isGroup ? 0.16 : undefined}
+        stroke={isGroup ? '#3b82f6' : undefined}
+        dash={isGroup ? [6, 4] : undefined}
+        cornerRadius={shapeDefinition.cornerRadius}
+      />
+      {isSelected && (
+        <Rect
+          width={node.width}
+          height={node.height}
+          cornerRadius={shapeDefinition.cornerRadius}
+          stroke="#3b82f6"
+          strokeWidth={1.5}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      )}
+    </Group>
+  )
+})
+
+export const RichTextNodeControls = memo(function RichTextNodeControls({
+  nodeId,
+}: RichTextNodeProps) {
+  const node = useCanvasNode(nodeId)
+  const editingNodeId = useCanvasEditingNodeId()
+  const selectedNodeId = useSelectedNodeId()
+  const selectedNodeIds = useSelectedNodeIds()
+  const { updateNodeFrame } = useCanvasActions()
+  const isSelected = selectedNodeIds.includes(nodeId)
+  const isSingleSelected = isSelected && selectedNodeId === nodeId
   const shapeDefinition = node ? getCanvasNodeShapeDefinition(node) : null
 
   const handleResizeEnd = useCallback(
@@ -151,23 +229,13 @@ export const RichTextNode = memo(function RichTextNode({
     onResizeEnd: handleResizeEnd,
   })
 
-  if (!node || !shapeDefinition || editingNodeId === node.id) return null
-
-  const handleClick = () => {
-    selectNode(node.id)
-  }
-
-  const handleDoubleClick = () => {
-    startEditing(node.id)
-  }
-
-  const handleDragMove = (event: KonvaEventObject<DragEvent>) => {
-    const target = event.target
-    moveNode({
-      id: node.id,
-      x: target.x(),
-      y: target.y(),
-    })
+  if (
+    !node ||
+    !shapeDefinition ||
+    !isSingleSelected ||
+    editingNodeId === node.id
+  ) {
+    return null
   }
 
   return (
@@ -176,40 +244,18 @@ export const RichTextNode = memo(function RichTextNode({
         ref={nodeRef}
         x={node.x}
         y={node.y}
-        draggable
-        onClick={handleClick}
-        onTap={handleClick}
-        onDblClick={handleDoubleClick}
-        onDblTap={handleDoubleClick}
-        onDragMove={handleDragMove}
-        onDragEnd={handleDragMove}
         onTransformEnd={handleTransformEnd}
       >
-        <RichTextNodeSurface
+        <Rect
           width={node.width}
           height={node.height}
-          fill={fill}
-          cornerRadius={shapeDefinition.cornerRadius}
+          listening={false}
         />
-        {isSelected && (
-          <Rect
-            width={node.width}
-            height={node.height}
-            cornerRadius={shapeDefinition.cornerRadius}
-            stroke="#3b82f6"
-            strokeWidth={1.5}
-            strokeScaleEnabled={false}
-            listening={false}
-          />
-        )}
       </Group>
-
-      {isSingleSelected && (
-        <Transformer
-          ref={transformerRef}
-          {...transformerProps}
-        />
-      )}
+      <Transformer
+        ref={transformerRef}
+        {...transformerProps}
+      />
     </>
   )
 })
@@ -225,7 +271,14 @@ export const RichTextNodeText = memo(function RichTextNodeText({
     return getRenderTagLayout(node)
   }, [node])
 
-  if (!node || !layoutResult || editingNodeId === node.id) return null
+  if (
+    !node ||
+    node.shape === 'group' ||
+    !layoutResult ||
+    editingNodeId === node.id
+  ) {
+    return null
+  }
 
   return (
     <RichTextNodeContent
