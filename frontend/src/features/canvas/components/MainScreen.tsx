@@ -1,8 +1,9 @@
-import { Stage, Layer } from 'react-konva'
+import { Stage, Layer, Rect } from 'react-konva'
 import { RichTextNode, RichTextNodeText } from './RichTextNode'
 import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
+import { useCanvasMarqueeSelection } from '../hooks/useCanvasMarqueeSelection'
 import { useCanvasViewportControls } from '../hooks/useCanvasViewportControls'
 import { useEnsureDefaultCanvasNode } from '../hooks/useEnsureDefaultCanvasNode'
 import { useCallback } from 'react'
@@ -14,11 +15,28 @@ export function MainScreen() {
   const { selectNode } = useCanvasActions()
   const { viewport, handleStageDragMove, handleWheel } =
     useCanvasViewportControls()
+  const {
+    isSelecting,
+    selectionRect,
+    handleMarqueeMouseDown,
+    handleMarqueeMouseMove,
+    handleMarqueeMouseUp,
+  } = useCanvasMarqueeSelection()
 
   useEnsureDefaultCanvasNode()
 
   const handleStagePointerDown = useCallback(
-    (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
+    (event: KonvaEventObject<MouseEvent>) => {
+      if (handleMarqueeMouseDown(event)) return
+      if (event.target !== event.currentTarget) return
+
+      selectNode(null)
+    },
+    [handleMarqueeMouseDown, selectNode],
+  )
+
+  const handleStageTouchStart = useCallback(
+    (event: KonvaEventObject<TouchEvent>) => {
       if (event.target !== event.currentTarget) return
 
       selectNode(null)
@@ -43,12 +61,14 @@ export function MainScreen() {
         y={viewport.y}
         scaleX={viewport.scale}
         scaleY={viewport.scale}
-        draggable
+        draggable={!isSelecting}
         onDragMove={handleStageDragMove}
         onDragEnd={handleStageDragMove}
         onWheel={handleWheel}
         onMouseDown={handleStagePointerDown}
-        onTouchStart={handleStagePointerDown}
+        onMouseMove={handleMarqueeMouseMove}
+        onMouseUp={handleMarqueeMouseUp}
+        onTouchStart={handleStageTouchStart}
       >
         <Layer>
           {nodeIds.map((id) => (
@@ -59,6 +79,21 @@ export function MainScreen() {
           {nodeIds.map((id) => (
             <RichTextNodeText key={id} nodeId={id} />
           ))}
+        </Layer>
+        <Layer listening={false}>
+          {selectionRect && (
+            <Rect
+              x={selectionRect.x}
+              y={selectionRect.y}
+              width={selectionRect.width}
+              height={selectionRect.height}
+              fill="rgba(59, 130, 246, 0.10)"
+              stroke="#3b82f6"
+              strokeWidth={1}
+              strokeScaleEnabled={false}
+              listening={false}
+            />
+          )}
         </Layer>
       </Stage>
       {<LexicalOverlayWrapper />}

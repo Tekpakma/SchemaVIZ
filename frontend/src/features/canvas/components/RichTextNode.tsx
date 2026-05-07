@@ -4,6 +4,7 @@ import {
   useCanvasEditingNodeId,
   useCanvasNode,
   useSelectedNodeId,
+  useSelectedNodeIds,
 } from '@/store/canvasStore'
 import { getRenderTagLayout } from '@/features/rendering/renderTagCache'
 import {
@@ -97,10 +98,12 @@ export const RichTextNode = memo(function RichTextNode({
   const node = useCanvasNode(nodeId)
   const editingNodeId = useCanvasEditingNodeId()
   const selectedNodeId = useSelectedNodeId()
+  const selectedNodeIds = useSelectedNodeIds()
   const { startEditing, selectNode, moveNode, updateNodeFrame } =
     useCanvasActions()
   const { resolvedTheme } = useTheme()
-  const isSelected = selectedNodeId === nodeId
+  const isSelected = selectedNodeIds.includes(nodeId)
+  const isSingleSelected = isSelected && selectedNodeId === nodeId
 
   const fill = useMemo(
     () =>
@@ -134,7 +137,7 @@ export const RichTextNode = memo(function RichTextNode({
     handleTransformEnd,
     transformerProps,
   } = useNodeResizeTransformer({
-    isEnabled: Boolean(node && shapeDefinition && isSelected),
+    isEnabled: Boolean(node && shapeDefinition && isSingleSelected),
     frame: {
       x: node?.x ?? 0,
       y: node?.y ?? 0,
@@ -188,9 +191,20 @@ export const RichTextNode = memo(function RichTextNode({
           fill={fill}
           cornerRadius={shapeDefinition.cornerRadius}
         />
+        {isSelected && (
+          <Rect
+            width={node.width}
+            height={node.height}
+            cornerRadius={shapeDefinition.cornerRadius}
+            stroke="#3b82f6"
+            strokeWidth={1.5}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+        )}
       </Group>
 
-      {isSelected && (
+      {isSingleSelected && (
         <Transformer
           ref={transformerRef}
           {...transformerProps}

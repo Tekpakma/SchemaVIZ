@@ -8,6 +8,7 @@ import { getCanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
 type CanvasState = {
   nodes: Record<NodeId, CanvasNode>
   selectedNodeId: NodeId | null
+  selectedNodeIds: Array<NodeId>
   editingNodeId: NodeId | null
   viewport: CanvasViewport
   actions: CanvasActions
@@ -49,6 +50,7 @@ export type CommitNodeTextPayload = {
 type CanvasActions = {
   addNode: (node: CanvasNode) => void
   selectNode: (id: NodeId | null) => void
+  selectNodes: (ids: Array<NodeId>) => void
   startEditing: (id: NodeId) => void
   stopEditing: () => void
   setViewport: (viewport: CanvasViewport) => void
@@ -62,6 +64,7 @@ const useCanvasStore = create<CanvasState>()(
     immer((set) => ({
       nodes: {},
       selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       viewport: {
         x: 0,
@@ -82,9 +85,20 @@ const useCanvasStore = create<CanvasState>()(
           set(
             (state) => {
               state.selectedNodeId = id
+              state.selectedNodeIds = id ? [id] : []
             },
             false,
             'canvas/selectNode',
+          ),
+
+        selectNodes: (ids) =>
+          set(
+            (state) => {
+              state.selectedNodeIds = ids
+              state.selectedNodeId = ids.length === 1 ? (ids[0] ?? null) : null
+            },
+            false,
+            'canvas/selectNodes',
           ),
 
         startEditing: (id) =>
@@ -92,6 +106,7 @@ const useCanvasStore = create<CanvasState>()(
             (state) => {
               state.editingNodeId = id
               state.selectedNodeId = id
+              state.selectedNodeIds = [id]
             },
             false,
             'canvas/startEditing',
@@ -189,6 +204,7 @@ const useCanvasStore = create<CanvasState>()(
 
 export const useCanvasActions = () => useCanvasStore((state) => state.actions)
 
+export const useCanvasNodes = () => useCanvasStore((state) => state.nodes)
 export const useCanvasNode: (id: NodeId) => CanvasNode | undefined = (id) =>
   useCanvasStore((state) => state.nodes[id])
 export const useCanvasNodeWidth = (id: NodeId) =>
@@ -198,6 +214,8 @@ export const useCanvasNodeIds = () =>
   useCanvasStore(useShallow((state) => Object.keys(state.nodes)))
 export const useSelectedNodeId = () =>
   useCanvasStore((state) => state.selectedNodeId)
+export const useSelectedNodeIds = () =>
+  useCanvasStore(useShallow((state) => state.selectedNodeIds))
 export const useCanvasEditingNodeId = () =>
   useCanvasStore((state) => state.editingNodeId)
 export const useCanvasViewport = () =>
