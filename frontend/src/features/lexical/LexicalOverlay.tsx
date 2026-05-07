@@ -17,7 +17,7 @@ import {
 import { CANVAS_NODE_SURFACE_CSS_VALUE } from '@/features/canvas/themeColors'
 import { LexicalCommitPlugin } from './LexicalCommitPlugin'
 import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
-import { TEST_IDS } from '#/constants'
+import { TEST_IDS } from '@/constants'
 
 
 function LexicalAutoFocusPlugin() {

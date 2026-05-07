@@ -1,8 +1,9 @@
-import { Group, Rect, Shape } from 'react-konva'
+import { Group, Rect, Shape, Transformer } from 'react-konva'
 import {
   useCanvasActions,
   useCanvasEditingNodeId,
   useCanvasNode,
+  useSelectedNodeId,
 } from '@/store/canvasStore'
 import { getRenderTagLayout } from '@/features/rendering/renderTagCache'
 import {
@@ -14,10 +15,12 @@ import { useTheme } from '@/features/theme/useTheme'
 import { drawLayout } from 'render-tag'
 import type { LayoutResult } from 'render-tag'
 import type { NodeId } from '@/features/canvas/model/types'
-import { memo, useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { getCanvasNodeShapeDefinition } from '../nodeShapes'
 import { getRenderTagTextBounds } from '@/features/rendering/renderTagTextBounds'
+import { useNodeResizeTransformer } from '../hooks/useNodeResizeTransformer'
+import type { NodeResizeFrame } from '../hooks/useNodeResizeTransformer'
 
 type RichTextNodeProps = {
   nodeId: NodeId
@@ -93,8 +96,11 @@ export const RichTextNode = memo(function RichTextNode({
 }: RichTextNodeProps) {
   const node = useCanvasNode(nodeId)
   const editingNodeId = useCanvasEditingNodeId()
-  const { startEditing, selectNode, moveNode } = useCanvasActions()
+  const selectedNodeId = useSelectedNodeId()
+  const { startEditing, selectNode, moveNode, updateNodeFrame } =
+    useCanvasActions()
   const { resolvedTheme } = useTheme()
+  const isSelected = selectedNodeId === nodeId
 
   const fill = useMemo(
     () =>
@@ -105,9 +111,44 @@ export const RichTextNode = memo(function RichTextNode({
     [resolvedTheme],
   )
 
-  if (!node || editingNodeId === node.id) return null
+  const shapeDefinition = node ? getCanvasNodeShapeDefinition(node) : null
 
-  const shapeDefinition = getCanvasNodeShapeDefinition(node)
+  const handleResizeEnd = useCallback(
+    ({ x, y, width, height }: NodeResizeFrame) => {
+      if (!node) return
+
+      updateNodeFrame({
+        id: node.id,
+        x,
+        y,
+        width,
+        height,
+      })
+    },
+    [node, updateNodeFrame],
+  )
+
+  const {
+    nodeRef,
+    transformerRef,
+    handleTransformEnd,
+    transformerProps,
+  } = useNodeResizeTransformer({
+    isEnabled: Boolean(node && shapeDefinition && isSelected),
+    frame: {
+      x: node?.x ?? 0,
+      y: node?.y ?? 0,
+      width: node?.width ?? 0,
+      height: node?.height ?? 0,
+    },
+    minSize: shapeDefinition?.minSize ?? {
+      width: 0,
+      height: 0,
+    },
+    onResizeEnd: handleResizeEnd,
+  })
+
+  if (!node || !shapeDefinition || editingNodeId === node.id) return null
 
   const handleClick = () => {
     selectNode(node.id)
@@ -125,25 +166,37 @@ export const RichTextNode = memo(function RichTextNode({
       y: target.y(),
     })
   }
+
   return (
-    <Group
-      x={node.x}
-      y={node.y}
-      draggable
-      onClick={handleClick}
-      onTap={handleClick}
-      onDblClick={handleDoubleClick}
-      onDblTap={handleDoubleClick}
-      onDragMove={handleDragMove}
-      onDragEnd={handleDragMove}
-    >
-      <RichTextNodeSurface
-        width={node.width}
-        height={node.height}
-        fill={fill}
-        cornerRadius={shapeDefinition.cornerRadius}
-      />
-    </Group>
+    <>
+      <Group
+        ref={nodeRef}
+        x={node.x}
+        y={node.y}
+        draggable
+        onClick={handleClick}
+        onTap={handleClick}
+        onDblClick={handleDoubleClick}
+        onDblTap={handleDoubleClick}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragMove}
+        onTransformEnd={handleTransformEnd}
+      >
+        <RichTextNodeSurface
+          width={node.width}
+          height={node.height}
+          fill={fill}
+          cornerRadius={shapeDefinition.cornerRadius}
+        />
+      </Group>
+
+      {isSelected && (
+        <Transformer
+          ref={transformerRef}
+          {...transformerProps}
+        />
+      )}
+    </>
   )
 })
 

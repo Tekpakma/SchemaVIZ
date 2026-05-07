@@ -31,6 +31,14 @@ export type ResizeNodePayload = {
   height: number
 }
 
+export type UpdateNodeFramePayload = {
+  id: NodeId
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type CommitNodeTextPayload = {
   id: NodeId
   lexicalJson: string
@@ -46,6 +54,7 @@ type CanvasActions = {
   setViewport: (viewport: CanvasViewport) => void
   moveNode: (payload: MoveNodePayload) => void
   resizeNode: (payload: ResizeNodePayload) => void
+  updateNodeFrame: (payload: UpdateNodeFramePayload) => void
   commitNodeText: (payload: CommitNodeTextPayload) => void
 }
 const useCanvasStore = create<CanvasState>()(
@@ -135,6 +144,24 @@ const useCanvasStore = create<CanvasState>()(
             },
             false,
             'canvas/resizeNode',
+          ),
+
+        updateNodeFrame: ({ id, x, y, width, height }) =>
+          set(
+            (state) => {
+              const node = state.nodes[id]
+              if (!node) return
+
+              const shapeDefinition = getCanvasNodeShapeDefinition(node)
+
+              node.x = x
+              node.y = y
+              node.width = Math.max(shapeDefinition.minSize.width, width)
+              node.height = Math.max(shapeDefinition.minSize.height, height)
+              node.version += 1
+            },
+            false,
+            'canvas/updateNodeFrame',
           ),
 
         commitNodeText: ({ id, lexicalJson, html, contentHeight }) =>
