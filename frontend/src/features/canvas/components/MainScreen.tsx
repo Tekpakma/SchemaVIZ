@@ -1,18 +1,30 @@
 import { Stage, Layer } from 'react-konva'
 import { RichTextNode, RichTextNodeText } from './RichTextNode'
-import { useCanvasNodeIds } from '@/store/canvasStore'
+import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
 import { useCanvasViewportControls } from '../hooks/useCanvasViewportControls'
 import { useEnsureDefaultCanvasNode } from '../hooks/useEnsureDefaultCanvasNode'
+import { useCallback } from 'react'
+import type { KonvaEventObject } from 'konva/lib/Node'
 
 export function MainScreen() {
   const { ref: stageContainerRef, size } = useCanvasStageSize()
   const nodeIds = useCanvasNodeIds()
+  const { selectNode } = useCanvasActions()
   const { viewport, handleStageDragMove, handleWheel } =
     useCanvasViewportControls()
 
   useEnsureDefaultCanvasNode()
+
+  const handleStagePointerDown = useCallback(
+    (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      if (event.target !== event.currentTarget) return
+
+      selectNode(null)
+    },
+    [selectNode],
+  )
 
   return (
     <div
@@ -35,6 +47,8 @@ export function MainScreen() {
         onDragMove={handleStageDragMove}
         onDragEnd={handleStageDragMove}
         onWheel={handleWheel}
+        onMouseDown={handleStagePointerDown}
+        onTouchStart={handleStagePointerDown}
       >
         <Layer>
           {nodeIds.map((id) => (
