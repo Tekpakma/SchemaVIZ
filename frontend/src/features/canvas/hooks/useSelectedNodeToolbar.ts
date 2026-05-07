@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
-import { useCanvasNodes, useCanvasViewport } from '@/store/canvasStore'
-import { useSelectedNodeBounds } from './useSelectedNodeBounds'
+import {
+  useCanvasNodes,
+  useCanvasSelectedNodeBounds,
+  useCanvasViewport,
+} from '@/store/canvasStore'
 
 export type SelectedNodeToolbarPlacement = {
   x: number
@@ -18,7 +21,7 @@ export type SelectedNodeToolbarPlacement = {
  */
 export function useSelectedNodeToolbar(): SelectedNodeToolbarPlacement | null {
   const nodes = useCanvasNodes()
-  const bounds = useSelectedNodeBounds()
+  const bounds = useCanvasSelectedNodeBounds()
   const viewport = useCanvasViewport()
 
   return useMemo(() => {

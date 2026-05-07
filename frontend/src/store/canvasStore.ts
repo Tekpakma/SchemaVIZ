@@ -106,6 +106,41 @@ export type CommitNodeTextPayload = {
   contentHeight: number
 }
 
+export type CanvasBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type CanvasSelectedNodeBounds = CanvasBounds & {
+  selectedCount: number
+  selectedNodeIds: Array<NodeId>
+}
+
+function getCanvasBounds(items: Array<CanvasBounds>): CanvasBounds | null {
+  if (items.length === 0) return null
+
+  let left = Number.POSITIVE_INFINITY
+  let top = Number.POSITIVE_INFINITY
+  let right = Number.NEGATIVE_INFINITY
+  let bottom = Number.NEGATIVE_INFINITY
+
+  for (const item of items) {
+    left = Math.min(left, item.x)
+    top = Math.min(top, item.y)
+    right = Math.max(right, item.x + item.width)
+    bottom = Math.max(bottom, item.y + item.height)
+  }
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+  }
+}
+
 type CanvasActions = {
   addNode: (node: CanvasNode) => void
   selectNode: (id: NodeId | null) => void
@@ -148,7 +183,8 @@ const useCanvasStore = create<CanvasState>()(
               }
 
               if (node.parentGroupId) {
-                const childIds = state.childIdsByGroupId[node.parentGroupId] ?? []
+                const childIds =
+                  state.childIdsByGroupId[node.parentGroupId] ?? []
                 if (!childIds.includes(node.id)) {
                   childIds.push(node.id)
                 }
@@ -250,7 +286,9 @@ const useCanvasStore = create<CanvasState>()(
 
               delete state.nodesById[id]
               delete state.childIdsByGroupId[id]
-              state.nodeOrder = state.nodeOrder.filter((nodeId) => nodeId !== id)
+              state.nodeOrder = state.nodeOrder.filter(
+                (nodeId) => nodeId !== id,
+              )
               state.selectedNodeId =
                 childIds.length === 1 ? (childIds[0] ?? null) : null
               state.selectedNodeIds = childIds
@@ -370,7 +408,10 @@ const useCanvasStore = create<CanvasState>()(
               const deltaX = x - node.x
               const deltaY = y - node.y
               const nextWidth = Math.max(shapeDefinition.minSize.width, width)
-              const nextHeight = Math.max(shapeDefinition.minSize.height, height)
+              const nextHeight = Math.max(
+                shapeDefinition.minSize.height,
+                height,
+              )
               const scaleX = node.width === 0 ? 1 : nextWidth / node.width
               const scaleY = node.height === 0 ? 1 : nextHeight / node.height
               const didResize = scaleX !== 1 || scaleY !== 1
@@ -430,6 +471,14 @@ const useCanvasStore = create<CanvasState>()(
   ),
 )
 
+export function getCanvasNodesSnapshot() {
+  return useCanvasStore.getState().nodesById
+}
+
+export function getCanvasNodeIdsSnapshot() {
+  return useCanvasStore.getState().nodeOrder
+}
+
 export const useCanvasActions = () => useCanvasStore((state) => state.actions)
 
 export const useCanvasNodes = () => useCanvasStore((state) => state.nodesById)
@@ -440,6 +489,33 @@ export const useCanvasNodeWidth = (id: NodeId) =>
 
 export const useCanvasNodeIds = () =>
   useCanvasStore(useShallow((state) => state.nodeOrder))
+export const useCanvasSelectedNodeBounds = () =>
+  useCanvasStore(
+    useShallow((state): CanvasSelectedNodeBounds | null => {
+      const selectedBounds = state.selectedNodeIds.flatMap((id) => {
+        const node = state.nodesById[id]
+        if (!node) return []
+
+        return [
+          {
+            x: node.x,
+            y: node.y,
+            width: node.width,
+            height: node.height,
+          },
+        ]
+      })
+
+      const bounds = getCanvasBounds(selectedBounds)
+      if (!bounds) return null
+
+      return {
+        ...bounds,
+        selectedCount: state.selectedNodeIds.length,
+        selectedNodeIds: state.selectedNodeIds,
+      }
+    }),
+  )
 export const useSelectedNodeId = () =>
   useCanvasStore((state) => state.selectedNodeId)
 export const useSelectedNodeIds = () =>
@@ -448,5 +524,4 @@ export const useIsMarqueeSelecting = () =>
   useCanvasStore((state) => state.isMarqueeSelecting)
 export const useCanvasEditingNodeId = () =>
   useCanvasStore((state) => state.editingNodeId)
-export const useCanvasViewport = () =>
-  useCanvasStore((state) => state.viewport)
+export const useCanvasViewport = () => useCanvasStore((state) => state.viewport)

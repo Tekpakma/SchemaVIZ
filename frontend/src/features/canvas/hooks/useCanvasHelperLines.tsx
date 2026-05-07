@@ -3,19 +3,25 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
 import {
-  useCanvasNodeIds,
-  useCanvasNodes,
+  getCanvasNodeIdsSnapshot,
+  getCanvasNodesSnapshot,
 } from '@/store/canvasStore'
-import { snapFrameToHelperLines } from '../helperLines'
+import {
+  createHelperLineCandidates,
+  snapFrameToHelperLines,
+} from '../helperLines'
 import type {
   CanvasHelperLine,
+  CanvasHelperLineCandidate,
   CanvasHelperLineSnapOptions,
   CanvasNodeFrame,
 } from '../helperLines'
+import type { CanvasNode, NodeId } from '../model/types'
 
 type CanvasHelperLinesContextValue = {
   activeLines: Array<CanvasHelperLine>
@@ -36,6 +42,12 @@ const CanvasHelperLinesContext =
 
 type CanvasHelperLinesProviderProps = {
   children: ReactNode
+}
+
+type CandidateCache = {
+  nodeIds: Array<NodeId>
+  nodesById: Record<NodeId, CanvasNode>
+  candidates: Array<CanvasHelperLineCandidate>
 }
 
 function haveSameHelperLines(
@@ -65,10 +77,9 @@ function haveSameHelperLines(
 export function CanvasHelperLinesProvider({
   children,
 }: CanvasHelperLinesProviderProps) {
-  const nodes = useCanvasNodes()
-  const nodeIds = useCanvasNodeIds()
   const [activeLines, setActiveLines] = useState<Array<CanvasHelperLine>>([])
   const [isEnabled, setIsEnabled] = useState(true)
+  const candidateCacheRef = useRef<CandidateCache | null>(null)
 
   const clearHelperLines = useCallback(() => {
     setActiveLines((current) => (current.length === 0 ? current : []))
@@ -78,6 +89,33 @@ export function CanvasHelperLinesProvider({
     clearHelperLines()
     setIsEnabled((current) => !current)
   }, [clearHelperLines])
+
+  const getSnapCandidates = useCallback(() => {
+    const nodeOrder = getCanvasNodeIdsSnapshot()
+    const nodesById = getCanvasNodesSnapshot()
+    const cached = candidateCacheRef.current
+
+    if (
+      cached &&
+      cached.nodeIds === nodeOrder &&
+      cached.nodesById === nodesById
+    ) {
+      return cached.candidates
+    }
+
+    const candidates = createHelperLineCandidates({
+      nodeIds: nodeOrder,
+      nodes: nodesById,
+    })
+
+    candidateCacheRef.current = {
+      nodeIds: nodeOrder,
+      nodesById,
+      candidates,
+    }
+
+    return candidates
+  }, [])
 
   const snapFrame = useCallback(
     (frame: CanvasNodeFrame, options: CanvasHelperLineSnapOptions = {}) => {
@@ -89,11 +127,11 @@ export function CanvasHelperLinesProvider({
         }
       }
 
+      const candidates = getSnapCandidates()
       const result = snapFrameToHelperLines({
+        candidates,
         excludeNodeIds: options.excludeNodeIds,
         frame,
-        nodeIds,
-        nodes,
       })
 
       setActiveLines((current) =>
@@ -105,7 +143,7 @@ export function CanvasHelperLinesProvider({
         y: result.y,
       }
     },
-    [clearHelperLines, isEnabled, nodeIds, nodes],
+    [clearHelperLines, getSnapCandidates, isEnabled],
   )
 
   const value = useMemo(

@@ -1,8 +1,11 @@
 import { Group, Rect } from 'react-konva'
 import { useRef } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
-import { useCanvasActions, useIsMarqueeSelecting } from '@/store/canvasStore'
-import { useSelectedNodeBounds } from '../hooks/useSelectedNodeBounds'
+import {
+  useCanvasActions,
+  useCanvasSelectedNodeBounds,
+  useIsMarqueeSelecting,
+} from '@/store/canvasStore'
 import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
 
 type DragPosition = {
@@ -11,7 +14,7 @@ type DragPosition = {
 }
 
 export function SelectedNodesFrame() {
-  const bounds = useSelectedNodeBounds()
+  const bounds = useCanvasSelectedNodeBounds()
   const isMarqueeSelecting = useIsMarqueeSelecting()
   const { moveSelectedNodes } = useCanvasActions()
   const { clearHelperLines, snapFrame } = useCanvasHelperLines()

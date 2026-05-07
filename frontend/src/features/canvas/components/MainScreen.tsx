@@ -105,8 +105,11 @@ export function MainScreen() {
           </Layer>
           <Layer>
             <SelectedNodesFrame />
+            {nodeIds.map((id: NodeId) => (
+              <RichTextNodeControls key={id} nodeId={id} />
+            ))}
           </Layer>
-          <Layer listening={false}>
+          <Layer>
             {selectionRect && (
               <Rect
                 x={selectionRect.x}
@@ -120,14 +123,7 @@ export function MainScreen() {
                 listening={false}
               />
             )}
-          </Layer>
-          <Layer listening={false}>
             <CanvasHelperLines viewport={viewport} stageSize={size} />
-          </Layer>
-          <Layer>
-            {nodeIds.map((id: NodeId) => (
-              <RichTextNodeControls key={id} nodeId={id} />
-            ))}
           </Layer>
         </Stage>
         <CanvasViewportPanel

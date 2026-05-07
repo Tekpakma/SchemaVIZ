@@ -30,6 +30,20 @@ export type CanvasHelperLine = {
   targetNodeId: NodeId
 }
 
+export type CanvasHelperLineCandidate = {
+  id: NodeId
+  parentGroupId?: NodeId
+  frame: CanvasNodeFrame
+  horizontalTargets: Array<{
+    name: CanvasHelperLineAnchorName
+    position: number
+  }>
+  verticalTargets: Array<{
+    name: CanvasHelperLineAnchorName
+    position: number
+  }>
+}
+
 type HelperLineAnchor = {
   orientation: CanvasHelperLineOrientation
   resolve: (frame: CanvasNodeFrame) => number
@@ -79,6 +93,10 @@ const HELPER_LINE_ANCHORS = {
   },
 } satisfies Record<CanvasHelperLineAnchorName, HelperLineAnchor>
 
+const HELPER_LINE_ANCHOR_NAMES = Object.keys(
+  HELPER_LINE_ANCHORS,
+) as Array<CanvasHelperLineAnchorName>
+
 function isCenterAnchorName(anchorName: CanvasHelperLineAnchorName) {
   return anchorName === 'centerX' || anchorName === 'centerY'
 }
@@ -118,16 +136,61 @@ function getFrameDistance(a: CanvasNodeFrame, b: CanvasNodeFrame) {
 }
 
 function shouldSkipCandidateNode(
-  node: CanvasNode,
+  candidate: CanvasHelperLineCandidate,
   sourceFrame: CanvasNodeFrame,
   excludeNodeIds: Set<NodeId>,
 ) {
-  if (node.id === sourceFrame.id) return true
-  if (excludeNodeIds.has(node.id)) return true
-  if (node.parentGroupId === sourceFrame.id) return true
-  if (node.parentGroupId && excludeNodeIds.has(node.parentGroupId)) return true
+  if (candidate.id === sourceFrame.id) return true
+  if (excludeNodeIds.has(candidate.id)) return true
+  if (candidate.parentGroupId === sourceFrame.id) return true
+  if (candidate.parentGroupId && excludeNodeIds.has(candidate.parentGroupId)) {
+    return true
+  }
 
   return false
+}
+
+export function createHelperLineCandidates({
+  nodeIds,
+  nodes,
+}: {
+  nodeIds: Array<NodeId>
+  nodes: Record<NodeId, CanvasNode>
+}): Array<CanvasHelperLineCandidate> {
+  const candidates: Array<CanvasHelperLineCandidate> = []
+
+  for (const nodeId of nodeIds) {
+    const node = nodes[nodeId]
+    if (!node) continue
+
+    const frame = getCanvasNodeFrame(node)
+    const horizontalTargets: CanvasHelperLineCandidate['horizontalTargets'] = []
+    const verticalTargets: CanvasHelperLineCandidate['verticalTargets'] = []
+
+    for (const anchorName of HELPER_LINE_ANCHOR_NAMES) {
+      const anchor = HELPER_LINE_ANCHORS[anchorName]
+      const target = {
+        name: anchorName,
+        position: anchor.resolve(frame),
+      }
+
+      if (anchor.orientation === 'horizontal') {
+        horizontalTargets.push(target)
+      } else {
+        verticalTargets.push(target)
+      }
+    }
+
+    candidates.push({
+      id: node.id,
+      parentGroupId: node.parentGroupId,
+      frame,
+      horizontalTargets,
+      verticalTargets,
+    })
+  }
+
+  return candidates
 }
 
 function isBetterMatch(
@@ -144,57 +207,54 @@ function isBetterMatch(
 
 function findBestHelperLineMatch({
   anchorName,
+  candidates,
   excludeNodeIds,
-  nodeIds,
-  nodes,
   sourceFrame,
 }: {
   anchorName: CanvasHelperLineAnchorName
+  candidates: Array<CanvasHelperLineCandidate>
   excludeNodeIds: Set<NodeId>
-  nodeIds: Array<NodeId>
-  nodes: Record<NodeId, CanvasNode>
   sourceFrame: CanvasNodeFrame
 }) {
   const sourceAnchor = HELPER_LINE_ANCHORS[anchorName]
   const sourcePosition = sourceAnchor.resolve(sourceFrame)
   let bestMatch: HelperLineMatch | null = null
 
-  for (const nodeId of nodeIds) {
-    const node = nodes[nodeId]
-    if (!node || shouldSkipCandidateNode(node, sourceFrame, excludeNodeIds)) {
+  for (const candidate of candidates) {
+    if (shouldSkipCandidateNode(candidate, sourceFrame, excludeNodeIds)) {
       continue
     }
 
-    const targetFrame = getCanvasNodeFrame(node)
-    const nodeDistance = getFrameDistance(sourceFrame, targetFrame)
+    const nodeDistance = getFrameDistance(sourceFrame, candidate.frame)
     if (nodeDistance > CANVAS_HELPER_LINE_MAX_CANDIDATE_DISTANCE) continue
 
-    for (const targetAnchorName of Object.keys(
-      HELPER_LINE_ANCHORS,
-    ) as Array<CanvasHelperLineAnchorName>) {
-      const targetAnchor = HELPER_LINE_ANCHORS[targetAnchorName]
-      if (targetAnchor.orientation !== sourceAnchor.orientation) continue
+    const targets =
+      sourceAnchor.orientation === 'horizontal'
+        ? candidate.horizontalTargets
+        : candidate.verticalTargets
+
+    for (const target of targets) {
+      const targetAnchorName = target.name
       if (!areCompatibleAnchorNames(anchorName, targetAnchorName)) continue
 
-      const targetPosition = targetAnchor.resolve(targetFrame)
-      const lineDistance = Math.abs(targetPosition - sourcePosition)
+      const lineDistance = Math.abs(target.position - sourcePosition)
       if (lineDistance > CANVAS_HELPER_LINE_SNAP_RADIUS) continue
 
-      const candidate: HelperLineMatch = {
+      const candidateMatch: HelperLineMatch = {
         line: {
           orientation: sourceAnchor.orientation,
-          position: targetPosition,
+          position: target.position,
           sourceAnchorName: anchorName,
           targetAnchorName,
-          targetNodeId: node.id,
+          targetNodeId: candidate.id,
         },
         sourcePosition,
         lineDistance,
         nodeDistance,
       }
 
-      if (isBetterMatch(candidate, bestMatch)) {
-        bestMatch = candidate
+      if (isBetterMatch(candidateMatch, bestMatch)) {
+        bestMatch = candidateMatch
       }
     }
   }
@@ -207,15 +267,13 @@ function findBestHelperLineMatch({
  * The search compares the moving frame's anchors against all non-excluded nodes.
  */
 export function snapFrameToHelperLines({
+  candidates,
   excludeNodeIds = [],
   frame,
-  nodeIds,
-  nodes,
 }: {
+  candidates: Array<CanvasHelperLineCandidate>
   excludeNodeIds?: Array<NodeId>
   frame: CanvasNodeFrame
-  nodeIds: Array<NodeId>
-  nodes: Record<NodeId, CanvasNode>
 }): CanvasHelperLineSnapResult {
   const excluded = new Set(excludeNodeIds)
   const result: CanvasHelperLineSnapResult = {
@@ -226,14 +284,11 @@ export function snapFrameToHelperLines({
   let horizontalMatch: HelperLineMatch | null = null
   let verticalMatch: HelperLineMatch | null = null
 
-  for (const anchorName of Object.keys(
-    HELPER_LINE_ANCHORS,
-  ) as Array<CanvasHelperLineAnchorName>) {
+  for (const anchorName of HELPER_LINE_ANCHOR_NAMES) {
     const match = findBestHelperLineMatch({
       anchorName,
+      candidates,
       excludeNodeIds: excluded,
-      nodeIds,
-      nodes,
       sourceFrame: frame,
     })
     if (!match) continue

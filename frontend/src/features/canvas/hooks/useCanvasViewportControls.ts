@@ -1,9 +1,9 @@
 import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import {
+  getCanvasNodesSnapshot,
   useCanvasActions,
   useCanvasNodeIds,
-  useCanvasNodes,
   useCanvasViewport,
 } from '@/store/canvasStore'
 import {
@@ -61,7 +61,6 @@ function getFitViewScale(
  * Provides pan and pointer-centered zoom controls for the canvas viewport.
  */
 export function useCanvasViewportControls(stageSize: StageSize) {
-  const nodes = useCanvasNodes()
   const nodeIds = useCanvasNodeIds()
   const viewport = useCanvasViewport()
   const { setViewport } = useCanvasActions()
@@ -123,9 +122,15 @@ export function useCanvasViewportControls(stageSize: StageSize) {
   }, [viewport.scale, zoomAtStageCenter])
 
   const fitView = useCallback(() => {
-    if (nodeIds.length === 0 || stageSize.width === 0 || stageSize.height === 0) {
+    if (
+      nodeIds.length === 0 ||
+      stageSize.width === 0 ||
+      stageSize.height === 0
+    ) {
       return
     }
+
+    const nodesById = getCanvasNodesSnapshot()
 
     let left = Number.POSITIVE_INFINITY
     let top = Number.POSITIVE_INFINITY
@@ -134,7 +139,7 @@ export function useCanvasViewportControls(stageSize: StageSize) {
     let boundsNodeCount = 0
 
     for (const nodeId of nodeIds) {
-      const node = nodes[nodeId]
+      const node = nodesById[nodeId]
       if (!node) continue
 
       left = Math.min(left, node.x)
@@ -158,7 +163,7 @@ export function useCanvasViewportControls(stageSize: StageSize) {
       y: (stageSize.height - boundsHeight * nextScale) / 2 - top * nextScale,
       scale: nextScale,
     })
-  }, [nodeIds, nodes, setViewport, stageSize])
+  }, [nodeIds, setViewport, stageSize])
 
   return {
     viewport,

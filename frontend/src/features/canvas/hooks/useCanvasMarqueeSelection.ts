@@ -2,9 +2,9 @@ import { useCallback, useRef, useState } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { NodeId } from '../model/types'
 import {
+  getCanvasNodeIdsSnapshot,
+  getCanvasNodesSnapshot,
   useCanvasActions,
-  useCanvasNodeIds,
-  useCanvasNodes,
   useCanvasViewport,
   useIsMarqueeSelecting,
 } from '@/store/canvasStore'
@@ -51,8 +51,6 @@ function hasSameIds(left: Array<NodeId>, right: Array<NodeId>) {
  * nodes whose frame intersects the dragged rectangle.
  */
 export function useCanvasMarqueeSelection() {
-  const nodes = useCanvasNodes()
-  const nodeIds = useCanvasNodeIds()
   const viewport = useCanvasViewport()
   const isMarqueeSelecting = useIsMarqueeSelecting()
   const { selectNodesFromMarquee, setMarqueeSelecting } = useCanvasActions()
@@ -75,14 +73,16 @@ export function useCanvasMarqueeSelection() {
 
   const selectNodesInRect = useCallback(
     (rect: MarqueeSelectionRect) => {
+      const nodeOrder = getCanvasNodeIdsSnapshot()
+      const nodesById = getCanvasNodesSnapshot()
       const selectedIds: Array<NodeId> = []
       const rectRight = rect.x + rect.width
       const rectBottom = rect.y + rect.height
 
       // TODO: Consider a quadtree or uniform grid index once canvases reach
       // thousands of nodes; marquee selection is currently a linear scan.
-      for (const nodeId of nodeIds) {
-        const node = nodes[nodeId]
+      for (const nodeId of nodeOrder) {
+        const node = nodesById[nodeId]
         if (!node) continue
 
         const nodeRight = node.x + node.width
@@ -102,7 +102,7 @@ export function useCanvasMarqueeSelection() {
       lastSelectedIdsRef.current = selectedIds
       selectNodesFromMarquee(selectedIds)
     },
-    [nodeIds, nodes, selectNodesFromMarquee],
+    [selectNodesFromMarquee],
   )
 
   const handleMarqueeMouseDown = useCallback(
