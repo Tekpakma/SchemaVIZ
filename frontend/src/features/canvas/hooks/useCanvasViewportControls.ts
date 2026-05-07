@@ -1,11 +1,18 @@
 import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
-import { useCanvasActions, useCanvasViewport } from '@/store/canvasStore'
+import {
+  useCanvasActions,
+  useCanvasNodeIds,
+  useCanvasNodes,
+  useCanvasViewport,
+} from '@/store/canvasStore'
 import {
   CANVAS_MAX_SCALE,
   CANVAS_MIN_SCALE,
   CANVAS_SCALE_STEP,
 } from '../constants'
+
+const FIT_VIEW_PADDING = 64
 
 type StageSize = {
   width: number
@@ -38,10 +45,24 @@ function getZoomedViewport(
   }
 }
 
+function getFitViewScale(
+  bounds: { width: number; height: number },
+  stageSize: StageSize,
+) {
+  const availableWidth = Math.max(1, stageSize.width - FIT_VIEW_PADDING * 2)
+  const availableHeight = Math.max(1, stageSize.height - FIT_VIEW_PADDING * 2)
+
+  return clampScale(
+    Math.min(availableWidth / bounds.width, availableHeight / bounds.height),
+  )
+}
+
 /**
  * Provides pan and pointer-centered zoom controls for the canvas viewport.
  */
 export function useCanvasViewportControls(stageSize: StageSize) {
+  const nodes = useCanvasNodes()
+  const nodeIds = useCanvasNodeIds()
   const viewport = useCanvasViewport()
   const { setViewport } = useCanvasActions()
 
@@ -101,10 +122,50 @@ export function useCanvasViewportControls(stageSize: StageSize) {
     zoomAtStageCenter(viewport.scale / CANVAS_SCALE_STEP)
   }, [viewport.scale, zoomAtStageCenter])
 
+  const fitView = useCallback(() => {
+    if (nodeIds.length === 0 || stageSize.width === 0 || stageSize.height === 0) {
+      return
+    }
+
+    let left = Number.POSITIVE_INFINITY
+    let top = Number.POSITIVE_INFINITY
+    let right = Number.NEGATIVE_INFINITY
+    let bottom = Number.NEGATIVE_INFINITY
+    let boundsNodeCount = 0
+
+    for (const nodeId of nodeIds) {
+      const node = nodes[nodeId]
+      if (!node) continue
+
+      left = Math.min(left, node.x)
+      top = Math.min(top, node.y)
+      right = Math.max(right, node.x + node.width)
+      bottom = Math.max(bottom, node.y + node.height)
+      boundsNodeCount += 1
+    }
+
+    if (boundsNodeCount === 0) return
+
+    const boundsWidth = Math.max(1, right - left)
+    const boundsHeight = Math.max(1, bottom - top)
+    const nextScale = getFitViewScale(
+      { width: boundsWidth, height: boundsHeight },
+      stageSize,
+    )
+
+    setViewport({
+      x: (stageSize.width - boundsWidth * nextScale) / 2 - left * nextScale,
+      y: (stageSize.height - boundsHeight * nextScale) / 2 - top * nextScale,
+      scale: nextScale,
+    })
+  }, [nodeIds, nodes, setViewport, stageSize])
+
   return {
     viewport,
     canZoomIn: viewport.scale < CANVAS_MAX_SCALE,
     canZoomOut: viewport.scale > CANVAS_MIN_SCALE,
+    canFitView: nodeIds.length > 0,
+    fitView,
     handleStageDragMove,
     handleWheel,
     zoomIn,

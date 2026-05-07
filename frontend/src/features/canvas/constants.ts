@@ -12,6 +12,9 @@ export const CANVAS_INITIAL_STAGE_SIZE = {
 export const CANVAS_MIN_SCALE = 0.25
 export const CANVAS_MAX_SCALE = 4
 export const CANVAS_SCALE_STEP = 1.06
+export const CANVAS_HELPER_LINE_SNAP_RADIUS = 6
+export const CANVAS_HELPER_LINE_MAX_CANDIDATE_DISTANCE = 800
+export const CANVAS_HELPER_LINE_COLOR = '#2563eb'
 
 export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
   {

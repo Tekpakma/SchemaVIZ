@@ -22,6 +22,7 @@ import { getCanvasNodeShapeDefinition } from '../nodeShapes'
 import { getRenderTagTextBounds } from '@/features/rendering/renderTagTextBounds'
 import { useNodeResizeTransformer } from '../hooks/useNodeResizeTransformer'
 import type { NodeResizeFrame } from '../hooks/useNodeResizeTransformer'
+import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
 
 type RichTextNodeProps = {
   nodeId: NodeId
@@ -109,6 +110,7 @@ export const RichTextNode = memo(function RichTextNode({
   const editingNodeId = useCanvasEditingNodeId()
   const selectedNodeIds = useSelectedNodeIds()
   const { startEditing, selectNode, moveNode } = useCanvasActions()
+  const { clearHelperLines, snapFrame } = useCanvasHelperLines()
   const { resolvedTheme } = useTheme()
   const isSelected = selectedNodeIds.includes(nodeId)
 
@@ -139,11 +141,30 @@ export const RichTextNode = memo(function RichTextNode({
 
   const handleDragMove = (event: KonvaEventObject<DragEvent>) => {
     const target = event.target
+    const snappedPosition = snapFrame(
+      {
+        id: node.id,
+        x: target.x(),
+        y: target.y(),
+        width: node.width,
+        height: node.height,
+      },
+      {
+        excludeNodeIds: [node.id],
+      },
+    )
+
+    target.position(snappedPosition)
     moveNode({
       id: node.id,
-      x: target.x(),
-      y: target.y(),
+      x: snappedPosition.x,
+      y: snappedPosition.y,
     })
+  }
+
+  const handleDragEnd = (event: KonvaEventObject<DragEvent>) => {
+    handleDragMove(event)
+    clearHelperLines()
   }
 
   return (
@@ -156,7 +177,7 @@ export const RichTextNode = memo(function RichTextNode({
       onDblClick={handleDoubleClick}
       onDblTap={handleDoubleClick}
       onDragMove={handleDragMove}
-      onDragEnd={handleDragMove}
+      onDragEnd={handleDragEnd}
     >
       <RichTextNodeSurface
         width={node.width}

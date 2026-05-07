@@ -4,6 +4,7 @@ import {
   RichTextNodeControls,
   RichTextNodeText,
 } from './RichTextNode'
+import { CanvasHelperLines } from './CanvasHelperLines'
 import { CanvasViewportPanel } from './CanvasViewportPanel'
 import { SelectedNodeToolbar } from './SelectedNodeToolbar'
 import { SelectedNodesFrame } from './SelectedNodesFrame'
@@ -13,6 +14,7 @@ import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
 import { useCanvasMarqueeSelection } from '../hooks/useCanvasMarqueeSelection'
 import { useCanvasViewportControls } from '../hooks/useCanvasViewportControls'
 import { useEnsureDefaultCanvasNode } from '../hooks/useEnsureDefaultCanvasNode'
+import { CanvasHelperLinesProvider } from '../hooks/useCanvasHelperLines'
 import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 
@@ -22,8 +24,10 @@ export function MainScreen() {
   const { selectNode } = useCanvasActions()
   const {
     viewport,
+    canFitView,
     canZoomIn,
     canZoomOut,
+    fitView,
     handleStageDragMove,
     handleWheel,
     zoomIn,
@@ -59,73 +63,80 @@ export function MainScreen() {
   )
 
   return (
-    <div
-      ref={stageContainerRef}
-      style={{
-        position: 'relative',
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden',
-      }}
-    >
-      <Stage
-        width={size.width}
-        height={size.height}
-        x={viewport.x}
-        y={viewport.y}
-        scaleX={viewport.scale}
-        scaleY={viewport.scale}
-        draggable={!isSelecting}
-        onDragMove={handleStageDragMove}
-        onDragEnd={handleStageDragMove}
-        onWheel={handleWheel}
-        onMouseDown={handleStagePointerDown}
-        onMouseMove={handleMarqueeMouseMove}
-        onMouseUp={handleMarqueeMouseUp}
-        onTouchStart={handleStageTouchStart}
+    <CanvasHelperLinesProvider>
+      <div
+        ref={stageContainerRef}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+        }}
       >
-        <Layer>
-          {nodeIds.map((id) => (
-            <RichTextNode key={id} nodeId={id} />
-          ))}
-        </Layer>
-        <Layer listening={false}>
-          {nodeIds.map((id) => (
-            <RichTextNodeText key={id} nodeId={id} />
-          ))}
-        </Layer>
-        <Layer>
-          <SelectedNodesFrame />
-        </Layer>
-        <Layer listening={false}>
-          {selectionRect && (
-            <Rect
-              x={selectionRect.x}
-              y={selectionRect.y}
-              width={selectionRect.width}
-              height={selectionRect.height}
-              fill="rgba(59, 130, 246, 0.10)"
-              stroke="#3b82f6"
-              strokeWidth={1}
-              strokeScaleEnabled={false}
-              listening={false}
-            />
-          )}
-        </Layer>
-        <Layer>
-          {nodeIds.map((id) => (
-            <RichTextNodeControls key={id} nodeId={id} />
-          ))}
-        </Layer>
-      </Stage>
-      <CanvasViewportPanel
-        canZoomIn={canZoomIn}
-        canZoomOut={canZoomOut}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-      />
-      <SelectedNodeToolbar />
-      {<LexicalOverlayWrapper />}
-    </div>
+        <Stage
+          width={size.width}
+          height={size.height}
+          x={viewport.x}
+          y={viewport.y}
+          scaleX={viewport.scale}
+          scaleY={viewport.scale}
+          draggable={!isSelecting}
+          onDragMove={handleStageDragMove}
+          onDragEnd={handleStageDragMove}
+          onWheel={handleWheel}
+          onMouseDown={handleStagePointerDown}
+          onMouseMove={handleMarqueeMouseMove}
+          onMouseUp={handleMarqueeMouseUp}
+          onTouchStart={handleStageTouchStart}
+        >
+          <Layer>
+            {nodeIds.map((id) => (
+              <RichTextNode key={id} nodeId={id} />
+            ))}
+          </Layer>
+          <Layer listening={false}>
+            {nodeIds.map((id) => (
+              <RichTextNodeText key={id} nodeId={id} />
+            ))}
+          </Layer>
+          <Layer>
+            <SelectedNodesFrame />
+          </Layer>
+          <Layer listening={false}>
+            {selectionRect && (
+              <Rect
+                x={selectionRect.x}
+                y={selectionRect.y}
+                width={selectionRect.width}
+                height={selectionRect.height}
+                fill="rgba(59, 130, 246, 0.10)"
+                stroke="#3b82f6"
+                strokeWidth={1}
+                strokeScaleEnabled={false}
+                listening={false}
+              />
+            )}
+          </Layer>
+          <Layer listening={false}>
+            <CanvasHelperLines viewport={viewport} stageSize={size} />
+          </Layer>
+          <Layer>
+            {nodeIds.map((id) => (
+              <RichTextNodeControls key={id} nodeId={id} />
+            ))}
+          </Layer>
+        </Stage>
+        <CanvasViewportPanel
+          canFitView={canFitView}
+          canZoomIn={canZoomIn}
+          canZoomOut={canZoomOut}
+          onFitView={fitView}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+        />
+        <SelectedNodeToolbar />
+        {<LexicalOverlayWrapper />}
+      </div>
+    </CanvasHelperLinesProvider>
   )
 }
