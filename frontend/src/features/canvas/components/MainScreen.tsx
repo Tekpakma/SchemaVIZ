@@ -17,6 +17,8 @@ import { useEnsureDefaultCanvasNode } from '../hooks/useEnsureDefaultCanvasNode'
 import { CanvasHelperLinesProvider } from '../hooks/useCanvasHelperLines'
 import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
+import { TEST_IDS } from '@/constants'
+import type { NodeId } from '../model/types'
 
 export function MainScreen() {
   const { ref: stageContainerRef, size } = useCanvasStageSize()
@@ -65,6 +67,8 @@ export function MainScreen() {
   return (
     <CanvasHelperLinesProvider>
       <div
+        data-node-count={nodeIds.length}
+        data-testid={TEST_IDS.CANVAS_STAGE_CONTAINER}
         ref={stageContainerRef}
         style={{
           position: 'relative',
@@ -90,12 +94,12 @@ export function MainScreen() {
           onTouchStart={handleStageTouchStart}
         >
           <Layer>
-            {nodeIds.map((id) => (
+            {nodeIds.map((id: NodeId) => (
               <RichTextNode key={id} nodeId={id} />
             ))}
           </Layer>
           <Layer listening={false}>
-            {nodeIds.map((id) => (
+            {nodeIds.map((id: NodeId) => (
               <RichTextNodeText key={id} nodeId={id} />
             ))}
           </Layer>
@@ -121,7 +125,7 @@ export function MainScreen() {
             <CanvasHelperLines viewport={viewport} stageSize={size} />
           </Layer>
           <Layer>
-            {nodeIds.map((id) => (
+            {nodeIds.map((id: NodeId) => (
               <RichTextNodeControls key={id} nodeId={id} />
             ))}
           </Layer>

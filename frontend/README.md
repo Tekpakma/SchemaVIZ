@@ -25,6 +25,15 @@ This project uses [Vitest](https://vitest.dev/) for testing. You can run the tes
 bun --bun run test
 ```
 
+For an end-to-end canvas stress run, use:
+
+```bash
+bun --bun run test:e2e -- canvas-stress.spec.ts
+```
+
+You can also open the canvas with a deterministic stress scene by adding a `stress`
+query parameter, for example `/?stress=240`.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

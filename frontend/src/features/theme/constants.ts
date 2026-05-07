@@ -13,7 +13,10 @@ export function parseThemeMode(value: unknown): ThemeMode {
     : DEFAULT_THEME_MODE
 }
 
-export function resolveThemeMode(theme: ThemeMode, prefersDark: boolean): ResolvedTheme {
+export function resolveThemeMode(
+  theme: ThemeMode,
+  prefersDark: boolean,
+): ResolvedTheme {
   if (theme === 'system') return prefersDark ? 'dark' : 'light'
   return theme
 }
