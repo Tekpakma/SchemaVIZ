@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, use } from 'react'
 import type { CanvasBoxNode, NodeId } from '@/features/canvas/model/types'
 import type { CanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
 
@@ -23,7 +23,7 @@ export const LexicalOverlayRuntimeProvider =
 
 /** Runtime metadata shared by the active lexical overlay, plugins, and future decorator nodes. */
 export function useLexicalOverlayRuntime() {
-  const runtime = useContext(LexicalOverlayRuntimeContext)
+  const runtime = use(LexicalOverlayRuntimeContext)
 
   if (!runtime) {
     throw new Error(

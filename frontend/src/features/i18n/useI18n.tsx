@@ -2,8 +2,8 @@ import { useServerFn } from '@tanstack/react-start'
 import { createInstance } from 'i18next'
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useState,
 } from 'react'
@@ -86,7 +86,7 @@ export function I18nProvider({
 }
 
 export function useLocale() {
-  const context = useContext(LocaleContext)
+  const context = use(LocaleContext)
   if (!context) {
     throw new Error('useLocale must be used inside I18nProvider')
   }

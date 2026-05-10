@@ -20,16 +20,13 @@ export async function handleMcpRequest(
     }
 
     await server.connect(serverTransport)
-
-    await clientTransport.start()
-    await serverTransport.start()
+    await Promise.all([clientTransport.start(), serverTransport.start()])
 
     await clientTransport.send(jsonRpcRequest)
 
     await new Promise((resolve) => setTimeout(resolve, 10))
 
-    await clientTransport.close()
-    await serverTransport.close()
+    await Promise.all([clientTransport.close(), serverTransport.close()])
 
     return Response.json(responseData, {
       headers: {

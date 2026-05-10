@@ -20,8 +20,10 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
   loader: async () => {
-    const theme = await getThemePreference()
-    const locale = await getLocalePreference()
+    const [theme, locale] = await Promise.all([
+      getThemePreference(),
+      getLocalePreference(),
+    ])
 
     return {
       locale,

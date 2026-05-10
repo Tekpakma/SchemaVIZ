@@ -28,7 +28,9 @@ export function extractPlainTextFromHtml(value: string) {
 
   return normalized
     .split('\n')
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
+    .flatMap((line) => {
+      const trimmed = line.replace(/\s+/g, ' ').trim()
+      return trimmed ? [trimmed] : []
+    })
     .join('\n')
 }

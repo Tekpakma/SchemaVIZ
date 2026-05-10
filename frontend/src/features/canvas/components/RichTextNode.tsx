@@ -130,7 +130,7 @@ export const RichTextNode = memo(function RichTextNode({
 
   const isGroup = node.shape === 'group'
 
-  const handleClick = () => {
+  const selectThisNode = () => {
     selectNode(node.id)
   }
 
@@ -173,8 +173,8 @@ export const RichTextNode = memo(function RichTextNode({
       x={node.x}
       y={node.y}
       draggable
-      onClick={handleClick}
-      onTap={handleClick}
+      onClick={selectThisNode}
+      onTap={selectThisNode}
       onDblClick={handleDoubleClick}
       onDblTap={handleDoubleClick}
       onDragMove={handleDragMove}

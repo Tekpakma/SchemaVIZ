@@ -536,9 +536,10 @@ function clipRoutePointToFrameBoundary(
     addCandidate((maxY - point.y) / deltaY)
   }
 
-  const clippedCandidate = [...candidates].sort(
-    (left, right) => left.t - right.t,
-  )[0]
+  const clippedCandidate = candidates.reduce<(typeof candidates)[number] | undefined>(
+    (min, c) => (!min || c.t < min.t ? c : min),
+    undefined,
+  )
   return clippedCandidate?.point ?? point
 }
 

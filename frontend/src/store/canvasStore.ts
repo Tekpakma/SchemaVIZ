@@ -134,8 +134,9 @@ function assignExplicitPortSlots(state: CanvasState) {
   >()
 
   for (const edge of Object.values(state.edgesById)) {
-    if (edge.sourcePort?.side) {
-      const key = `${edge.sourceNodeId}:${edge.sourcePort.side}`
+    const sourceSide = edge.sourcePort?.side
+    if (sourceSide) {
+      const key = `${edge.sourceNodeId}:${sourceSide}`
       const group = endpointGroups.get(key) ?? []
       group.push({
         edge,
@@ -143,14 +144,15 @@ function assignExplicitPortSlots(state: CanvasState) {
         sortValue: getPortSlotSortValue(
           state,
           edge.targetNodeId,
-          edge.sourcePort.side,
+          sourceSide,
         ),
       })
       endpointGroups.set(key, group)
     }
 
-    if (edge.targetPort?.side) {
-      const key = `${edge.targetNodeId}:${edge.targetPort.side}`
+    const targetSide = edge.targetPort?.side
+    if (targetSide) {
+      const key = `${edge.targetNodeId}:${targetSide}`
       const group = endpointGroups.get(key) ?? []
       group.push({
         edge,
@@ -158,7 +160,7 @@ function assignExplicitPortSlots(state: CanvasState) {
         sortValue: getPortSlotSortValue(
           state,
           edge.sourceNodeId,
-          edge.targetPort.side,
+          targetSide,
         ),
       })
       endpointGroups.set(key, group)

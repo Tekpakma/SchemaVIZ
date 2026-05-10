@@ -150,7 +150,7 @@ export function CanvasDevtoolsPanel() {
             />
           ))}
         </div>
-        <div className="rounded-sm border border-border bg-background px-2 py-2 text-[11px] text-muted-foreground">
+        <div className="rounded-sm border border-border bg-background p-2 text-[11px] text-muted-foreground">
           {manualNodeCount} manual node{manualNodeCount === 1 ? '' : 's'} ·{' '}
           {fixedEdgeCount} fixed edge{fixedEdgeCount === 1 ? '' : 's'}
         </div>
@@ -206,7 +206,7 @@ export function CanvasDevtoolsPanel() {
         </div>
       </section>
 
-      <div className="mt-auto flex items-center justify-between rounded-sm border border-border bg-background px-2 py-2 text-xs text-muted-foreground">
+      <div className="mt-auto flex items-center justify-between rounded-sm border border-border bg-background p-2 text-xs text-muted-foreground">
         <span>Applies immediately and can be deleted as one slice.</span>
         <button
           className="rounded-sm border border-border px-2 py-1 text-foreground transition-colors hover:border-foreground/40 disabled:pointer-events-none disabled:opacity-40"

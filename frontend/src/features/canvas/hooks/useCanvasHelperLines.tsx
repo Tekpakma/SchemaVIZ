@@ -1,7 +1,7 @@
 import {
   createContext,
+  use,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   useState,
@@ -165,7 +165,7 @@ export function CanvasHelperLinesProvider({
 }
 
 export function useCanvasHelperLines() {
-  const context = useContext(CanvasHelperLinesContext)
+  const context = use(CanvasHelperLinesContext)
   if (!context) {
     throw new Error(
       'useCanvasHelperLines must be used within CanvasHelperLinesProvider',
