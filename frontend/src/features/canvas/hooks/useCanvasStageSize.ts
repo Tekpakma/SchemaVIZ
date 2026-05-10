@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CANVAS_INITIAL_STAGE_SIZE } from '../constants'
+import { useCanvasActions, useCanvasStageSizeValue } from '@/store/canvasStore'
 
 type StageSize = {
   width: number
@@ -15,11 +15,16 @@ type CanvasStageSizeResult = {
  * Tracks the Konva stage dimensions from its canvas container.
  */
 export function useCanvasStageSize(): CanvasStageSizeResult {
+  const size = useCanvasStageSizeValue()
+  const { setStageMounted, setStageSize } = useCanvasActions()
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
-  const [size, setSize] = useState<StageSize>(CANVAS_INITIAL_STAGE_SIZE)
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    setContainer(node)
-  }, [])
+  const ref = useCallback(
+    (node: HTMLDivElement | null) => {
+      setContainer(node)
+      setStageMounted(Boolean(node))
+    },
+    [setStageMounted],
+  )
 
   useEffect(() => {
     if (!container) return
@@ -27,7 +32,7 @@ export function useCanvasStageSize(): CanvasStageSizeResult {
     const update = () => {
       const rect = container.getBoundingClientRect()
 
-      setSize({
+      setStageSize({
         width: Math.round(rect.width),
         height: Math.round(rect.height),
       })
@@ -38,7 +43,7 @@ export function useCanvasStageSize(): CanvasStageSizeResult {
     resizeObserver.observe(container)
 
     return () => resizeObserver.disconnect()
-  }, [container])
+  }, [container, setStageSize])
 
   return {
     ref,

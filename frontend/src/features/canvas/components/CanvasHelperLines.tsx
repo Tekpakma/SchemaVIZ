@@ -1,5 +1,5 @@
 import { Line } from 'react-konva'
-import { CANVAS_HELPER_LINE_COLOR } from '../constants'
+import { CANVAS_HELPER_LINE_COLOR } from '../themeColors'
 import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
 import type { CanvasViewport } from '@/store/canvasStore'
 

@@ -1,4 +1,4 @@
-import type { CanvasNode } from './model/types'
+import type { CanvasEdge, CanvasNode } from './model/types'
 import {
   DEFAULT_CANVAS_NODE_SHAPE,
   DEFAULT_CANVAS_NODE_SHAPE_NAME,
@@ -14,12 +14,14 @@ export const CANVAS_MAX_SCALE = 4
 export const CANVAS_SCALE_STEP = 1.06
 export const CANVAS_HELPER_LINE_SNAP_RADIUS = 6
 export const CANVAS_HELPER_LINE_MAX_CANDIDATE_DISTANCE = 800
-export const CANVAS_HELPER_LINE_COLOR = '#2563eb'
 
 export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
   {
     id: 'node-1',
     shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
+    layoutMode: 'manual',
+    appLabel: 'demo',
+    modelName: 'server',
     x: 80,
     y: 80,
     width: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.width,
@@ -38,6 +40,9 @@ export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
   {
     id: 'node-2',
     shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
+    layoutMode: 'manual',
+    appLabel: 'demo',
+    modelName: 'database',
     x: 300,
     y: 200,
     width: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.width,
@@ -52,6 +57,16 @@ export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
       `,
     contentHeight: 0,
     version: 1,
+  },
+]
+
+export const DEFAULT_CANVAS_EDGES: CanvasEdge[] = [
+  {
+    id: 'edge-1',
+    sourceNodeId: 'node-1',
+    targetNodeId: 'node-2',
+    kind: 'default',
+    sourceLabel: 'reads',
   },
 ]
 

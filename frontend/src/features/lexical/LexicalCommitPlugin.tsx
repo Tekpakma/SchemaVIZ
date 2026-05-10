@@ -11,15 +11,15 @@ import {
 } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
 
-import { useActiveCanvasNodeId } from '../canvas/components/activeCanvasNodeContext'
-import { useCanvasActions, useCanvasNodeWidth } from '@/store/canvasStore'
+import { useCanvasActions } from '@/store/canvasStore'
 import { exportRenderTagHtml, renderTagAccuracy } from './exportRenderTagHtml'
+import { useLexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
 
 export function LexicalCommitPlugin() {
   const [editor] = useLexicalComposerContext()
-  const nodeId = useActiveCanvasNodeId()
+  const { node, nodeId } = useLexicalOverlayRuntime()
   const { commitNodeText, stopEditing } = useCanvasActions()
-  const nodeWidth = useCanvasNodeWidth(nodeId)
+  const nodeWidth = node.width
   const didCommitRef = useRef(false)
 
   useEffect(() => {

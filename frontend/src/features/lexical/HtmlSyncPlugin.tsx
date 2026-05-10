@@ -1,24 +1,19 @@
 import { useEffect } from 'react'
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { layout } from 'render-tag'
 import { exportRenderTagHtml } from './exportRenderTagHtml'
-import { useActiveCanvasNodeId } from '../canvas/components/activeCanvasNodeContext';
 import { useDebouncedCallback } from '@tanstack/react-pacer/debouncer'
-import { useCanvasActions, useCanvasNodeWidth } from '@/store/canvasStore';
+import { useCanvasActions } from '@/store/canvasStore'
+import { useLexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
 
 export function HtmlSyncPlugin() {
   const [editor] = useLexicalComposerContext()
-  const nodeId = useActiveCanvasNodeId()
-
+  const { node, nodeId } = useLexicalOverlayRuntime()
   const { commitNodeText } = useCanvasActions()
-  const width = useCanvasNodeWidth(nodeId)
+  const width = node.width
 
   const debouncedCommit = useDebouncedCallback(
-    (payload: {
-      lexicalJson: string
-      html: string
-      contentHeight: number
-    }) => {
+    (payload: { lexicalJson: string; html: string; contentHeight: number }) => {
       commitNodeText({
         id: nodeId,
         lexicalJson: payload.lexicalJson,

@@ -1,0 +1,750 @@
+import type {
+  ElkExtendedEdge,
+  ElkNode,
+  ElkPort,
+  LayoutOptions,
+} from 'elkjs/lib/elk-api'
+import type {
+  SchemaEdgeOutput,
+  SchemaGraphOutput,
+  SchemaNodeOutput,
+} from '@/api/contracts'
+import type { CanvasLayoutInput } from './layout.schemas'
+import { CANVAS_NODE_SHAPES } from './nodeShapes'
+import type {
+  CanvasEdge,
+  CanvasFlowDirection,
+  CanvasEdgeKind,
+  CanvasGraphLayoutResult,
+  CanvasNode,
+  CanvasNodeFrame,
+  CanvasPoint,
+  CanvasPortRef,
+  CanvasPortSide,
+  NodeId,
+} from './model/types'
+import { escapeHtml } from '@/utils/html'
+import * as R from 'remeda'
+import {
+  SCHEMA_NODE_FIELD_COLOR,
+  SCHEMA_NODE_SUBTITLE_COLOR,
+  SCHEMA_NODE_TITLE_COLOR,
+} from './themeColors'
+
+export type SchemaGraphNode = SchemaNodeOutput
+export type SchemaGraphEdge = SchemaEdgeOutput
+export type SchemaGraphPayload = SchemaGraphOutput
+
+export type SchemaCanvasGraph = {
+  nodes: Array<CanvasNode>
+  edges: Array<CanvasEdge>
+}
+
+type ElkDirection = 'RIGHT' | 'LEFT' | 'DOWN' | 'UP'
+type ElkPortSide = 'EAST' | 'WEST' | 'NORTH' | 'SOUTH'
+type CanvasRect = Pick<CanvasNodeFrame, 'height' | 'width' | 'x' | 'y'>
+type EdgeEndpoint = 'source' | 'target'
+
+export const DEFAULT_CANVAS_FLOW_DIRECTION: CanvasFlowDirection = 'LR'
+
+const ELK_PORT_SIDE_BY_CANVAS_PORT_SIDE: Record<CanvasPortSide, ElkPortSide> = {
+  LEFT: 'WEST',
+  RIGHT: 'EAST',
+  TOP: 'NORTH',
+  BOTTOM: 'SOUTH',
+}
+
+const PORT_ID_SEPARATOR = ':port:'
+const ELK_PORT_CONSTRAINTS_OPTION = 'org.eclipse.elk.portConstraints'
+const ELK_PORT_SIDE_OPTION = 'org.eclipse.elk.port.side'
+
+const SOURCE_PORT_SIDE_BY_FLOW_DIRECTION: Record<
+  CanvasFlowDirection,
+  CanvasPortSide
+> = {
+  LR: 'RIGHT',
+  RL: 'LEFT',
+  TB: 'BOTTOM',
+  BT: 'TOP',
+}
+
+const TARGET_PORT_SIDE_BY_FLOW_DIRECTION: Record<
+  CanvasFlowDirection,
+  CanvasPortSide
+> = {
+  LR: 'LEFT',
+  RL: 'RIGHT',
+  TB: 'TOP',
+  BT: 'BOTTOM',
+}
+
+export const DEFAULT_ELK_LAYOUT_OPTIONS: LayoutOptions = {
+  'elk.algorithm': 'layered',
+  'elk.direction': 'RIGHT',
+  'elk.edgeRouting': 'ORTHOGONAL',
+  'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+  'elk.padding': '[top=36,left=36,bottom=36,right=36]',
+  'elk.spacing.nodeNode': '48',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '88',
+  'elk.layered.spacing.edgeNodeBetweenLayers': '32',
+  'elk.layered.spacing.edgeEdgeBetweenLayers': '16',
+}
+
+const SCHEMA_GROUP_PREFIX = 'schema-group:'
+
+function getElkDirectionForCanvasFlowDirection(
+  flowDirection: CanvasFlowDirection,
+): ElkDirection {
+  switch (flowDirection) {
+    case 'RL':
+      return 'LEFT'
+    case 'TB':
+      return 'DOWN'
+    case 'BT':
+      return 'UP'
+    case 'LR':
+    default:
+      return 'RIGHT'
+  }
+}
+
+function isHorizontalCanvasFlowDirection(flowDirection: CanvasFlowDirection) {
+  return flowDirection === 'LR' || flowDirection === 'RL'
+}
+
+function clampToRange(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function getNodeCenter(node: CanvasRect): CanvasPoint {
+  return {
+    x: node.x + node.width / 2,
+    y: node.y + node.height / 2,
+  }
+}
+
+/** Resolves the active canvas flow direction, preferring explicit canvas state over raw ELK options. */
+export function getCanvasFlowDirection(
+  flowDirection?: CanvasFlowDirection,
+  layoutOptions?: LayoutOptions,
+): CanvasFlowDirection {
+  if (flowDirection) {
+    return flowDirection
+  }
+
+  switch (layoutOptions?.['elk.direction']) {
+    case 'LEFT':
+      return 'RL'
+    case 'DOWN':
+      return 'TB'
+    case 'UP':
+      return 'BT'
+    case 'RIGHT':
+    default:
+      return DEFAULT_CANVAS_FLOW_DIRECTION
+  }
+}
+
+/** Determines which side an edge endpoint should use, honoring explicit edge intent before flow defaults. */
+export function resolveEdgePortSide(
+  portRef: CanvasPortRef | undefined,
+  endpoint: EdgeEndpoint,
+  flowDirection?: CanvasFlowDirection,
+  layoutOptions?: LayoutOptions,
+): CanvasPortSide {
+  if (portRef?.side) {
+    return portRef.side
+  }
+
+  const effectiveFlowDirection = getCanvasFlowDirection(
+    flowDirection,
+    layoutOptions,
+  )
+  return endpoint === 'source'
+    ? SOURCE_PORT_SIDE_BY_FLOW_DIRECTION[effectiveFlowDirection]
+    : TARGET_PORT_SIDE_BY_FLOW_DIRECTION[effectiveFlowDirection]
+}
+
+function createElkPortId(nodeId: NodeId, side: CanvasPortSide) {
+  return `${nodeId}${PORT_ID_SEPARATOR}${side}`
+}
+
+function getNodeIdFromElkPortId(elementId: string) {
+  return elementId.split(PORT_ID_SEPARATOR)[0] ?? elementId
+}
+
+function createElkPortsForNode(node: CanvasNode): Array<ElkPort> {
+  const sides: Array<CanvasPortSide> = ['LEFT', 'RIGHT', 'TOP', 'BOTTOM']
+
+  return sides.map((side) => ({
+    id: createElkPortId(node.id, side),
+    width: 0,
+    height: 0,
+    layoutOptions: {
+      [ELK_PORT_SIDE_OPTION]: ELK_PORT_SIDE_BY_CANVAS_PORT_SIDE[side],
+    },
+  }))
+}
+
+/** Projects a side-constrained anchor onto a node boundary while preserving the relevant axis from the reference point. */
+export function getPortAnchorPoint(
+  node: CanvasRect,
+  side: CanvasPortSide,
+  referencePoint: CanvasPoint,
+): CanvasPoint {
+  const minX = node.x
+  const maxX = node.x + node.width
+  const minY = node.y
+  const maxY = node.y + node.height
+
+  switch (side) {
+    case 'LEFT':
+      return {
+        x: minX,
+        y: clampToRange(referencePoint.y, minY, maxY),
+      }
+    case 'RIGHT':
+      return {
+        x: maxX,
+        y: clampToRange(referencePoint.y, minY, maxY),
+      }
+    case 'TOP':
+      return {
+        x: clampToRange(referencePoint.x, minX, maxX),
+        y: minY,
+      }
+    case 'BOTTOM':
+      return {
+        x: clampToRange(referencePoint.x, minX, maxX),
+        y: maxY,
+      }
+    default:
+      return getNodeCenter(node)
+  }
+}
+
+/** Explicit ports stay pinned to the center of their chosen side so manual node moves do not slide anchors. */
+function getFixedPortAnchorPoint(
+  node: CanvasRect,
+  side: CanvasPortSide,
+  portRef: CanvasPortRef,
+) {
+  if (portRef.slot === undefined || !portRef.slotCount || portRef.slotCount < 2) {
+    return getPortAnchorPoint(node, side, getNodeCenter(node))
+  }
+
+  const lanePosition = (portRef.slot + 1) / (portRef.slotCount + 1)
+
+  switch (side) {
+    case 'LEFT':
+      return {
+        x: node.x,
+        y: node.y + node.height * lanePosition,
+      }
+    case 'RIGHT':
+      return {
+        x: node.x + node.width,
+        y: node.y + node.height * lanePosition,
+      }
+    case 'TOP':
+      return {
+        x: node.x + node.width * lanePosition,
+        y: node.y,
+      }
+    case 'BOTTOM':
+      return {
+        x: node.x + node.width * lanePosition,
+        y: node.y + node.height,
+      }
+    default:
+      return getPortAnchorPoint(node, side, getNodeCenter(node))
+  }
+}
+
+function dedupeRoutePoints(points: Array<CanvasPoint>) {
+  return points.filter((point, index, allPoints) => {
+    if (index === 0) {
+      return true
+    }
+
+    const previousPoint = allPoints[index - 1]
+    if (!previousPoint) {
+      return true
+    }
+
+    return previousPoint.x !== point.x || previousPoint.y !== point.y
+  })
+}
+
+/** Builds the local orthogonal fallback route when no ELK route is present, using the resolved endpoint sides. */
+export function createFallbackEdgeRoute(
+  edge: CanvasEdge,
+  nodes: Record<NodeId, CanvasNode | CanvasNodeFrame>,
+  flowDirection?: CanvasFlowDirection,
+  layoutOptions?: LayoutOptions,
+): Array<CanvasPoint> | null {
+  const sourceNode = nodes[edge.sourceNodeId]
+  const targetNode = nodes[edge.targetNodeId]
+  if (!sourceNode || !targetNode) {
+    return null
+  }
+
+  const effectiveFlowDirection = getCanvasFlowDirection(
+    flowDirection,
+    layoutOptions,
+  )
+  const sourceCenter = getNodeCenter(sourceNode)
+  const targetCenter = getNodeCenter(targetNode)
+  const sourceSide = resolveEdgePortSide(
+    edge.sourcePort,
+    'source',
+    effectiveFlowDirection,
+    layoutOptions,
+  )
+  const targetSide = resolveEdgePortSide(
+    edge.targetPort,
+    'target',
+    effectiveFlowDirection,
+    layoutOptions,
+  )
+  const sourceAnchor = edge.sourcePort?.side
+    ? getFixedPortAnchorPoint(sourceNode, sourceSide, edge.sourcePort)
+    : getPortAnchorPoint(sourceNode, sourceSide, targetCenter)
+  const targetAnchor = edge.targetPort?.side
+    ? getFixedPortAnchorPoint(targetNode, targetSide, edge.targetPort)
+    : getPortAnchorPoint(targetNode, targetSide, sourceCenter)
+
+  if (isHorizontalCanvasFlowDirection(effectiveFlowDirection)) {
+    const midX = sourceAnchor.x + (targetAnchor.x - sourceAnchor.x) / 2
+    return dedupeRoutePoints([
+      sourceAnchor,
+      {
+        x: midX,
+        y: sourceAnchor.y,
+      },
+      {
+        x: midX,
+        y: targetAnchor.y,
+      },
+      targetAnchor,
+    ])
+  }
+
+  const midY = sourceAnchor.y + (targetAnchor.y - sourceAnchor.y) / 2
+  return dedupeRoutePoints([
+    sourceAnchor,
+    {
+      x: sourceAnchor.x,
+      y: midY,
+    },
+    {
+      x: targetAnchor.x,
+      y: midY,
+    },
+    targetAnchor,
+  ])
+}
+
+function getDirectChildIds(input: CanvasLayoutInput, parentId: NodeId) {
+  return input.childIdsByGroupId[parentId] ?? []
+}
+
+/** Recursively converts a canvas node subtree into an ELK node tree and attaches fixed-side ports for routing. */
+function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
+  const children = R.pipe(
+    getDirectChildIds(input, node.id),
+    R.flatMap((childId) => {
+      const childNode = input.nodesById[childId]
+      if (!childNode) {
+        return []
+      }
+
+      return [createElkNode(input, childNode)]
+    }),
+  )
+
+  return {
+    id: node.id,
+    width: node.width,
+    height: node.height,
+    ports: createElkPortsForNode(node),
+    layoutOptions: {
+      [ELK_PORT_CONSTRAINTS_OPTION]: 'FIXED_SIDE',
+    },
+    ...(children.length > 0 ? { children } : {}),
+  }
+}
+
+function isValidLayoutEdge(input: CanvasLayoutInput, edge: CanvasEdge) {
+  return Boolean(
+    input.nodesById[edge.sourceNodeId] && input.nodesById[edge.targetNodeId],
+  )
+}
+
+/** Maps a canvas edge onto ELK port endpoints so ELK can honor side constraints during layout and routing. */
+function createElkEdge(
+  edge: CanvasEdge,
+  flowDirection: CanvasFlowDirection,
+  layoutOptions?: LayoutOptions,
+): ElkExtendedEdge {
+  const sourceSide = resolveEdgePortSide(
+    edge.sourcePort,
+    'source',
+    flowDirection,
+    layoutOptions,
+  )
+  const targetSide = resolveEdgePortSide(
+    edge.targetPort,
+    'target',
+    flowDirection,
+    layoutOptions,
+  )
+
+  return {
+    id: edge.id,
+    sources: [createElkPortId(edge.sourceNodeId, sourceSide)],
+    targets: [createElkPortId(edge.targetNodeId, targetSide)],
+  }
+}
+
+/** Builds the root ELK graph from canvas state, resolving flow direction once for both node ports and edge endpoints. */
+export function createElkGraph(input: CanvasLayoutInput): ElkNode {
+  const flowDirection = getCanvasFlowDirection(
+    input.flowDirection,
+    input.layoutOptions,
+  )
+  const rootChildren = R.pipe(
+    input.nodeOrder,
+    R.flatMap((nodeId) => {
+      const node = input.nodesById[nodeId]
+      if (!node || node.parentGroupId) {
+        return []
+      }
+
+      return [createElkNode(input, node)]
+    }),
+  )
+
+  const edges = R.pipe(
+    input.edgeOrder,
+    R.flatMap((edgeId) => {
+      const edge = input.edgesById[edgeId]
+      if (!edge || !isValidLayoutEdge(input, edge)) {
+        return []
+      }
+
+      return [createElkEdge(edge, flowDirection, input.layoutOptions)]
+    }),
+  )
+
+  return {
+    id: 'root',
+    layoutOptions: {
+      ...DEFAULT_ELK_LAYOUT_OPTIONS,
+      ...input.layoutOptions,
+      'elk.direction': getElkDirectionForCanvasFlowDirection(flowDirection),
+    },
+    children: rootChildren,
+    edges,
+  }
+}
+
+function collectNodeFrames(
+  node: ElkNode,
+  parentOffset: CanvasPoint,
+  frames: Array<CanvasNodeFrame>,
+) {
+  const x = parentOffset.x + (node.x ?? 0)
+  const y = parentOffset.y + (node.y ?? 0)
+
+  if (node.id !== 'root') {
+    frames.push({
+      id: node.id,
+      x,
+      y,
+      width: node.width ?? 0,
+      height: node.height ?? 0,
+    })
+  }
+
+  for (const child of node.children ?? []) {
+    collectNodeFrames(child, { x, y }, frames)
+  }
+}
+
+function isPointInsideFrame(point: CanvasPoint, frame: CanvasNodeFrame) {
+  return (
+    point.x > frame.x &&
+    point.x < frame.x + frame.width &&
+    point.y > frame.y &&
+    point.y < frame.y + frame.height
+  )
+}
+
+/** Clips an interior route point to the first intersection with the node frame so rendered edges start at the boundary. */
+function clipRoutePointToFrameBoundary(
+  point: CanvasPoint,
+  adjacentPoint: CanvasPoint,
+  frame: CanvasNodeFrame,
+) {
+  if (
+    !isPointInsideFrame(point, frame) ||
+    isPointInsideFrame(adjacentPoint, frame)
+  ) {
+    return point
+  }
+
+  const deltaX = adjacentPoint.x - point.x
+  const deltaY = adjacentPoint.y - point.y
+  if (deltaX === 0 && deltaY === 0) {
+    return point
+  }
+
+  const minX = frame.x
+  const maxX = frame.x + frame.width
+  const minY = frame.y
+  const maxY = frame.y + frame.height
+  const candidates: Array<{ point: CanvasPoint; t: number }> = []
+
+  const addCandidate = (t: number) => {
+    if (t <= 0 || t > 1) {
+      return
+    }
+
+    const x = point.x + deltaX * t
+    const y = point.y + deltaY * t
+    if (x < minX || x > maxX || y < minY || y > maxY) {
+      return
+    }
+
+    candidates.push({
+      point: {
+        x: Math.min(maxX, Math.max(minX, x)),
+        y: Math.min(maxY, Math.max(minY, y)),
+      },
+      t,
+    })
+  }
+
+  if (deltaX !== 0) {
+    addCandidate((minX - point.x) / deltaX)
+    addCandidate((maxX - point.x) / deltaX)
+  }
+
+  if (deltaY !== 0) {
+    addCandidate((minY - point.y) / deltaY)
+    addCandidate((maxY - point.y) / deltaY)
+  }
+
+  const clippedCandidate = [...candidates].sort(
+    (left, right) => left.t - right.t,
+  )[0]
+  return clippedCandidate?.point ?? point
+}
+
+function getSectionPoints(edge: ElkExtendedEdge): Array<CanvasPoint> {
+  const section = edge.sections?.[0]
+  if (!section) return []
+
+  return [
+    section.startPoint,
+    ...(section.bendPoints ?? []),
+    section.endPoint,
+  ].map((point) => ({
+    x: point.x,
+    y: point.y,
+  }))
+}
+
+/** Adjusts the first and last route points against the owning node frames, even when ELK edges target port IDs. */
+function clipEdgeRoutePoints(
+  edge: ElkExtendedEdge,
+  points: Array<CanvasPoint>,
+  nodeFramesById: Record<NodeId, CanvasNodeFrame>,
+) {
+  if (points.length < 2) {
+    return points
+  }
+
+  const clippedPoints = [...points]
+  const firstPoint = clippedPoints[0]
+  const secondPoint = clippedPoints[1]
+  const lastIndex = clippedPoints.length - 1
+  const lastPoint = clippedPoints[lastIndex]
+  const previousPoint = clippedPoints[lastIndex - 1]
+  if (!firstPoint || !secondPoint || !lastPoint || !previousPoint) {
+    return points
+  }
+
+  const sourceNodeId = edge.sources[0]
+    ? getNodeIdFromElkPortId(edge.sources[0])
+    : undefined
+  const targetNodeId = edge.targets[0]
+    ? getNodeIdFromElkPortId(edge.targets[0])
+    : undefined
+  const sourceFrame = sourceNodeId ? nodeFramesById[sourceNodeId] : undefined
+  const targetFrame = targetNodeId ? nodeFramesById[targetNodeId] : undefined
+
+  if (sourceFrame) {
+    clippedPoints[0] = clipRoutePointToFrameBoundary(
+      firstPoint,
+      secondPoint,
+      sourceFrame,
+    )
+  }
+
+  if (targetFrame) {
+    clippedPoints[lastIndex] = clipRoutePointToFrameBoundary(
+      lastPoint,
+      previousPoint,
+      targetFrame,
+    )
+  }
+
+  return clippedPoints
+}
+
+/** Converts ELK layout output back into canvas node frames and clipped edge polylines. */
+export function createGraphLayoutResult(
+  laidOutGraph: ElkNode,
+): CanvasGraphLayoutResult {
+  const nodeFrames: Array<CanvasNodeFrame> = []
+  collectNodeFrames(laidOutGraph, { x: 0, y: 0 }, nodeFrames)
+  const nodeFramesById = R.indexBy(nodeFrames, R.prop('id'))
+
+  const edgeRoutes = R.pipe(
+    laidOutGraph.edges ?? [],
+    R.flatMap((edge) => {
+      const points = clipEdgeRoutePoints(
+        edge,
+        getSectionPoints(edge),
+        nodeFramesById,
+      )
+      if (points.length < 2 || !edge.id) return []
+
+      return [
+        {
+          id: edge.id,
+          points,
+        },
+      ]
+    }),
+  )
+
+  return {
+    nodeFrames,
+    edgeRoutes,
+  }
+}
+
+/** Normalizes a schema-derived graph into the canvas layout input shape, including group lookup tables and ordering. */
+export function createCanvasLayoutInputFromGraph(
+  graph: SchemaCanvasGraph,
+  flowDirection: CanvasFlowDirection = DEFAULT_CANVAS_FLOW_DIRECTION,
+  layoutOptions?: LayoutOptions,
+): CanvasLayoutInput {
+  const nodesById = R.indexBy(graph.nodes, R.prop('id'))
+  const childIdsByGroupId: Record<NodeId, Array<NodeId>> = {}
+
+  for (const node of graph.nodes) {
+    if (!node.parentGroupId) {
+      continue
+    }
+
+    const childIds = childIdsByGroupId[node.parentGroupId] ?? []
+    childIds.push(node.id)
+    childIdsByGroupId[node.parentGroupId] = childIds
+  }
+
+  return {
+    nodesById,
+    nodeOrder: R.map(graph.nodes, R.prop('id')),
+    childIdsByGroupId,
+    edgesById: R.indexBy(graph.edges, R.prop('id')),
+    edgeOrder: R.map(graph.edges, R.prop('id')),
+    flowDirection,
+    layoutOptions,
+  }
+}
+
+// TODO: Don't limit the fields here.
+function createSchemaNodeHtml(node: SchemaGraphNode) {
+  const fieldRows = node.fields
+    .slice(0, 6)
+    .map(
+      ([name = '', type = '']) =>
+        `<div style="font-size: 10px; color: ${SCHEMA_NODE_FIELD_COLOR};">${escapeHtml(name)} · ${escapeHtml(type)}</div>`,
+    )
+    .join('')
+
+  return `
+    <div style="font-family: sans-serif; padding: 12px;">
+      <b style="color: ${SCHEMA_NODE_TITLE_COLOR};">${escapeHtml(node.name)}</b>
+      <div style="font-size: 11px; margin-top: 3px; color: ${SCHEMA_NODE_SUBTITLE_COLOR};">${escapeHtml(node.appLabel)}.${escapeHtml(node.modelName)}</div>
+      <div style="margin-top: 8px;">${fieldRows}</div>
+    </div>
+  `
+}
+
+function getSchemaEdgeKind(edge: SchemaGraphEdge): CanvasEdgeKind {
+  if (edge.isProxy) return 'proxy'
+  if (edge.isSubclass) return 'subclass'
+  if (edge.isManyToMany) return 'many-to-many'
+  if (edge.isOneToOne) return 'one-to-one'
+  if (edge.isForeignKey) return 'foreign-key'
+
+  return 'relation'
+}
+
+/** Adapts backend schema graph payloads into initial canvas nodes and edges before any ELK layout is applied. */
+export function createSchemaCanvasGraph(
+  schemaGraph: SchemaGraphPayload,
+): SchemaCanvasGraph {
+  const groupNodes: Array<CanvasNode> = schemaGraph.groups.map((group) => ({
+    id: `${SCHEMA_GROUP_PREFIX}${group.id}`,
+    shape: 'group',
+    layoutMode: 'auto',
+    x: 0,
+    y: 0,
+    width: CANVAS_NODE_SHAPES.group.defaultSize.width,
+    height: CANVAS_NODE_SHAPES.group.defaultSize.height,
+    lexicalJson: '',
+    html: '',
+    contentHeight: 0,
+    version: 1,
+  }))
+
+  const schemaNodes: Array<CanvasNode> = schemaGraph.nodes.map((node) => ({
+    id: node.id,
+    shape: 'box',
+    layoutMode: 'auto',
+    appLabel: node.appLabel,
+    modelName: node.modelName,
+    parentGroupId: `${SCHEMA_GROUP_PREFIX}${node.group}`,
+    x: 0,
+    y: 0,
+    width: 260,
+    height: 148,
+    lexicalJson: '',
+    html: createSchemaNodeHtml(node),
+    contentHeight: 0,
+    version: 1,
+  }))
+
+  return {
+    nodes: [...groupNodes, ...schemaNodes],
+    edges: schemaGraph.edges.map((edge, index) => ({
+      id: [
+        'schema-edge',
+        edge.source,
+        edge.target,
+        edge.sourceField || index,
+      ].join(':'),
+      sourceNodeId: edge.source,
+      targetNodeId: edge.target,
+      kind: getSchemaEdgeKind(edge),
+      sourceLabel: edge.sourceField,
+      targetLabel: edge.targetField || edge.reverseName,
+    })),
+  }
+}

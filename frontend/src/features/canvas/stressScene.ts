@@ -1,4 +1,4 @@
-import type { CanvasNode } from './model/types'
+import type { CanvasEdge, CanvasNode } from './model/types'
 import {
   DEFAULT_CANVAS_NODE_SHAPE,
   DEFAULT_CANVAS_NODE_SHAPE_NAME,
@@ -79,6 +79,9 @@ export function createStressSceneNodes(count: number): Array<CanvasNode> {
     return {
       id: `stress-node-${index + 1}`,
       shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
+      layoutMode: 'manual',
+      appLabel: 'stress',
+      modelName: 'service',
       x:
         STRESS_SCENE_START_X +
         column *
@@ -97,6 +100,18 @@ export function createStressSceneNodes(count: number): Array<CanvasNode> {
   })
 }
 
+export function createStressSceneEdges(count: number): Array<CanvasEdge> {
+  const nodeCount = clampStressSceneNodeCount(count)
+  if (nodeCount < 2) return []
+
+  return Array.from({ length: nodeCount - 1 }, (_, index) => ({
+    id: `stress-edge-${index + 1}`,
+    sourceNodeId: `stress-node-${index + 1}`,
+    targetNodeId: `stress-node-${index + 2}`,
+    kind: 'default',
+  }))
+}
+
 export function getCanvasSeedNodesFromSearch(
   search: string | undefined,
 ): Array<CanvasNode> | null {
@@ -108,4 +123,17 @@ export function getCanvasSeedNodesFromSearch(
   if (!Number.isFinite(parsedNodeCount)) return null
 
   return createStressSceneNodes(parsedNodeCount)
+}
+
+export function getCanvasSeedEdgesFromSearch(
+  search: string | undefined,
+): Array<CanvasEdge> | null {
+  const searchParams = new URLSearchParams(search)
+  const stressSceneValue = searchParams.get(STRESS_SCENE_QUERY_PARAM)
+  if (!stressSceneValue) return null
+
+  const parsedNodeCount = Number.parseInt(stressSceneValue, 10)
+  if (!Number.isFinite(parsedNodeCount)) return null
+
+  return createStressSceneEdges(parsedNodeCount)
 }

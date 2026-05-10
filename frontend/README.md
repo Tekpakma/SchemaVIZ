@@ -34,6 +34,31 @@ bun --bun run test:e2e -- canvas-stress.spec.ts
 You can also open the canvas with a deterministic stress scene by adding a `stress`
 query parameter, for example `/?stress=240`.
 
+## Backend API Client
+
+The frontend OpenAPI client is generated from the Django backend schema with
+Orval.
+
+```bash
+bun run generate:api
+```
+
+That command does three things:
+
+1. Exports the backend OpenAPI schema via `uv run manage.py spectacular`
+2. Generates the typed fetch client into `src/api/generated/schema-viz.ts`
+3. Generates Zod schemas for backend contracts into `src/api/generated/zod/`
+
+### Contract Usage
+
+Import backend transport contracts from `@/api/contracts`.
+Use generated contracts for request bodies, query params, and responses that come from OpenAPI.
+Keep local Zod schemas for UI state, canvas/layout models, and TanStack Start inputs that are not represented in the backend schema.
+
+Server-side backend calls use `SCHEMA_VIZ_BACKEND_BASE_URL`.
+If you want to use the generated client directly in browser-side code against a
+separate backend origin, set the same `SCHEMA_VIZ_BACKEND_BASE_URL` variable.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

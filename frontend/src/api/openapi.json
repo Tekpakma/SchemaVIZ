@@ -1,0 +1,4160 @@
+openapi: 3.0.3
+info:
+  title: Drawing API
+  version: 1.0.0
+  description: API to manage drawings and their elements
+paths:
+  /schema-viz/apps/:
+    get:
+      operationId: schemaVizAppsRetrieve
+      description: Get all apps that have at least one accessible model
+      summary: List Apps
+      tags:
+      - Schema Introspection
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppsListResponse'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppsErrorResponse'
+          description: ''
+  /schema-viz/drawings/:
+    get:
+      operationId: schemaVizDrawingsList
+      description: Returns all drawings owned by the authenticated user.
+      summary: List Drawings
+      tags:
+      - Drawings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Drawing'
+          description: ''
+    post:
+      operationId: schemaVizDrawingsCreate
+      description: Creates a new drawing for the authenticated user.
+      summary: Create Drawing
+      tags:
+      - Drawings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrawingRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Drawing'
+          description: ''
+  /schema-viz/drawings/{id}/:
+    get:
+      operationId: schemaVizDrawingsRetrieve
+      description: Returns a single drawing by ID. Must be owned by the authenticated
+        user.
+      summary: Get Drawing
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this drawing.
+        required: true
+      tags:
+      - Drawings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Drawing'
+          description: ''
+    put:
+      operationId: schemaVizDrawingsUpdate
+      description: Fully replaces a drawing's data.
+      summary: Update Drawing
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this drawing.
+        required: true
+      tags:
+      - Drawings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DrawingRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Drawing'
+          description: ''
+    patch:
+      operationId: schemaVizDrawingsPartialUpdate
+      description: Partially updates a drawing.
+      summary: Patch Drawing
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this drawing.
+        required: true
+      tags:
+      - Drawings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDrawingRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Drawing'
+          description: ''
+    delete:
+      operationId: schemaVizDrawingsDestroy
+      description: Deletes a drawing permanently.
+      summary: Delete Drawing
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this drawing.
+        required: true
+      tags:
+      - Drawings
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /schema-viz/drawings/{id}/export/:
+    get:
+      operationId: schemaVizDrawingsExportRetrieve
+      description: Export a drawing as draw.io XML or rendered SVG. Use `exportFormat=drawio`
+        for diagrams.net XML, or `exportFormat=svg` for deterministic image rendering
+        from stored graph data.
+      summary: Export Drawing
+      parameters:
+      - in: query
+        name: background
+        schema:
+          type: string
+          default: '#ffffff'
+        description: 'SVG background: hex color (#rrggbb) or ''transparent''. Defaults
+          to #ffffff.'
+      - in: query
+        name: exportFormat
+        schema:
+          type: string
+          enum:
+          - drawio
+          - svg
+          default: drawio
+        description: Export format.
+      - in: query
+        name: height
+        schema:
+          type: integer
+        description: 'SVG canvas height in pixels. Defaults to 1080. Allowed range:
+          256..8000.'
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: mode
+        schema:
+          type: string
+          enum:
+          - current
+          - fit
+          default: fit
+        description: SVG render mode. 'fit' fits and centers all nodes. 'current'
+          uses saved viewport.
+      - in: query
+        name: width
+        schema:
+          type: integer
+        description: 'SVG canvas width in pixels. Defaults to 1920. Allowed range:
+          256..8000.'
+      tags:
+      - Drawings
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/xml:
+              schema:
+                type: string
+            image/svg+xml:
+              schema:
+                type: string
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                description: Drawing not found
+          description: ''
+  /schema-viz/drawings/import/:
+    post:
+      operationId: schemaVizDrawingsImportCreate
+      description: Uploads a `.schemeviz` drawing file, validates it on the server,
+        and creates a saved drawing for the authenticated user.
+      summary: Import SchemeViz Drawing File
+      tags:
+      - Drawings
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DrawingImportRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Drawing'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/export/:
+    post:
+      operationId: schemaVizExportCreate
+      description: Export a canvas snapshot as SVG or Draw.io XML. The caller sends
+        the full React Flow state in the request body — no saved Drawing is required.
+      summary: Stateless Canvas Export
+      tags:
+      - Export
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatelessExportRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/xml:
+              schema:
+                type: string
+            image/svg+xml:
+              schema:
+                type: string
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                description: Validation error
+          description: ''
+  /schema-viz/generate/{shareSlug}/:
+    get:
+      operationId: schemaVizGenerateTemplateRetrieve
+      description: Resolves the published template metadata for a share slug.
+      summary: Get Shared Generation Template
+      parameters:
+      - in: path
+        name: shareSlug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateRead'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/generate/{shareSlug}/{recordId}/:
+    get:
+      operationId: schemaVizGenerateRunRetrieve
+      description: Runs the published template resolved by share slug and record id.
+      summary: Run Shared Generation
+      parameters:
+      - in: path
+        name: recordId
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: shareSlug
+        schema:
+          type: string
+        required: true
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/generation-runs/:
+    post:
+      operationId: schemaVizGenerationRunsCreate
+      description: Resolves a draft, published, or inline generation definition and
+        returns either a structure preview or live/share generation result.
+      summary: Run Generation
+      tags:
+      - Generation Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationRunRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/generation-template-quick-access/:
+    get:
+      operationId: schemaVizGenerationTemplateQuickAccessRetrieve
+      description: Returns the current user's most recently updated non-featured templates
+        for quick access.
+      summary: Get Own Recent Generation Template Quick Access
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateOwnRecentQuickAccess'
+          description: ''
+  /schema-viz/generation-template-quick-access/featured/:
+    get:
+      operationId: schemaVizGenerationTemplateQuickAccessFeaturedList
+      description: Returns featured published templates with preview payloads and
+        limit-offset pagination.
+      summary: Get Featured Generation Template Quick Access
+      parameters:
+      - name: limit
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: offset
+        required: false
+        in: query
+        description: The initial index from which to return the results.
+        schema:
+          type: integer
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedGenerationTemplateQuickAccessEntryList'
+          description: ''
+  /schema-viz/generation-templates/:
+    get:
+      operationId: schemaVizGenerationTemplatesList
+      description: Returns accessible generation templates with draft/published version
+        summaries. Supports filtering by scope, published state, featured state, owner,
+        and optional sample runs for home/library surfaces.
+      summary: List Generation Templates
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GenerationTemplateList'
+          description: ''
+    post:
+      operationId: schemaVizGenerationTemplatesCreate
+      description: Creates a new draft generation template.
+      summary: Create Generation Template
+      tags:
+      - Generation Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationTemplateWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateWrite'
+          description: ''
+  /schema-viz/generation-templates/{id}/:
+    get:
+      operationId: schemaVizGenerationTemplatesRetrieve
+      description: Returns a single generation template with full draft and published
+        versions.
+      summary: Get Generation Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this generation template.
+        required: true
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateRead'
+          description: ''
+    put:
+      operationId: schemaVizGenerationTemplatesUpdate
+      description: Fully replaces the current draft definition and metadata.
+      summary: Update Generation Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this generation template.
+        required: true
+      tags:
+      - Generation Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationTemplateWriteRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateWrite'
+          description: ''
+    patch:
+      operationId: schemaVizGenerationTemplatesPartialUpdate
+      description: Alias for full draft replacement.
+      summary: Patch Generation Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this generation template.
+        required: true
+      tags:
+      - Generation Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedGenerationTemplateWriteRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateWrite'
+          description: ''
+    delete:
+      operationId: schemaVizGenerationTemplatesDestroy
+      description: Deletes the template container and all stored versions.
+      summary: Delete Generation Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this generation template.
+        required: true
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /schema-viz/generation-templates/{id}/publish/:
+    post:
+      operationId: schemaVizGenerationTemplatesPublishCreate
+      description: Snapshots the current draft as a new published version.
+      summary: Publish Generation Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this generation template.
+        required: true
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateRead'
+          description: ''
+  /schema-viz/generation-templates/{id}/unpublish/:
+    post:
+      operationId: schemaVizGenerationTemplatesUnpublishCreate
+      description: Clears the published version while keeping the current draft intact.
+      summary: Unpublish Generation Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this generation template.
+        required: true
+      tags:
+      - Generation Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTemplateRead'
+          description: ''
+  /schema-viz/graph/:
+    get:
+      operationId: schemaVizGraphRetrieve
+      description: Get complete schema graph with nodes, edges, and groups
+      summary: Get Schema Graph
+      tags:
+      - Schema Introspection
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaGraph'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphErrorResponse'
+          description: ''
+  /schema-viz/group-templates/:
+    get:
+      operationId: schemaVizGroupTemplatesList
+      description: |-
+        Drop-in mixin for DRF views / viewsets.
+
+        Subclasses set ``schema_viz_permission_category`` to one of:
+          - ``"introspection"`` – public schema endpoints
+          - ``"user_data"``     – authenticated read access
+          - ``"owner"``         – authenticated + ownership checks
+      tags:
+      - schema-viz
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupTemplate'
+          description: ''
+    post:
+      operationId: schemaVizGroupTemplatesCreate
+      description: |-
+        Drop-in mixin for DRF views / viewsets.
+
+        Subclasses set ``schema_viz_permission_category`` to one of:
+          - ``"introspection"`` – public schema endpoints
+          - ``"user_data"``     – authenticated read access
+          - ``"owner"``         – authenticated + ownership checks
+      tags:
+      - schema-viz
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupTemplate'
+          description: ''
+  /schema-viz/group-templates/{id}/:
+    get:
+      operationId: schemaVizGroupTemplatesRetrieve
+      description: |-
+        Drop-in mixin for DRF views / viewsets.
+
+        Subclasses set ``schema_viz_permission_category`` to one of:
+          - ``"introspection"`` – public schema endpoints
+          - ``"user_data"``     – authenticated read access
+          - ``"owner"``         – authenticated + ownership checks
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this group template.
+        required: true
+      tags:
+      - schema-viz
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupTemplate'
+          description: ''
+    put:
+      operationId: schemaVizGroupTemplatesUpdate
+      description: |-
+        Drop-in mixin for DRF views / viewsets.
+
+        Subclasses set ``schema_viz_permission_category`` to one of:
+          - ``"introspection"`` – public schema endpoints
+          - ``"user_data"``     – authenticated read access
+          - ``"owner"``         – authenticated + ownership checks
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this group template.
+        required: true
+      tags:
+      - schema-viz
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupTemplate'
+          description: ''
+    patch:
+      operationId: schemaVizGroupTemplatesPartialUpdate
+      description: |-
+        Drop-in mixin for DRF views / viewsets.
+
+        Subclasses set ``schema_viz_permission_category`` to one of:
+          - ``"introspection"`` – public schema endpoints
+          - ``"user_data"``     – authenticated read access
+          - ``"owner"``         – authenticated + ownership checks
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this group template.
+        required: true
+      tags:
+      - schema-viz
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedGroupTemplateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupTemplate'
+          description: ''
+    delete:
+      operationId: schemaVizGroupTemplatesDestroy
+      description: |-
+        Drop-in mixin for DRF views / viewsets.
+
+        Subclasses set ``schema_viz_permission_category`` to one of:
+          - ``"introspection"`` – public schema endpoints
+          - ``"user_data"``     – authenticated read access
+          - ``"owner"``         – authenticated + ownership checks
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this group template.
+        required: true
+      tags:
+      - schema-viz
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /schema-viz/model-details/:
+    get:
+      operationId: schemaVizModelDetailsRetrieve
+      description: Get detailed information about a specific model including fields
+        and relationships
+      summary: Get Model Details
+      parameters:
+      - in: query
+        name: appLabel
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description: Django app label
+        required: true
+      - in: query
+        name: modelName
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description: Model name
+        required: true
+      tags:
+      - Schema Introspection
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetailBadRequest'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetailForbidden'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelDetailNotFound'
+          description: ''
+  /schema-viz/model-registry/:
+    get:
+      operationId: schemaVizModelRegistryList
+      description: Returns staff-manageable QLab model registry entries for frontend
+        administration.
+      summary: List QLab Model Registry Entries
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QLabRegistryEntry'
+          description: ''
+    post:
+      operationId: schemaVizModelRegistryCreate
+      description: Creates a QLab model registry entry for a frontend-selected Django
+        model.
+      summary: Create QLab Model Registry Entry
+      tags:
+      - System
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QLabRegistryEntryRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabRegistryEntry'
+          description: ''
+  /schema-viz/model-registry/{id}/:
+    get:
+      operationId: schemaVizModelRegistryRetrieve
+      description: Returns one QLab model registry entry for frontend administration.
+      summary: Get QLab Model Registry Entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Model Registry.
+        required: true
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabRegistryEntry'
+          description: ''
+    put:
+      operationId: schemaVizModelRegistryUpdate
+      description: Replaces a QLab model registry entry.
+      summary: Replace QLab Model Registry Entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Model Registry.
+        required: true
+      tags:
+      - System
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QLabRegistryEntryRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabRegistryEntry'
+          description: ''
+    patch:
+      operationId: schemaVizModelRegistryPartialUpdate
+      description: Partially updates status, restrictions, or allowed groups for a
+        QLab model registry entry.
+      summary: Patch QLab Model Registry Entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Model Registry.
+        required: true
+      tags:
+      - System
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedQLabRegistryEntryRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabRegistryEntry'
+          description: ''
+    delete:
+      operationId: schemaVizModelRegistryDestroy
+      description: Deletes a QLab model registry entry.
+      summary: Delete QLab Model Registry Entry
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Model Registry.
+        required: true
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /schema-viz/model-registry/candidates/:
+    get:
+      operationId: schemaVizModelRegistryCandidatesList
+      description: Returns installed Django models that can be added to the QLab registry
+        but do not yet have an entry.
+      summary: List QLab Model Registry Candidate Models
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QLabRegistryCandidate'
+          description: ''
+  /schema-viz/model-registry/groups/:
+    get:
+      operationId: schemaVizModelRegistryGroupsList
+      description: Returns Django auth groups that can be assigned to restricted registry
+        entries.
+      summary: List Allowed Django Groups for QLab Model Registry
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QLabRegistryGroup'
+          description: ''
+  /schema-viz/model-template-defaults/:
+    get:
+      operationId: schemaVizModelTemplateDefaultsList
+      description: Returns the current user's per-model default style templates.
+      summary: List Model Template Defaults
+      parameters:
+      - in: query
+        name: modelRef
+        schema:
+          type: string
+          minLength: 1
+      tags:
+      - Style Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelTemplateDefault'
+          description: ''
+    post:
+      operationId: schemaVizModelTemplateDefaultsCreate
+      description: Creates a per-user default style template for a model.
+      summary: Create Model Template Default
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelTemplateDefaultRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelTemplateDefault'
+          description: ''
+  /schema-viz/model-template-defaults/{id}/:
+    get:
+      operationId: schemaVizModelTemplateDefaultsRetrieve
+      description: Returns a single model template default owned by the current user.
+      summary: Get Model Template Default
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this model template default.
+        required: true
+      tags:
+      - Style Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelTemplateDefault'
+          description: ''
+    put:
+      operationId: schemaVizModelTemplateDefaultsUpdate
+      description: Replaces a per-user default style template for a model.
+      summary: Update Model Template Default
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this model template default.
+        required: true
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelTemplateDefaultRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelTemplateDefault'
+          description: ''
+    patch:
+      operationId: schemaVizModelTemplateDefaultsPartialUpdate
+      description: Partially updates a per-user default style template for a model.
+      summary: Patch Model Template Default
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this model template default.
+        required: true
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedModelTemplateDefaultRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelTemplateDefault'
+          description: ''
+    delete:
+      operationId: schemaVizModelTemplateDefaultsDestroy
+      description: Deletes a per-user default style template for a model.
+      summary: Delete Model Template Default
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this model template default.
+        required: true
+      tags:
+      - Style Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /schema-viz/models/:
+    get:
+      operationId: schemaVizModelsList
+      description: Get all accessible models, optionally filtered by app label
+      summary: List Models
+      parameters:
+      - in: query
+        name: appLabel
+        schema:
+          type: string
+        description: Filter models by app label
+      - in: query
+        name: excludeDjango
+        schema:
+          type: boolean
+          default: true
+        description: 'Exclude Django built-in models (default: true)'
+      tags:
+      - Schema Introspection
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelInfoShort'
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsErrorResponse'
+          description: ''
+  /schema-viz/query/metadata/:
+    post:
+      operationId: schemaVizQueryMetadataCreate
+      description: Return QLab metadata for an accessible model, including allowed
+        lookups and operations for advanced record search UIs.
+      summary: Get Query Metadata
+      tags:
+      - Query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryMetadataRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryMetadataResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabErrorResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/query/neighborhood/:
+    post:
+      operationId: schemaVizQueryNeighborhoodCreate
+      description: Return all relation primary keys for a set of accessible records.
+        Used to power relation-follow UIs without issuing repeated reverse-record
+        queries.
+      summary: Resolve Record Neighborhood
+      tags:
+      - Query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryNeighborhoodRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryNeighborhoodResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabErrorResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/query/record/:
+    post:
+      operationId: schemaVizQueryRecordCreate
+      description: Fetch a single accessible record by primary key. When `selectFields`
+        is omitted the full record payload is returned.
+      summary: Query Single Record
+      tags:
+      - Query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRecordRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabErrorResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/query/records/:
+    post:
+      operationId: schemaVizQueryRecordsCreate
+      description: Run a QLab-backed record query against an accessible model. Supports
+        nested AND/OR/NOT filters and pagination.
+      summary: Query Model Records
+      tags:
+      - Query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRecordsRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRecordsResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QLabErrorResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/route/:
+    get:
+      operationId: schemaVizRouteList
+      description: Find the shortest path between a start and end model, formatted
+        as a sequence of fields to traverse. Optionally pass comma-separated waypoints,
+        preferred models, and exclusions.
+      summary: Find Schema Route
+      parameters:
+      - in: query
+        name: endModel
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: exclude
+        schema:
+          type: string
+          minLength: 1
+          default: ''
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 5
+      - in: query
+        name: maxDepth
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 12
+      - in: query
+        name: preferred
+        schema:
+          type: string
+          minLength: 1
+          default: ''
+      - in: query
+        name: startModel
+        schema:
+          type: string
+          minLength: 1
+        required: true
+      - in: query
+        name: waypoints
+        schema:
+          type: string
+          minLength: 1
+          default: ''
+      tags:
+      - Schema Introspection
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaRoute'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteBadRequest'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteNotFound'
+          description: ''
+  /schema-viz/route/probe/:
+    post:
+      operationId: schemaVizRouteProbeCreate
+      description: Test whether a schema path between two models yields actual data.
+        Performs COUNT queries per hop to determine viability.
+      summary: Probe Schema Route
+      parameters:
+      - in: query
+        name: endModel
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: startModel
+        schema:
+          type: string
+        required: true
+      tags:
+      - Schema Introspection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteProbeRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteProbeResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteProbeBadRequest'
+          description: ''
+  /schema-viz/session/:
+    get:
+      operationId: schemaVizSessionRetrieve
+      description: Returns capability flags and persisted user preferences for the
+        authenticated user.
+      summary: Get Session State
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionState'
+          description: ''
+    patch:
+      operationId: schemaVizSessionPartialUpdate
+      description: Updates persisted session preferences for the authenticated user.
+      summary: Update Session Preferences
+      tags:
+      - System
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSessionStateUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSessionStateUpdateRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSessionStateUpdateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionState'
+          description: ''
+  /schema-viz/session/ai-config/:
+    get:
+      operationId: schemaVizSessionAiConfigRetrieve
+      description: Returns the AI configuration including the decrypted API key. Intended
+        for server-to-server use only.
+      summary: Get AI Config (with decrypted key)
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /schema-viz/shapes/:
+    get:
+      operationId: schemaVizShapesRetrieve
+      description: Returns the shape registry with SVG rendering data for all supported
+        shapes.
+      summary: List Shape Definitions
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /schema-viz/template-compatibility/:
+    post:
+      operationId: schemaVizTemplateCompatibilityCreate
+      description: Evaluates the current style-template draft against accessible models
+        and returns the live compatibility count, model list, and exclusive target
+        state.
+      summary: Preflight Style Template Compatibility
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StyleTemplateCompatibilityRequestRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleTemplateCompatibilityResponse'
+          description: ''
+  /schema-viz/template-favorites/:
+    get:
+      operationId: schemaVizTemplateFavoritesRetrieve
+      description: Returns the authenticated user's favorite style and generation
+        template IDs.
+      summary: Get Template Favorites
+      tags:
+      - Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateFavorites'
+          description: ''
+    put:
+      operationId: schemaVizTemplateFavoritesUpdate
+      description: Replaces the authenticated user's favorite template IDs with the
+        submitted set.
+      summary: Update Template Favorites
+      tags:
+      - Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateFavoritesRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateFavorites'
+          description: ''
+  /schema-viz/template-uniqueness/:
+    post:
+      operationId: schemaVizTemplateUniquenessCreate
+      description: Preflight uniqueness check for style and generation template editing.
+        Evaluates the current template scope rules before save.
+      summary: Check Template Uniqueness
+      tags:
+      - Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateUniquenessRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateUniquenessResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/templates/:
+    get:
+      operationId: schemaVizTemplatesList
+      description: 'Returns all templates accessible to the user: their own and all
+        global ones. Pass `model=app_label.ModelName` to filter to templates whose
+        required fields are all present on that model (full match).'
+      summary: List Style Templates
+      parameters:
+      - in: query
+        name: app_label
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 100
+      - in: query
+        name: model_name
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 100
+      tags:
+      - Style Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StyleTemplate'
+          description: ''
+    post:
+      operationId: schemaVizTemplatesCreate
+      description: Creates a new style template. Only staff can set `is_global=true`.
+      summary: Create Style Template
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StyleTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleTemplate'
+          description: ''
+  /schema-viz/templates/{id}/:
+    get:
+      operationId: schemaVizTemplatesRetrieve
+      description: Returns a single style template by ID.
+      summary: Get Style Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this style template.
+        required: true
+      tags:
+      - Style Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleTemplate'
+          description: ''
+    put:
+      operationId: schemaVizTemplatesUpdate
+      description: Fully replaces a style template. Only the owner can modify their
+        own templates.
+      summary: Update Style Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this style template.
+        required: true
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StyleTemplateRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleTemplate'
+          description: ''
+    patch:
+      operationId: schemaVizTemplatesPartialUpdate
+      description: Partially updates a style template.
+      summary: Patch Style Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this style template.
+        required: true
+      tags:
+      - Style Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedStyleTemplateRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StyleTemplate'
+          description: ''
+    delete:
+      operationId: schemaVizTemplatesDestroy
+      description: Deletes a style template. Only the owner can delete their own templates.
+      summary: Delete Style Template
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this style template.
+        required: true
+      tags:
+      - Style Templates
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /schema-viz/tours/{key}/progress/:
+    get:
+      operationId: schemaVizToursProgressRetrieve
+      description: Returns the active version for `key` and the authenticated user's
+        progress for that version. Creates an initial `not_started` progress row if
+        missing.
+      summary: Get Tour Progress
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - Tours
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TourProgressResource'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+    put:
+      operationId: schemaVizToursProgressUpdate
+      description: Upserts progress for the authenticated user on the active tour
+        version for `key`.
+      summary: Update Tour Progress
+      parameters:
+      - in: path
+        name: key
+        schema:
+          type: string
+        required: true
+      tags:
+      - Tours
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TourProgressUpsertRequest'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TourProgressResource'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: ''
+  /schema-viz/tours/progress/:
+    get:
+      operationId: schemaVizToursProgressList
+      description: Returns every active tour key and the authenticated user's progress
+        for the latest active version of each key. Creates an initial `not_started`
+        progress row if missing.
+      summary: List Tour Progress
+      tags:
+      - Tours
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TourProgressResource'
+          description: ''
+  /schema-viz/version/:
+    get:
+      operationId: schemaVizVersionRetrieve
+      description: Returns the installed django-schema-viz backend version.
+      summary: Get Backend Version
+      tags:
+      - System
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendVersionResponse'
+          description: ''
+components:
+  schemas:
+    AppsErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+      required:
+      - details
+      - error
+    AppsListResponse:
+      type: object
+      properties:
+        apps:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - apps
+    AvailableLocalesEnum:
+      enum:
+      - de
+      - en
+      type: string
+      description: |-
+        * `de` - de
+        * `en` - en
+    BackendVersionResponse:
+      type: object
+      properties:
+        version:
+          type: string
+      required:
+      - version
+    Drawing:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        reactFlowState: {}
+        lexicalState: {}
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+      required:
+      - createdAt
+      - revision
+      - title
+      - updatedAt
+    DrawingImportRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+      required:
+      - file
+    DrawingRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        reactFlowState: {}
+        lexicalState: {}
+      required:
+      - title
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+      required:
+      - error
+    ExportFormatEnum:
+      enum:
+      - svg
+      - drawio
+      type: string
+      description: |-
+        * `svg` - SVG
+        * `drawio` - Draw.io
+    FieldInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        verboseName:
+          type: string
+          nullable: true
+        helpText:
+          type: string
+          nullable: true
+        primaryKey:
+          type: boolean
+        'null':
+          type: boolean
+        blank:
+          type: boolean
+        maxLength:
+          type: integer
+          nullable: true
+        choices:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          nullable: true
+      required:
+      - name
+      - type
+    ForcedModelStatusEnum:
+      enum:
+      - unused
+      - missing
+      - ok
+      - incompatible
+      - inaccessible
+      - stale
+      type: string
+      description: |-
+        * `unused` - Unused
+        * `missing` - Missing
+        * `ok` - OK
+        * `incompatible` - Incompatible
+        * `inaccessible` - Inaccessible
+        * `stale` - Stale
+    GenerationRunRequestModeEnum:
+      enum:
+      - structure
+      - live
+      - share
+      type: string
+      description: |-
+        * `structure` - Structure
+        * `live` - Live
+        * `share` - Share
+    GenerationRunRequestRequest:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/GenerationRunRequestModeEnum'
+        recordId:
+          type: string
+          nullable: true
+          minLength: 1
+        source:
+          $ref: '#/components/schemas/GenerationRunSourceRequest'
+      required:
+      - mode
+      - source
+    GenerationRunSourceRequest:
+      type: object
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        version:
+          $ref: '#/components/schemas/GenerationVersionSelectionEnum'
+        inlineDefinition: {}
+        rootModel:
+          type: string
+          minLength: 1
+        layoutSettings: {}
+    GenerationTemplateFeatured:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+        rank:
+          type: integer
+          minimum: 0
+          nullable: true
+    GenerationTemplateFeaturedRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+        rank:
+          type: integer
+          minimum: 0
+          nullable: true
+    GenerationTemplateList:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        rootModel:
+          type: string
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/TemplateScopeEnum'
+        ownedByCurrentUser:
+          type: boolean
+        featured:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateFeatured'
+        shareSlug:
+          type: string
+          nullable: true
+        draftVersion:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateVersionDetail'
+          nullable: true
+        publishedVersion:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateVersionDetail'
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        publishedBy:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplatePublishedBy'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - createdAt
+      - draftVersion
+      - featured
+      - id
+      - name
+      - ownedByCurrentUser
+      - publishedBy
+      - publishedVersion
+      - rootModel
+      - scope
+      - shareSlug
+      - updatedAt
+    GenerationTemplateOwnRecentQuickAccess:
+      type: object
+      properties:
+        ownRecent:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenerationTemplateQuickAccessEntry'
+      required:
+      - ownRecent
+    GenerationTemplatePublishedBy:
+      type: object
+      properties:
+        id:
+          type: integer
+        displayName:
+          type: string
+      required:
+      - displayName
+      - id
+    GenerationTemplateQuickAccessEntry:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/GenerationTemplateList'
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        sampleRecordId:
+          type: string
+          nullable: true
+        sampleRecordDisplayName:
+          type: string
+          nullable: true
+        previewStatus:
+          $ref: '#/components/schemas/PreviewStatusEnum'
+        run:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateQuickAccessRun'
+          nullable: true
+        result:
+          nullable: true
+        styleTemplates:
+          type: array
+          items:
+            $ref: '#/components/schemas/StyleTemplate'
+      required:
+      - previewStatus
+      - sampleRecordDisplayName
+      - sampleRecordId
+      - source
+      - styleTemplates
+      - template
+    GenerationTemplateQuickAccessRun:
+      type: object
+      properties:
+        mode:
+          type: string
+        sourceVersion:
+          $ref: '#/components/schemas/GenerationTemplateQuickAccessSourceVersion'
+        result: {}
+        styleTemplates:
+          type: array
+          items:
+            $ref: '#/components/schemas/StyleTemplate'
+        groupTemplates:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupTemplate'
+        template:
+          $ref: '#/components/schemas/GenerationTemplateList'
+      required:
+      - groupTemplates
+      - mode
+      - result
+      - sourceVersion
+      - styleTemplates
+    GenerationTemplateQuickAccessSourceVersion:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        selection:
+          $ref: '#/components/schemas/GenerationVersionSelectionEnum'
+        versionId:
+          type: string
+          nullable: true
+        versionNumber:
+          type: integer
+          nullable: true
+        rootModel:
+          type: string
+        layoutSettings: {}
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        shareSlug:
+          type: string
+          nullable: true
+      required:
+      - kind
+      - layoutSettings
+      - publishedAt
+      - rootModel
+      - selection
+      - shareSlug
+      - versionId
+      - versionNumber
+    GenerationTemplateRead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        rootModel:
+          type: string
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/TemplateScopeEnum'
+        ownedByCurrentUser:
+          type: boolean
+        featured:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateFeatured'
+        shareSlug:
+          type: string
+          nullable: true
+        draftVersion:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateVersionDetail'
+          nullable: true
+        publishedVersion:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateVersionDetail'
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        publishedBy:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplatePublishedBy'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - createdAt
+      - draftVersion
+      - featured
+      - id
+      - name
+      - ownedByCurrentUser
+      - publishedBy
+      - publishedVersion
+      - rootModel
+      - scope
+      - shareSlug
+      - updatedAt
+    GenerationTemplateVersionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        versionNumber:
+          type: integer
+        rootModel:
+          type: string
+        layoutSettings: {}
+        createdBy:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplatePublishedBy'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        definition: {}
+      required:
+      - createdAt
+      - createdBy
+      - definition
+      - id
+      - layoutSettings
+      - rootModel
+      - versionNumber
+    GenerationTemplateWrite:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+        rootModel:
+          type: string
+          maxLength: 200
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateWriteScopeEnum'
+          default: owner
+        featured:
+          $ref: '#/components/schemas/GenerationTemplateFeatured'
+        shareSlug:
+          type: string
+          nullable: true
+        definition: {}
+        layoutSettings: {}
+      required:
+      - definition
+      - name
+      - rootModel
+    GenerationTemplateWriteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+        rootModel:
+          type: string
+          minLength: 1
+          maxLength: 200
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateWriteScopeEnum'
+          default: owner
+        featured:
+          $ref: '#/components/schemas/GenerationTemplateFeaturedRequest'
+        shareSlug:
+          type: string
+          nullable: true
+        definition: {}
+        layoutSettings: {}
+      required:
+      - definition
+      - name
+      - rootModel
+    GenerationTemplateWriteScopeEnum:
+      enum:
+      - owner
+      - global
+      type: string
+      description: |-
+        * `owner` - Owner
+        * `global` - Global
+    GenerationVersionSelectionEnum:
+      enum:
+      - draft
+      - published
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `published` - Published
+    GraphErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+      required:
+      - details
+      - error
+    GroupTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        backgroundColor:
+          type: string
+          description: Background color of the group container.
+          maxLength: 50
+        backgroundOpacity:
+          type: number
+          format: double
+          description: Opacity multiplier for the background (0.0 - 1.0).
+        borderColor:
+          type: string
+          description: Border color of the group.
+          maxLength: 50
+        borderWidth:
+          type: number
+          format: double
+          description: Border width in px.
+        borderStyle:
+          type: string
+          description: 'CSS border-style: solid, dashed, dotted, etc.'
+          maxLength: 20
+        borderRadius:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Border radius in px.
+        paddingTop:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Top padding in px (includes label area).
+        paddingX:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Horizontal padding (left and right) in px.
+        paddingBottom:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Bottom padding in px.
+        labelFontSize:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Font size of the group label in px.
+        labelColor:
+          type: string
+          description: Text color of the group label.
+          maxLength: 50
+        textContent:
+          nullable: true
+          description: Optional Lexical editor state for the group label text.
+        childColumns:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Number of columns for the child grid layout.
+        childGapX:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Horizontal gap between children in px.
+        childGapY:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Vertical gap between children in px.
+        childDirection:
+          type: string
+          description: 'Layout direction for children: grid, horizontal, or vertical.'
+          maxLength: 20
+        isGlobal:
+          type: boolean
+          description: Global templates are available to all users.
+        isFeatured:
+          type: boolean
+          description: Featured templates are highlighted as recommended company defaults.
+        featureRank:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Optional ordering for featured templates. Lower ranks appear
+            first.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+      required:
+      - createdAt
+      - name
+      - revision
+      - updatedAt
+    GroupTemplateRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        backgroundColor:
+          type: string
+          minLength: 1
+          description: Background color of the group container.
+          maxLength: 50
+        backgroundOpacity:
+          type: number
+          format: double
+          description: Opacity multiplier for the background (0.0 - 1.0).
+        borderColor:
+          type: string
+          minLength: 1
+          description: Border color of the group.
+          maxLength: 50
+        borderWidth:
+          type: number
+          format: double
+          description: Border width in px.
+        borderStyle:
+          type: string
+          minLength: 1
+          description: 'CSS border-style: solid, dashed, dotted, etc.'
+          maxLength: 20
+        borderRadius:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Border radius in px.
+        paddingTop:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Top padding in px (includes label area).
+        paddingX:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Horizontal padding (left and right) in px.
+        paddingBottom:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Bottom padding in px.
+        labelFontSize:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Font size of the group label in px.
+        labelColor:
+          type: string
+          minLength: 1
+          description: Text color of the group label.
+          maxLength: 50
+        textContent:
+          nullable: true
+          description: Optional Lexical editor state for the group label text.
+        childColumns:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Number of columns for the child grid layout.
+        childGapX:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Horizontal gap between children in px.
+        childGapY:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Vertical gap between children in px.
+        childDirection:
+          type: string
+          minLength: 1
+          description: 'Layout direction for children: grid, horizontal, or vertical.'
+          maxLength: 20
+        isGlobal:
+          type: boolean
+          description: Global templates are available to all users.
+        isFeatured:
+          type: boolean
+          description: Featured templates are highlighted as recommended company defaults.
+        featureRank:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Optional ordering for featured templates. Lower ranks appear
+            first.
+      required:
+      - name
+    KindEnum:
+      enum:
+      - inline
+      - template
+      type: string
+      description: |-
+        * `inline` - Inline
+        * `template` - Template
+    MethodInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        doc:
+          type: string
+          nullable: true
+        signature:
+          type: string
+          nullable: true
+      required:
+      - name
+    ModelDetailBadRequest:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ModelDetailForbidden:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ModelDetailNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    ModelInfo:
+      type: object
+      properties:
+        appLabel:
+          type: string
+        appVerboseName:
+          type: string
+        modelName:
+          type: string
+        verboseName:
+          type: string
+        verboseNamePlural:
+          type: string
+        abstract:
+          type: boolean
+        dbTable:
+          type: string
+        managed:
+          type: boolean
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldInfo'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationInfo'
+        methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/MethodInfo'
+      required:
+      - abstract
+      - appLabel
+      - appVerboseName
+      - dbTable
+      - fields
+      - managed
+      - methods
+      - modelName
+      - relations
+      - verboseName
+      - verboseNamePlural
+    ModelInfoShort:
+      type: object
+      properties:
+        appLabel:
+          type: string
+        appVerboseName:
+          type: string
+        modelName:
+          type: string
+        verboseName:
+          type: string
+        verboseNamePlural:
+          type: string
+        abstract:
+          type: boolean
+        dbTable:
+          type: string
+        managed:
+          type: boolean
+      required:
+      - abstract
+      - appLabel
+      - appVerboseName
+      - dbTable
+      - managed
+      - modelName
+      - verboseName
+      - verboseNamePlural
+    ModelTemplateDefault:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        modelRef:
+          type: string
+        modelStatus:
+          type: string
+        styleTemplateId:
+          type: string
+          format: uuid
+        styleTemplate:
+          allOf:
+          - $ref: '#/components/schemas/StyleTemplate'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - createdAt
+      - modelRef
+      - modelStatus
+      - styleTemplate
+      - styleTemplateId
+      - updatedAt
+    ModelTemplateDefaultRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        modelRef:
+          type: string
+          minLength: 1
+        styleTemplateId:
+          type: string
+          format: uuid
+      required:
+      - modelRef
+      - styleTemplateId
+    ModelsErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+      required:
+      - details
+      - error
+    PaginatedGenerationTemplateQuickAccessEntryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=400&limit=100
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?offset=200&limit=100
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenerationTemplateQuickAccessEntry'
+    PatchedDrawingRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        reactFlowState: {}
+        lexicalState: {}
+    PatchedGenerationTemplateWriteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+        rootModel:
+          type: string
+          minLength: 1
+          maxLength: 200
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/GenerationTemplateWriteScopeEnum'
+          default: owner
+        featured:
+          $ref: '#/components/schemas/GenerationTemplateFeaturedRequest'
+        shareSlug:
+          type: string
+          nullable: true
+        definition: {}
+        layoutSettings: {}
+    PatchedGroupTemplateRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        backgroundColor:
+          type: string
+          minLength: 1
+          description: Background color of the group container.
+          maxLength: 50
+        backgroundOpacity:
+          type: number
+          format: double
+          description: Opacity multiplier for the background (0.0 - 1.0).
+        borderColor:
+          type: string
+          minLength: 1
+          description: Border color of the group.
+          maxLength: 50
+        borderWidth:
+          type: number
+          format: double
+          description: Border width in px.
+        borderStyle:
+          type: string
+          minLength: 1
+          description: 'CSS border-style: solid, dashed, dotted, etc.'
+          maxLength: 20
+        borderRadius:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Border radius in px.
+        paddingTop:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Top padding in px (includes label area).
+        paddingX:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Horizontal padding (left and right) in px.
+        paddingBottom:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Bottom padding in px.
+        labelFontSize:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Font size of the group label in px.
+        labelColor:
+          type: string
+          minLength: 1
+          description: Text color of the group label.
+          maxLength: 50
+        textContent:
+          nullable: true
+          description: Optional Lexical editor state for the group label text.
+        childColumns:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Number of columns for the child grid layout.
+        childGapX:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Horizontal gap between children in px.
+        childGapY:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Vertical gap between children in px.
+        childDirection:
+          type: string
+          minLength: 1
+          description: 'Layout direction for children: grid, horizontal, or vertical.'
+          maxLength: 20
+        isGlobal:
+          type: boolean
+          description: Global templates are available to all users.
+        isFeatured:
+          type: boolean
+          description: Featured templates are highlighted as recommended company defaults.
+        featureRank:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Optional ordering for featured templates. Lower ranks appear
+            first.
+    PatchedModelTemplateDefaultRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        modelRef:
+          type: string
+          minLength: 1
+        styleTemplateId:
+          type: string
+          format: uuid
+    PatchedQLabRegistryEntryRequest:
+      type: object
+      properties:
+        modelRef:
+          type: string
+          minLength: 1
+        status:
+          $ref: '#/components/schemas/QLabRegistryEntryStatusEnum'
+        isRestricted:
+          type: boolean
+        allowedGroupIds:
+          type: array
+          items:
+            type: integer
+    PatchedSessionStateUpdateRequest:
+      type: object
+      properties:
+        locale:
+          $ref: '#/components/schemas/AvailableLocalesEnum'
+        helpHintsEnabled:
+          type: boolean
+        helpHintsDismissed:
+          type: object
+          additionalProperties:
+            type: string
+            minLength: 1
+        aiApiKey:
+          type: string
+        aiBaseUrl:
+          type: string
+        aiModel:
+          type: string
+    PatchedStyleTemplateRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        visualStyles:
+          description: 'CSS properties: colors, borders, backgrounds, etc.'
+        dimensions:
+          description: Default width and height of the node
+        typeSpecificData:
+          description: Node-type specific data such as shape and shape colors.
+        textContent:
+          nullable: true
+          description: Lexical editor state, may reference model fields via {{field_name}}
+        requiredFields:
+          description: List of model field names this template needs, e.g. ['hostname',
+            'ip_address']
+        targetModel:
+          type: string
+          nullable: true
+          minLength: 1
+        isModelExclusive:
+          type: boolean
+          description: When enabled, this template can only be applied to the selected
+            target model.
+        isGlobal:
+          type: boolean
+          description: Global templates are available to all users
+        isFeatured:
+          type: boolean
+          description: Featured templates are highlighted as recommended company defaults.
+        featureRank:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Optional manual ordering for featured templates. Lower ranks
+            appear first.
+    PreviewStatusEnum:
+      enum:
+      - ready
+      - no_record
+      - error
+      type: string
+      description: |-
+        * `ready` - Ready
+        * `no_record` - No Record
+        * `error` - Error
+    QLabErrorItem:
+      type: object
+      properties:
+        loc:
+          type: array
+          items:
+            type: string
+        msg:
+          type: string
+        type:
+          type: string
+        code:
+          type: string
+      required:
+      - code
+      - loc
+      - msg
+      - type
+    QLabErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/QLabErrorItem'
+      required:
+      - errors
+    QLabFieldMetadata:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        required:
+          type: boolean
+        primaryKey:
+          type: boolean
+          default: false
+        allowedOperations:
+          type: array
+          items:
+            type: string
+        relatedModel:
+          type: string
+          nullable: true
+        filterName:
+          type: string
+          nullable: true
+        maxLength:
+          type: integer
+          nullable: true
+        choices:
+          type: array
+          items: {}
+          nullable: true
+      required:
+      - allowedOperations
+      - label
+      - name
+      - required
+      - type
+    QLabRegistryCandidate:
+      type: object
+      properties:
+        modelRef:
+          type: string
+        modelLabel:
+          type: string
+        appLabel:
+          type: string
+        modelName:
+          type: string
+        appVerboseName:
+          type: string
+        verboseName:
+          type: string
+        verboseNamePlural:
+          type: string
+      required:
+      - appLabel
+      - appVerboseName
+      - modelLabel
+      - modelName
+      - modelRef
+      - verboseName
+      - verboseNamePlural
+    QLabRegistryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        modelRef:
+          type: string
+        modelLabel:
+          type: string
+        appLabel:
+          type: string
+        modelName:
+          type: string
+        status:
+          $ref: '#/components/schemas/QLabRegistryEntryStatusEnum'
+        isRestricted:
+          type: boolean
+        allowedGroups:
+          type: array
+          items:
+            $ref: '#/components/schemas/QLabRegistryGroup'
+        allowedGroupIds:
+          type: array
+          items:
+            type: integer
+        appVerboseName:
+          type: string
+          nullable: true
+        verboseName:
+          type: string
+          nullable: true
+        verboseNamePlural:
+          type: string
+          nullable: true
+        modelExists:
+          type: boolean
+        isQlabAppAllowed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - allowedGroups
+      - appLabel
+      - appVerboseName
+      - createdAt
+      - id
+      - isQlabAppAllowed
+      - modelExists
+      - modelLabel
+      - modelName
+      - updatedAt
+      - verboseName
+      - verboseNamePlural
+    QLabRegistryEntryRequest:
+      type: object
+      properties:
+        modelRef:
+          type: string
+          minLength: 1
+        status:
+          $ref: '#/components/schemas/QLabRegistryEntryStatusEnum'
+        isRestricted:
+          type: boolean
+        allowedGroupIds:
+          type: array
+          items:
+            type: integer
+    QLabRegistryEntryStatusEnum:
+      enum:
+      - enabled
+      - disabled
+      - submitted
+      type: string
+      description: |-
+        * `enabled` - Enabled
+        * `disabled` - Disabled
+        * `submitted` - Submitted
+    QLabRegistryGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
+    QueryMetadataRequestRequest:
+      type: object
+      properties:
+        appLabel:
+          type: string
+          minLength: 1
+          maxLength: 100
+        modelName:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required:
+      - appLabel
+      - modelName
+    QueryMetadataResponse:
+      type: object
+      properties:
+        modelName:
+          type: string
+        appLabel:
+          type: string
+        primaryKeyField:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/QLabFieldMetadata'
+        allLookups:
+          type: array
+          items:
+            type: string
+      required:
+      - allLookups
+      - appLabel
+      - fields
+      - modelName
+      - primaryKeyField
+    QueryNeighborhoodRecord:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        relations:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: {}
+      required:
+      - nodeId
+      - relations
+    QueryNeighborhoodRequestRequest:
+      type: object
+      properties:
+        appLabel:
+          type: string
+          minLength: 1
+          maxLength: 100
+        modelName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        nodePks:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - appLabel
+      - modelName
+      - nodePks
+    QueryNeighborhoodResponse:
+      type: object
+      properties:
+        model:
+          type: string
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryNeighborhoodRecord'
+      required:
+      - model
+      - records
+    QueryRecordRequestRequest:
+      type: object
+      properties:
+        appLabel:
+          type: string
+          minLength: 1
+          maxLength: 100
+        modelName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        id:
+          type: string
+          minLength: 1
+        selectFields:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - appLabel
+      - id
+      - modelName
+    QueryRecordsRequestRequest:
+      type: object
+      properties:
+        appLabel:
+          type: string
+          minLength: 1
+          maxLength: 100
+        modelName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        selectFields:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        filterFields: {}
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        pageSize:
+          type: integer
+          minimum: 1
+      required:
+      - appLabel
+      - modelName
+    QueryRecordsResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+        next:
+          type: integer
+          nullable: true
+        previous:
+          type: integer
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryResult'
+      required:
+      - count
+      - next
+      - page
+      - pageSize
+      - previous
+      - results
+      - totalPages
+    QueryResult:
+      type: object
+      properties:
+        fields:
+          type: object
+          additionalProperties: {}
+        displayName:
+          type: string
+      required:
+      - displayName
+      - fields
+    RelationInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        relatedModel:
+          type: string
+        relatedName:
+          type: string
+        helpText:
+          type: string
+          nullable: true
+        verboseName:
+          type: string
+          nullable: true
+        onDelete:
+          type: string
+          nullable: true
+        reverse:
+          type: boolean
+      required:
+      - name
+      - relatedModel
+      - relatedName
+      - type
+    RouteBadRequest:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RouteNotFound:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RouteProbeBadRequest:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+      - error
+    RouteProbeRequestRequest:
+      type: object
+      properties:
+        route:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: 'Route steps from find_path: [{fromModel, toModel, viaField,
+            isForward}]'
+        sampleRecordId:
+          type: string
+          minLength: 1
+          description: Optional start record ID
+        sampleSize:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 5
+      required:
+      - route
+    RouteProbeResponse:
+      type: object
+      properties:
+        viable:
+          type: boolean
+        coverage:
+          type: number
+          format: double
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - coverage
+      - steps
+      - viable
+    RouteStep:
+      type: object
+      properties:
+        fromModel:
+          type: string
+        toModel:
+          type: string
+        viaField:
+          type: string
+        isForward:
+          type: boolean
+        isMany:
+          type: boolean
+      required:
+      - fromModel
+      - isForward
+      - isMany
+      - toModel
+      - viaField
+    SchemaEdge:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        sourceField:
+          type: string
+        targetField:
+          type: string
+        reverseName:
+          type: string
+        isProxy:
+          type: boolean
+        isSubclass:
+          type: boolean
+        isForeignKey:
+          type: boolean
+        isOneToOne:
+          type: boolean
+        isManyToMany:
+          type: boolean
+      required:
+      - source
+      - target
+    SchemaGraph:
+      type: object
+      properties:
+        schemaHash:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaEdge'
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaGroup'
+      required:
+      - edges
+      - groups
+      - nodes
+      - schemaHash
+    SchemaGroup:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required:
+      - id
+      - name
+    SchemaNode:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        group:
+          type: string
+        isProxy:
+          type: boolean
+        isAbstract:
+          type: boolean
+        primaryKey:
+          type: string
+        appLabel:
+          type: string
+        modelName:
+          type: string
+        fields:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+      required:
+      - appLabel
+      - fields
+      - group
+      - id
+      - isAbstract
+      - isProxy
+      - modelName
+      - name
+      - primaryKey
+    SchemaRoute:
+      type: object
+      properties:
+        startModel:
+          type: string
+        endModel:
+          type: string
+        route:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteStep'
+        waypoints:
+          type: array
+          items:
+            type: string
+      required:
+      - endModel
+      - route
+      - startModel
+      - waypoints
+    SessionState:
+      type: object
+      properties:
+        capabilities:
+          $ref: '#/components/schemas/SessionStateCapabilities'
+        locale:
+          $ref: '#/components/schemas/AvailableLocalesEnum'
+        availableLocales:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableLocalesEnum'
+        defaultLocale:
+          $ref: '#/components/schemas/AvailableLocalesEnum'
+        helpHintsEnabled:
+          type: boolean
+        helpHintsDismissed:
+          type: object
+          additionalProperties:
+            type: string
+        hasAiKey:
+          type: boolean
+        aiBaseUrl:
+          type: string
+        aiModel:
+          type: string
+      required:
+      - aiBaseUrl
+      - aiModel
+      - availableLocales
+      - capabilities
+      - defaultLocale
+      - hasAiKey
+      - helpHintsDismissed
+      - helpHintsEnabled
+      - locale
+    SessionStateCapabilities:
+      type: object
+      properties:
+        canManageFeaturedTemplates:
+          type: boolean
+        canManageModelRegistry:
+          type: boolean
+      required:
+      - canManageFeaturedTemplates
+      - canManageModelRegistry
+    SourceEnum:
+      enum:
+      - own
+      - featured
+      type: string
+      description: |-
+        * `own` - Own
+        * `featured` - Featured
+    StatelessExportModeEnum:
+      enum:
+      - fit
+      - current
+      type: string
+      description: |-
+        * `fit` - Fit
+        * `current` - Current
+    StatelessExportRequest:
+      type: object
+      description: Request body for stateless SVG/DrawIO export without a saved Drawing.
+      properties:
+        reactFlowState:
+          description: Full React Flow state with nodes, edges, and viewport.
+        lexicalState:
+          description: Lexical editor state keyed by node ID.
+        exportFormat:
+          allOf:
+          - $ref: '#/components/schemas/ExportFormatEnum'
+          default: svg
+          description: |-
+            Export format: svg or drawio.
+
+            * `svg` - SVG
+            * `drawio` - Draw.io
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/StatelessExportModeEnum'
+          default: fit
+          description: |-
+            SVG render mode. 'fit' fits all nodes; 'current' uses provided viewport.
+
+            * `fit` - Fit
+            * `current` - Current
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        fileName:
+          type: string
+          minLength: 1
+          default: export
+          description: Base file name for the Content-Disposition header.
+          maxLength: 200
+        scaleFactor:
+          type: number
+          format: double
+          maximum: 4.0
+          minimum: 0.25
+          default: 1.0
+          description: Content scale multiplier. 1.0=fit, >1 zoom in, <1 zoom out.
+        background:
+          type: string
+          minLength: 1
+          default: '#ffffff'
+          description: 'SVG background color: hex (#rrggbb) or ''transparent''.'
+          maxLength: 20
+      required:
+      - reactFlowState
+    StyleTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        visualStyles:
+          description: 'CSS properties: colors, borders, backgrounds, etc.'
+        dimensions:
+          description: Default width and height of the node
+        typeSpecificData:
+          description: Node-type specific data such as shape and shape colors.
+        textContent:
+          nullable: true
+          description: Lexical editor state, may reference model fields via {{field_name}}
+        requiredFields:
+          description: List of model field names this template needs, e.g. ['hostname',
+            'ip_address']
+        targetModel:
+          type: string
+          nullable: true
+        targetModelStatus:
+          type: string
+        isModelExclusive:
+          type: boolean
+          description: When enabled, this template can only be applied to the selected
+            target model.
+        isGlobal:
+          type: boolean
+          description: Global templates are available to all users
+        isFeatured:
+          type: boolean
+          description: Featured templates are highlighted as recommended company defaults.
+        featureRank:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Optional manual ordering for featured templates. Lower ranks
+            appear first.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+      required:
+      - createdAt
+      - name
+      - revision
+      - targetModelStatus
+      - updatedAt
+    StyleTemplateCompatibilityModel:
+      type: object
+      properties:
+        appLabel:
+          type: string
+        appVerboseName:
+          type: string
+        modelName:
+          type: string
+        verboseName:
+          type: string
+        verboseNamePlural:
+          type: string
+      required:
+      - appLabel
+      - appVerboseName
+      - modelName
+      - verboseName
+      - verboseNamePlural
+    StyleTemplateCompatibilityRequestRequest:
+      type: object
+      properties:
+        requiredFields:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        targetModel:
+          type: string
+          nullable: true
+          minLength: 1
+        isModelExclusive:
+          type: boolean
+          default: false
+    StyleTemplateCompatibilityResponse:
+      type: object
+      properties:
+        compatibleModelCount:
+          type: integer
+          minimum: 0
+        compatibleModels:
+          type: array
+          items:
+            $ref: '#/components/schemas/StyleTemplateCompatibilityModel'
+        forcedModel:
+          allOf:
+          - $ref: '#/components/schemas/StyleTemplateCompatibilityModel'
+          nullable: true
+        forcedModelStatus:
+          $ref: '#/components/schemas/ForcedModelStatusEnum'
+      required:
+      - compatibleModelCount
+      - compatibleModels
+      - forcedModelStatus
+    StyleTemplateRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        visualStyles:
+          description: 'CSS properties: colors, borders, backgrounds, etc.'
+        dimensions:
+          description: Default width and height of the node
+        typeSpecificData:
+          description: Node-type specific data such as shape and shape colors.
+        textContent:
+          nullable: true
+          description: Lexical editor state, may reference model fields via {{field_name}}
+        requiredFields:
+          description: List of model field names this template needs, e.g. ['hostname',
+            'ip_address']
+        targetModel:
+          type: string
+          nullable: true
+          minLength: 1
+        isModelExclusive:
+          type: boolean
+          description: When enabled, this template can only be applied to the selected
+            target model.
+        isGlobal:
+          type: boolean
+          description: Global templates are available to all users
+        isFeatured:
+          type: boolean
+          description: Featured templates are highlighted as recommended company defaults.
+        featureRank:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Optional manual ordering for featured templates. Lower ranks
+            appear first.
+      required:
+      - name
+    TemplateFavorites:
+      type: object
+      properties:
+        styleTemplateIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        generationTemplateIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    TemplateFavoritesRequest:
+      type: object
+      properties:
+        styleTemplateIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        generationTemplateIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    TemplateKindEnum:
+      enum:
+      - style
+      - generation
+      type: string
+      description: |-
+        * `style` - Style
+        * `generation` - Generation
+    TemplateScopeEnum:
+      enum:
+      - owner
+      - global
+      type: string
+      description: |-
+        * `owner` - owner
+        * `global` - global
+    TemplateUniquenessRequestRequest:
+      type: object
+      properties:
+        templateKind:
+          $ref: '#/components/schemas/TemplateKindEnum'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        exportName:
+          type: string
+          nullable: true
+        templateId:
+          type: string
+          format: uuid
+          nullable: true
+        isGlobal:
+          type: boolean
+          default: false
+      required:
+      - name
+      - templateKind
+    TemplateUniquenessResponse:
+      type: object
+      properties:
+        nameUnique:
+          type: boolean
+        nameMessage:
+          type: string
+          nullable: true
+        exportNameUnique:
+          type: boolean
+          nullable: true
+        exportNameMessage:
+          type: string
+          nullable: true
+      required:
+      - nameUnique
+    TourProgress:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TourProgressStatusEnum'
+        currentStep:
+          type: integer
+        highestStep:
+          type: integer
+        metadata: {}
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - completedAt
+      - createdAt
+      - currentStep
+      - highestStep
+      - id
+      - metadata
+      - startedAt
+      - status
+      - updatedAt
+    TourProgressResource:
+      type: object
+      properties:
+        key:
+          type: string
+        version:
+          type: integer
+        progress:
+          allOf:
+          - $ref: '#/components/schemas/TourProgress'
+      required:
+      - key
+      - progress
+      - version
+    TourProgressStatusEnum:
+      enum:
+      - not_started
+      - in_progress
+      - completed
+      type: string
+      description: |-
+        * `not_started` - Not Started
+        * `in_progress` - In Progress
+        * `completed` - Completed
+    TourProgressUpsertRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/TourProgressStatusEnum'
+        currentStep:
+          type: integer
+          minimum: 0
+        highestStep:
+          type: integer
+          minimum: 0
+        metadata:
+          type: object
+          additionalProperties: {}
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    oauth2:
+      type: oauth2
+      flows: {}

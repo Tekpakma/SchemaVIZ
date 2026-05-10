@@ -7,6 +7,7 @@ import {
   useIsMarqueeSelecting,
 } from '@/store/canvasStore'
 import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
+import { CANVAS_SELECT_COLOR, CANVAS_SELECT_FILL } from '../themeColors'
 
 type DragPosition = {
   x: number
@@ -77,8 +78,8 @@ export function SelectedNodesFrame() {
       <Rect
         width={bounds.width}
         height={bounds.height}
-        fill="rgba(59, 130, 246, 0.04)"
-        stroke="#3b82f6"
+        fill={CANVAS_SELECT_FILL}
+        stroke={CANVAS_SELECT_COLOR}
         strokeWidth={1}
         dash={[3, 3]}
         strokeScaleEnabled={false}

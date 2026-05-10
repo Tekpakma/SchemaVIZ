@@ -2,19 +2,23 @@ import {
   HeadContent,
   ScriptOnce,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
 
+import { CanvasDevtoolsPanel } from '@/features/canvas/components/CanvasDevtoolsPanel'
 import { I18nProvider } from '@/features/i18n/useI18n'
 import { getLocalePreference } from '@/features/i18n/localeServerFns'
 import { ThemeProvider } from '@/features/theme/useTheme'
 import { getThemePreference } from '@/features/theme/themeServerFns'
 import appCss from '../styles.css?url'
+import type { QueryClient } from '@tanstack/react-query'
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
   loader: async () => {
     const theme = await getThemePreference()
     const locale = await getLocalePreference()
@@ -62,6 +66,20 @@ try {
 function RootDocument({ children }: { children: React.ReactNode }) {
   const { locale, theme } = Route.useLoaderData()
   const resolvedTheme = theme === 'dark' ? 'dark' : 'light'
+  const plugins = [
+    {
+      name: 'Tanstack Router',
+      render: <TanStackRouterDevtoolsPanel />,
+    },
+    {
+      name: 'React Query',
+      render: <ReactQueryDevtoolsPanel />,
+    },
+    {
+      name: 'Canvas',
+      render: <CanvasDevtoolsPanel />,
+    },
+  ]
 
   return (
     <html
@@ -70,7 +88,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       suppressHydrationWarning
     >
       <head>
-        {theme === 'system' ? <ScriptOnce>{systemThemeScript}</ScriptOnce> : null}
+        {theme === 'system' ? (
+          <ScriptOnce>{systemThemeScript}</ScriptOnce>
+        ) : null}
         <HeadContent />
       </head>
       <body>
@@ -81,16 +101,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           config={{
             position: 'bottom-right',
           }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            {
-              name: 'React Query',
-              render: <ReactQueryDevtoolsPanel />
-            }
-          ]}
+          plugins={plugins}
         />
         <Scripts />
       </body>

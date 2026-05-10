@@ -11,8 +11,7 @@ import {
   CANVAS_MIN_SCALE,
   CANVAS_SCALE_STEP,
 } from '../constants'
-
-const FIT_VIEW_PADDING = 64
+import { getCanvasFitViewportForFrames } from '../fitView'
 
 type StageSize = {
   width: number
@@ -45,17 +44,7 @@ function getZoomedViewport(
   }
 }
 
-function getFitViewScale(
-  bounds: { width: number; height: number },
-  stageSize: StageSize,
-) {
-  const availableWidth = Math.max(1, stageSize.width - FIT_VIEW_PADDING * 2)
-  const availableHeight = Math.max(1, stageSize.height - FIT_VIEW_PADDING * 2)
 
-  return clampScale(
-    Math.min(availableWidth / bounds.width, availableHeight / bounds.height),
-  )
-}
 
 /**
  * Provides pan and pointer-centered zoom controls for the canvas viewport.
@@ -122,47 +111,16 @@ export function useCanvasViewportControls(stageSize: StageSize) {
   }, [viewport.scale, zoomAtStageCenter])
 
   const fitView = useCallback(() => {
-    if (
-      nodeIds.length === 0 ||
-      stageSize.width === 0 ||
-      stageSize.height === 0
-    ) {
-      return
-    }
-
     const nodesById = getCanvasNodesSnapshot()
 
-    let left = Number.POSITIVE_INFINITY
-    let top = Number.POSITIVE_INFINITY
-    let right = Number.NEGATIVE_INFINITY
-    let bottom = Number.NEGATIVE_INFINITY
-    let boundsNodeCount = 0
-
-    for (const nodeId of nodeIds) {
+    const frames = nodeIds.flatMap((nodeId) => {
       const node = nodesById[nodeId]
-      if (!node) continue
-
-      left = Math.min(left, node.x)
-      top = Math.min(top, node.y)
-      right = Math.max(right, node.x + node.width)
-      bottom = Math.max(bottom, node.y + node.height)
-      boundsNodeCount += 1
-    }
-
-    if (boundsNodeCount === 0) return
-
-    const boundsWidth = Math.max(1, right - left)
-    const boundsHeight = Math.max(1, bottom - top)
-    const nextScale = getFitViewScale(
-      { width: boundsWidth, height: boundsHeight },
-      stageSize,
-    )
-
-    setViewport({
-      x: (stageSize.width - boundsWidth * nextScale) / 2 - left * nextScale,
-      y: (stageSize.height - boundsHeight * nextScale) / 2 - top * nextScale,
-      scale: nextScale,
+      if (!node) return []
+      return [{ id: node.id, x: node.x, y: node.y, width: node.width, height: node.height }]
     })
+
+    const nextViewport = getCanvasFitViewportForFrames(frames, stageSize)
+    if (nextViewport) setViewport(nextViewport)
   }, [nodeIds, setViewport, stageSize])
 
   return {

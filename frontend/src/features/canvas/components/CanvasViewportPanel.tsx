@@ -1,11 +1,19 @@
-import { MagnetIcon, ScanIcon, ZoomInIcon, ZoomOutIcon } from 'lucide-react'
+import {
+  MagnetIcon,
+  ScanIcon,
+  WorkflowIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from 'lucide-react'
 import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
 
 type CanvasViewportPanelProps = {
   canFitView: boolean
   canZoomIn: boolean
   canZoomOut: boolean
+  isLayoutPending: boolean
   onFitView: () => void
+  onLayout: () => void
   onZoomIn: () => void
   onZoomOut: () => void
 }
@@ -45,7 +53,9 @@ export function CanvasViewportPanel({
   canFitView,
   canZoomIn,
   canZoomOut,
+  isLayoutPending,
   onFitView,
+  onLayout,
   onZoomIn,
   onZoomOut,
 }: CanvasViewportPanelProps) {
@@ -68,6 +78,15 @@ export function CanvasViewportPanel({
         onClick={onZoomOut}
       >
         <ZoomOutIcon className="size-4" />
+      </ViewportPanelButton>
+      <div className="h-px bg-border" />
+      <ViewportPanelButton
+        label="Layout graph"
+        disabled={!canFitView || isLayoutPending}
+        pressed={isLayoutPending}
+        onClick={onLayout}
+      >
+        <WorkflowIcon className="size-4" />
       </ViewportPanelButton>
       <div className="h-px bg-border" />
       <ViewportPanelButton

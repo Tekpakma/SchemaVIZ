@@ -50,8 +50,20 @@ from .utils.style_template_compatibility import (
     resolve_content_type_for_model_ref,
     resolve_model_info_from_ref,
 )
+from .api_choices import (
+    GENERATION_PREVIEW_STATUS_CHOICES,
+    GENERATION_QUICK_ACCESS_SOURCE_CHOICES,
+    GENERATION_RUN_MODE_CHOICES,
+    GENERATION_SOURCE_KIND_CHOICES,
+    GENERATION_VERSION_SELECTION_CHOICES,
+    STATELESS_EXPORT_FORMAT_CHOICES,
+    STATELESS_EXPORT_MODE_CHOICES,
+    TEMPLATE_KIND_CHOICES,
+    TEMPLATE_SCOPE_CHOICES,
+)
 
 
+@extend_schema_field(serializers.CharField(allow_null=True))
 class StyleTemplateTargetModelField(serializers.Field):
     default_error_messages = {
         "invalid": "targetModel must be a string model reference like app_label.model_name.",
@@ -78,6 +90,7 @@ class StyleTemplateTargetModelField(serializers.Field):
         return normalized
 
 
+@extend_schema_field(serializers.CharField())
 class ModelTemplateDefaultModelField(serializers.Field):
     default_error_messages = {
         "invalid": "modelRef must be a string model reference like app_label.model_name.",
@@ -198,6 +211,7 @@ class QLabRegistryGroupSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+@extend_schema_field(serializers.CharField())
 class QLabRegistryModelRefField(serializers.Field):
     default_error_messages = {
         "invalid": "modelRef must be a string model reference like app_label.model_name.",
@@ -277,28 +291,28 @@ class QLabRegistryEntrySerializer(serializers.ModelSerializer):
         except LookupError:
             return None
 
-    def get_app_verbose_name(self, obj):
+    def get_app_verbose_name(self, obj) -> str | None:
         model = self._resolve_model(obj)
         if model is None:
             return None
         return str(model._meta.app_config.verbose_name)
 
-    def get_verbose_name(self, obj):
+    def get_verbose_name(self, obj) -> str | None:
         model = self._resolve_model(obj)
         if model is None:
             return None
         return str(model._meta.verbose_name)
 
-    def get_verbose_name_plural(self, obj):
+    def get_verbose_name_plural(self, obj) -> str | None:
         model = self._resolve_model(obj)
         if model is None:
             return None
         return str(model._meta.verbose_name_plural)
 
-    def get_model_exists(self, obj):
+    def get_model_exists(self, obj) -> bool:
         return self._resolve_model(obj) is not None
 
-    def get_is_qlab_app_allowed(self, obj):
+    def get_is_qlab_app_allowed(self, obj) -> bool:
         return is_qlab_app_allowed(obj.app_label)
 
     def validate_model_ref(self, value):
@@ -867,14 +881,14 @@ class ModelInfoRequestSerializer(serializers.Serializer):
     Validates requests to get model information
     """
 
-    appLabel = serializers.CharField(  # ← camelCase
-        source="app_label",  # ← still maps to snake_case internally
+    appLabel = serializers.CharField(
+        source="app_label",
         required=True,
         max_length=100,
         help_text="Django app label",
     )
-    modelName = serializers.CharField(  # ← camelCase
-        source="model_name",  # ← still maps to snake_case internally
+    modelName = serializers.CharField(
+        source="model_name",
         required=True,
         max_length=100,
         help_text="Model name",
@@ -951,26 +965,26 @@ class GenerationTemplatePublishedBySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     display_name = serializers.SerializerMethodField()
 
-    def get_display_name(self, obj):
+    def get_display_name(self, obj) -> str:
         return str(obj)
 
 
 class GenerationTemplateVersionSummarySerializer(serializers.ModelSerializer):
-    versionNumber = serializers.IntegerField(source="version_number", read_only=True)
-    rootModel = serializers.CharField(source="root_model", read_only=True)
-    layoutSettings = serializers.JSONField(source="layout_settings", read_only=True)
-    createdBy = GenerationTemplatePublishedBySerializer(
-        source="created_by", read_only=True, allow_null=True
+    version_number = serializers.IntegerField(read_only=True)
+    root_model = serializers.CharField(read_only=True)
+    layout_settings = serializers.JSONField(read_only=True)
+    created_by = GenerationTemplatePublishedBySerializer(
+        read_only=True, allow_null=True
     )
 
     class Meta:
         model = GenerationTemplateVersion
         fields = [
             "id",
-            "versionNumber",
-            "rootModel",
-            "layoutSettings",
-            "createdBy",
+            "version_number",
+            "root_model",
+            "layout_settings",
+            "created_by",
             "created_at",
         ]
 
@@ -987,21 +1001,21 @@ class GenerationTemplateVersionDetailSerializer(
 
 
 class GenerationTemplateReadSerializer(serializers.ModelSerializer):
-    rootModel = serializers.CharField(source="root_model", read_only=True)
-    shareSlug = serializers.CharField(
+    root_model = serializers.CharField(read_only=True)
+    share_slug = serializers.CharField(
         source="export_name", read_only=True, allow_null=True
     )
     scope = serializers.SerializerMethodField()
-    ownedByCurrentUser = serializers.SerializerMethodField()
+    owned_by_current_user = serializers.SerializerMethodField()
     featured = serializers.SerializerMethodField()
-    draftVersion = GenerationTemplateVersionDetailSerializer(
-        source="draft_version", read_only=True, allow_null=True
+    draft_version = GenerationTemplateVersionDetailSerializer(
+        read_only=True, allow_null=True
     )
-    publishedVersion = GenerationTemplateVersionDetailSerializer(
-        source="published_version", read_only=True, allow_null=True
+    published_version = GenerationTemplateVersionDetailSerializer(
+        read_only=True, allow_null=True
     )
-    publishedBy = GenerationTemplatePublishedBySerializer(
-        source="published_by", read_only=True, allow_null=True
+    published_by = GenerationTemplatePublishedBySerializer(
+        read_only=True, allow_null=True
     )
 
     class Meta:
@@ -1010,15 +1024,15 @@ class GenerationTemplateReadSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
-            "rootModel",
+            "root_model",
             "scope",
-            "ownedByCurrentUser",
+            "owned_by_current_user",
             "featured",
-            "shareSlug",
-            "draftVersion",
-            "publishedVersion",
+            "share_slug",
+            "draft_version",
+            "published_version",
             "published_at",
-            "publishedBy",
+            "published_by",
             "created_at",
             "updated_at",
             "revision",
@@ -1029,7 +1043,7 @@ class GenerationTemplateReadSerializer(serializers.ModelSerializer):
         return "global" if obj.is_global else "owner"
 
     @extend_schema_field(serializers.BooleanField())
-    def get_ownedByCurrentUser(self, obj):
+    def get_owned_by_current_user(self, obj):
         request = self.context.get("request")
         user = getattr(request, "user", None)
         return bool(user and user.is_authenticated and obj.owner_id == user.id)
@@ -1043,21 +1057,21 @@ class GenerationTemplateReadSerializer(serializers.ModelSerializer):
 
 
 class GenerationTemplateListSerializer(serializers.ModelSerializer):
-    rootModel = serializers.CharField(source="root_model", read_only=True)
-    shareSlug = serializers.CharField(
+    root_model = serializers.CharField(read_only=True)
+    share_slug = serializers.CharField(
         source="export_name", read_only=True, allow_null=True
     )
     scope = serializers.SerializerMethodField()
-    ownedByCurrentUser = serializers.SerializerMethodField()
+    owned_by_current_user = serializers.SerializerMethodField()
     featured = serializers.SerializerMethodField()
-    draftVersion = GenerationTemplateVersionDetailSerializer(
-        source="draft_version", read_only=True, allow_null=True
+    draft_version = GenerationTemplateVersionDetailSerializer(
+        read_only=True, allow_null=True
     )
-    publishedVersion = GenerationTemplateVersionDetailSerializer(
-        source="published_version", read_only=True, allow_null=True
+    published_version = GenerationTemplateVersionDetailSerializer(
+        read_only=True, allow_null=True
     )
-    publishedBy = GenerationTemplatePublishedBySerializer(
-        source="published_by", read_only=True, allow_null=True
+    published_by = GenerationTemplatePublishedBySerializer(
+        read_only=True, allow_null=True
     )
 
     class Meta:
@@ -1066,15 +1080,15 @@ class GenerationTemplateListSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
-            "rootModel",
+            "root_model",
             "scope",
-            "ownedByCurrentUser",
+            "owned_by_current_user",
             "featured",
-            "shareSlug",
-            "draftVersion",
-            "publishedVersion",
+            "share_slug",
+            "draft_version",
+            "published_version",
             "published_at",
-            "publishedBy",
+            "published_by",
             "created_at",
             "updated_at",
             "revision",
@@ -1085,7 +1099,7 @@ class GenerationTemplateListSerializer(serializers.ModelSerializer):
         return "global" if obj.is_global else "owner"
 
     @extend_schema_field(serializers.BooleanField())
-    def get_ownedByCurrentUser(self, obj):
+    def get_owned_by_current_user(self, obj):
         request = self.context.get("request")
         user = getattr(request, "user", None)
         return bool(user and user.is_authenticated and obj.owner_id == user.id)
@@ -1099,10 +1113,45 @@ class GenerationTemplateListSerializer(serializers.ModelSerializer):
 
 
 class GenerationTemplateSampleSerializer(serializers.Serializer):
-    recordId = serializers.CharField(required=False, allow_null=True)
-    recordDisplayName = serializers.CharField(required=False, allow_null=True)
-    status = serializers.ChoiceField(choices=["ready", "no_record", "error"])
+    record_id = serializers.CharField(required=False, allow_null=True)
+    record_display_name = serializers.CharField(required=False, allow_null=True)
+    status = serializers.ChoiceField(choices=GENERATION_PREVIEW_STATUS_CHOICES)
     run = serializers.DictField(required=False, allow_null=True)
+
+
+class GenerationTemplateQuickAccessSourceVersionSerializer(serializers.Serializer):
+    kind = serializers.ChoiceField(choices=GENERATION_SOURCE_KIND_CHOICES)
+    selection = serializers.ChoiceField(choices=GENERATION_VERSION_SELECTION_CHOICES)
+    version_id = serializers.CharField(allow_null=True)
+    version_number = serializers.IntegerField(allow_null=True)
+    root_model = serializers.CharField()
+    layout_settings = serializers.JSONField()
+    published_at = serializers.DateTimeField(allow_null=True)
+    share_slug = serializers.CharField(allow_null=True)
+
+
+class GenerationTemplateQuickAccessRunSerializer(serializers.Serializer):
+    mode = serializers.CharField()
+    source_version = GenerationTemplateQuickAccessSourceVersionSerializer()
+    result = serializers.JSONField()
+    style_templates = StyleTemplateSerializer(many=True)
+    group_templates = GroupTemplateSerializer(many=True)
+    template = GenerationTemplateListSerializer(required=False)
+
+
+class GenerationTemplateQuickAccessEntrySerializer(serializers.Serializer):
+    template = GenerationTemplateListSerializer()
+    source = serializers.ChoiceField(choices=GENERATION_QUICK_ACCESS_SOURCE_CHOICES)
+    sample_record_id = serializers.CharField(allow_null=True)
+    sample_record_display_name = serializers.CharField(allow_null=True)
+    preview_status = serializers.ChoiceField(choices=GENERATION_PREVIEW_STATUS_CHOICES)
+    run = GenerationTemplateQuickAccessRunSerializer(required=False, allow_null=True)
+    result = serializers.JSONField(required=False, allow_null=True)
+    style_templates = StyleTemplateSerializer(many=True)
+
+
+class GenerationTemplateOwnRecentQuickAccessSerializer(serializers.Serializer):
+    own_recent = GenerationTemplateQuickAccessEntrySerializer(many=True)
 
 
 class GenerationTemplateWriteSerializer(serializers.Serializer):
@@ -1110,7 +1159,7 @@ class GenerationTemplateWriteSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, default="")
     root_model = serializers.CharField(max_length=200)
     scope = serializers.ChoiceField(
-        choices=[("owner", "Owner"), ("global", "Global")],
+        choices=TEMPLATE_SCOPE_CHOICES,
         required=False,
         default="owner",
     )
@@ -1254,7 +1303,7 @@ class GenerationTemplateWriteSerializer(serializers.Serializer):
 class GenerationRunSourceSerializer(serializers.Serializer):
     template_id = serializers.UUIDField(required=False)
     version = serializers.ChoiceField(
-        choices=[("draft", "Draft"), ("published", "Published")],
+        choices=GENERATION_VERSION_SELECTION_CHOICES,
         required=False,
     )
     inline_definition = serializers.JSONField(required=False)
@@ -1309,9 +1358,7 @@ class GenerationRunSourceSerializer(serializers.Serializer):
 
 
 class GenerationRunRequestSerializer(serializers.Serializer):
-    mode = serializers.ChoiceField(
-        choices=[("structure", "Structure"), ("live", "Live"), ("share", "Share")]
-    )
+    mode = serializers.ChoiceField(choices=GENERATION_RUN_MODE_CHOICES)
     record_id = serializers.CharField(
         required=False,
         allow_blank=False,
@@ -1337,7 +1384,7 @@ class GenerationRunRequestSerializer(serializers.Serializer):
 
 class TemplateUniquenessRequestSerializer(serializers.Serializer):
     template_kind = serializers.ChoiceField(
-        choices=[("style", "Style"), ("generation", "Generation")],
+        choices=TEMPLATE_KIND_CHOICES,
     )
     name = serializers.CharField(max_length=200)
     export_name = serializers.CharField(
@@ -1518,12 +1565,12 @@ class StatelessExportSerializer(serializers.Serializer):
         help_text="Lexical editor state keyed by node ID.",
     )
     export_format = serializers.ChoiceField(
-        choices=["svg", "drawio"],
+        choices=STATELESS_EXPORT_FORMAT_CHOICES,
         default="svg",
         help_text="Export format: svg or drawio.",
     )
     mode = serializers.ChoiceField(
-        choices=["fit", "current"],
+        choices=STATELESS_EXPORT_MODE_CHOICES,
         default="fit",
         required=False,
         help_text="SVG render mode. 'fit' fits all nodes; 'current' uses provided viewport.",

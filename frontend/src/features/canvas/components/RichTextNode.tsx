@@ -9,6 +9,7 @@ import {
 import { getRenderTagLayout } from '@/features/rendering/renderTagCache'
 import {
   CANVAS_NODE_SURFACE_VARIABLE,
+  CANVAS_SELECT_COLOR,
   CANVAS_SURFACE_FALLBACKS,
   resolveCanvasThemeColor,
 } from '@/features/canvas/themeColors'
@@ -184,7 +185,7 @@ export const RichTextNode = memo(function RichTextNode({
         height={node.height}
         fill={fill}
         opacity={isGroup ? 0.16 : undefined}
-        stroke={isGroup ? '#3b82f6' : undefined}
+        stroke={isGroup ? CANVAS_SELECT_COLOR : undefined}
         dash={isGroup ? [6, 4] : undefined}
         cornerRadius={shapeDefinition.cornerRadius}
       />
@@ -193,7 +194,7 @@ export const RichTextNode = memo(function RichTextNode({
           width={node.width}
           height={node.height}
           cornerRadius={shapeDefinition.cornerRadius}
-          stroke="#3b82f6"
+          stroke={CANVAS_SELECT_COLOR}
           strokeWidth={1.5}
           strokeScaleEnabled={false}
           listening={false}

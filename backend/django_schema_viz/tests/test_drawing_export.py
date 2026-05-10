@@ -118,7 +118,9 @@ class DrawingExportViewTests(APITestCase):
             f"/schema-viz/drawings/{self.drawing.id}/export/?exportFormat=svg&width=8000&height=8000"
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("width*height exceeds maximum export pixels", response.json()["error"])
+        self.assertIn(
+            "width*height exceeds maximum export pixels", response.json()["error"]
+        )
 
     def test_svg_export_uses_discover_bottom_to_top_anchors(self):
         drawing = Drawing.objects.create(
@@ -194,7 +196,10 @@ class DrawingExportViewTests(APITestCase):
                                             {
                                                 "type": "paragraph",
                                                 "children": [
-                                                    {"type": "text", "text": "Hello Export"}
+                                                    {
+                                                        "type": "text",
+                                                        "text": "Hello Export",
+                                                    }
                                                 ],
                                             }
                                         ],
@@ -562,7 +567,41 @@ class DrawingExportViewTests(APITestCase):
         # Default shape: no nested svg viewBox, just a <rect>
         self.assertNotIn('viewBox="27 23', content)
         self.assertNotIn('viewBox="18 17', content)
+        self.assertIn('rx="10.00"', content)
+        self.assertIn('ry="10.00"', content)
         self.assertIn("Rectangle", content)
+
+    def test_svg_export_box_shape_uses_canvas_corner_radius(self):
+        drawing = Drawing.objects.create(
+            title="Box Shape",
+            description="box",
+            react_flow_state={
+                "nodes": [
+                    {
+                        "id": "box-1",
+                        "type": "discover",
+                        "position": {"x": 50, "y": 50},
+                        "width": 200,
+                        "height": 100,
+                        "data": {"shape": "box", "label": "Canvas Box"},
+                    }
+                ],
+                "edges": [],
+                "viewport": {"x": 0, "y": 0, "zoom": 1},
+            },
+            lexical_state={},
+            owner=self.owner,
+        )
+        self.client.force_authenticate(self.owner)
+        response = self.client.get(
+            f"/schema-viz/drawings/{drawing.id}/export/?exportFormat=svg&width=800&height=600&mode=current"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn('rx="8.00"', content)
+        self.assertIn('ry="8.00"', content)
+        self.assertIn("Canvas Box", content)
 
     def test_svg_export_database_alias_renders_cylinder(self):
         """The 'database' alias should resolve to cylinder shape."""
@@ -1021,9 +1060,7 @@ class DrawingExportViewTests(APITestCase):
                             {
                                 "type": "paragraph",
                                 "format": "left",
-                                "children": [
-                                    {"type": "text", "text": "Left"}
-                                ],
+                                "children": [{"type": "text", "text": "Left"}],
                             }
                         ],
                     }
@@ -1064,9 +1101,7 @@ class DrawingExportViewTests(APITestCase):
                             {
                                 "type": "paragraph",
                                 "format": "right",
-                                "children": [
-                                    {"type": "text", "text": "Right"}
-                                ],
+                                "children": [{"type": "text", "text": "Right"}],
                             }
                         ],
                     }

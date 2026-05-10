@@ -4,26 +4,33 @@ import {
   RichTextNodeControls,
   RichTextNodeText,
 } from './RichTextNode'
+import { CanvasEdges } from './CanvasEdges'
 import { CanvasHelperLines } from './CanvasHelperLines'
 import { CanvasViewportPanel } from './CanvasViewportPanel'
 import { SelectedNodeToolbar } from './SelectedNodeToolbar'
 import { SelectedNodesFrame } from './SelectedNodesFrame'
-import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
+import {
+  useCanvasActions,
+  useCanvasNodeIds,
+} from '@/store/canvasStore'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
 import { useCanvasMarqueeSelection } from '../hooks/useCanvasMarqueeSelection'
 import { useCanvasViewportControls } from '../hooks/useCanvasViewportControls'
 import { useEnsureDefaultCanvasNode } from '../hooks/useEnsureDefaultCanvasNode'
+import { useCanvasLayout } from '../hooks/useCanvasLayout'
 import { CanvasHelperLinesProvider } from '../hooks/useCanvasHelperLines'
 import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { TEST_IDS } from '@/constants'
 import type { NodeId } from '../model/types'
+import { CANVAS_MARQUEE_FILL, CANVAS_SELECT_COLOR } from '../themeColors'
 
 export function MainScreen() {
   const { ref: stageContainerRef, size } = useCanvasStageSize()
   const nodeIds = useCanvasNodeIds()
   const { selectNode } = useCanvasActions()
+  const { handleLayoutGraph, isLayoutPending } = useCanvasLayout(size)
   const {
     viewport,
     canFitView,
@@ -93,6 +100,9 @@ export function MainScreen() {
           onMouseUp={handleMarqueeMouseUp}
           onTouchStart={handleStageTouchStart}
         >
+          <Layer listening={false}>
+            <CanvasEdges />
+          </Layer>
           <Layer>
             {nodeIds.map((id: NodeId) => (
               <RichTextNode key={id} nodeId={id} />
@@ -116,8 +126,8 @@ export function MainScreen() {
                 y={selectionRect.y}
                 width={selectionRect.width}
                 height={selectionRect.height}
-                fill="rgba(59, 130, 246, 0.10)"
-                stroke="#3b82f6"
+                fill={CANVAS_MARQUEE_FILL}
+                stroke={CANVAS_SELECT_COLOR}
                 strokeWidth={1}
                 strokeScaleEnabled={false}
                 listening={false}
@@ -130,7 +140,9 @@ export function MainScreen() {
           canFitView={canFitView}
           canZoomIn={canZoomIn}
           canZoomOut={canZoomOut}
+          isLayoutPending={isLayoutPending}
           onFitView={fitView}
+          onLayout={handleLayoutGraph}
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
         />

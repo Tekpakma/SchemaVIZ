@@ -1,9 +1,27 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
-import type { CanvasNode, NodeId } from '@/features/canvas/model/types'
+import type {
+  CanvasEdge,
+  CanvasFlowDirection,
+  CanvasGraphLayoutResult,
+  CanvasNode,
+  CanvasNodeLayoutMode,
+  CanvasPortSide,
+  CanvasRoutingAuthorityMode,
+  EdgeId,
+  NodeId,
+} from '@/features/canvas/model/types'
 import { useShallow } from 'zustand/react/shallow'
 import { getCanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
+import type { CanvasLayoutInput } from '@/features/canvas/layout.schemas'
+import {
+  DEFAULT_CANVAS_FLOW_DIRECTION,
+  DEFAULT_ELK_LAYOUT_OPTIONS,
+  resolveEdgePortSide,
+} from '@/features/canvas/layoutAdapters'
+import type { LayoutOptions } from 'elkjs/lib/elk-api'
+import * as R from 'remeda'
 
 const GROUP_NODE_PADDING = 24
 
@@ -11,6 +29,7 @@ function createNodeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
 }
 
+/** Computes the axis-aligned bounding box enclosing all given nodes. */
 function getNodeBounds(nodes: Array<CanvasNode>) {
   let left = Number.POSITIVE_INFINITY
   let top = Number.POSITIVE_INFINITY
@@ -32,6 +51,232 @@ function getNodeBounds(nodes: Array<CanvasNode>) {
   }
 }
 
+/** Builds a lookup from group node ID to its direct child node IDs. */
+function getChildIdsByGroupId(nodes: Array<CanvasNode>) {
+  const childIdsByGroupId: Record<NodeId, Array<NodeId>> = {}
+
+  for (const node of nodes) {
+    if (!node.parentGroupId) continue
+
+    const childIds = childIdsByGroupId[node.parentGroupId] ?? []
+    childIds.push(node.id)
+    childIdsByGroupId[node.parentGroupId] = childIds
+  }
+
+  return childIdsByGroupId
+}
+
+/** Removes cached edge routes for any edge connected to the given node IDs. */
+function clearConnectedEdgeRoutes(state: CanvasState, nodeIds: Array<NodeId>) {
+  const nodeIdSet = new Set(nodeIds)
+
+  for (const edge of Object.values(state.edgesById)) {
+    if (
+      !nodeIdSet.has(edge.sourceNodeId) &&
+      !nodeIdSet.has(edge.targetNodeId)
+    ) {
+      continue
+    }
+
+    delete edge.routePoints
+  }
+}
+
+function clearAllExplicitEdgePorts(state: CanvasState) {
+  for (const edge of Object.values(state.edgesById)) {
+    delete edge.sourcePort
+    delete edge.targetPort
+  }
+}
+
+function clearConnectedEdgePorts(state: CanvasState, nodeIds: Array<NodeId>) {
+  const nodeIdSet = new Set(nodeIds)
+
+  for (const edge of Object.values(state.edgesById)) {
+    if (
+      !nodeIdSet.has(edge.sourceNodeId) &&
+      !nodeIdSet.has(edge.targetNodeId)
+    ) {
+      continue
+    }
+
+    delete edge.sourcePort
+    delete edge.targetPort
+  }
+}
+
+function getNodeCenterPoint(node: CanvasNode) {
+  return {
+    x: node.x + node.width / 2,
+    y: node.y + node.height / 2,
+  }
+}
+
+function getPortSlotSortValue(
+  state: CanvasState,
+  otherNodeId: NodeId,
+  side: CanvasPortSide,
+) {
+  const otherNode = state.nodesById[otherNodeId]
+  if (!otherNode) {
+    return 0
+  }
+
+  const otherCenter = getNodeCenterPoint(otherNode)
+
+  return side === 'LEFT' || side === 'RIGHT' ? otherCenter.y : otherCenter.x
+}
+
+function assignExplicitPortSlots(state: CanvasState) {
+  const endpointGroups = new Map<
+    string,
+    Array<{ edge: CanvasEdge; endpoint: 'source' | 'target'; sortValue: number }>
+  >()
+
+  for (const edge of Object.values(state.edgesById)) {
+    if (edge.sourcePort?.side) {
+      const key = `${edge.sourceNodeId}:${edge.sourcePort.side}`
+      const group = endpointGroups.get(key) ?? []
+      group.push({
+        edge,
+        endpoint: 'source',
+        sortValue: getPortSlotSortValue(
+          state,
+          edge.targetNodeId,
+          edge.sourcePort.side,
+        ),
+      })
+      endpointGroups.set(key, group)
+    }
+
+    if (edge.targetPort?.side) {
+      const key = `${edge.targetNodeId}:${edge.targetPort.side}`
+      const group = endpointGroups.get(key) ?? []
+      group.push({
+        edge,
+        endpoint: 'target',
+        sortValue: getPortSlotSortValue(
+          state,
+          edge.sourceNodeId,
+          edge.targetPort.side,
+        ),
+      })
+      endpointGroups.set(key, group)
+    }
+  }
+
+  for (const group of endpointGroups.values()) {
+    group.sort((left, right) => {
+      if (left.sortValue !== right.sortValue) {
+        return left.sortValue - right.sortValue
+      }
+
+      return left.edge.id.localeCompare(right.edge.id)
+    })
+
+    const slotCount = group.length
+
+    for (const [index, entry] of group.entries()) {
+      if (entry.endpoint === 'source' && entry.edge.sourcePort?.side) {
+        entry.edge.sourcePort = {
+          side: entry.edge.sourcePort.side,
+          slot: index,
+          slotCount,
+        }
+      }
+
+      if (entry.endpoint === 'target' && entry.edge.targetPort?.side) {
+        entry.edge.targetPort = {
+          side: entry.edge.targetPort.side,
+          slot: index,
+          slotCount,
+        }
+      }
+    }
+  }
+}
+
+function setNodeLayoutMode(
+  state: CanvasState,
+  nodeIds: Array<NodeId>,
+  layoutMode: CanvasNodeLayoutMode,
+) {
+  for (const nodeId of nodeIds) {
+    const node = state.nodesById[nodeId]
+    if (!node) continue
+
+    node.layoutMode = layoutMode
+  }
+}
+
+/** Materializes both edge endpoints once a connected node is manually transformed so anchors stop sliding. */
+function materializeConnectedEdgePorts(
+  state: CanvasState,
+  nodeIds: Array<NodeId>,
+) {
+  const nodeIdSet = new Set(nodeIds)
+
+  for (const edge of Object.values(state.edgesById)) {
+    if (
+      !nodeIdSet.has(edge.sourceNodeId) &&
+      !nodeIdSet.has(edge.targetNodeId)
+    ) {
+      continue
+    }
+
+    edge.sourcePort ??= {
+      side: resolveEdgePortSide(
+        edge.sourcePort,
+        'source',
+        state.flowDirection,
+        state.layoutOptions,
+      ),
+    }
+    edge.targetPort ??= {
+      side: resolveEdgePortSide(
+        edge.targetPort,
+        'target',
+        state.flowDirection,
+        state.layoutOptions,
+      ),
+    }
+  }
+
+  assignExplicitPortSlots(state)
+}
+
+/** Recursively collects a node's ID and all its descendant IDs in the group hierarchy. */
+function getNodeAndDescendantIds(
+  state: CanvasState,
+  id: NodeId,
+): Array<NodeId> {
+  const ids = [id]
+  const childIds = state.childIdsByGroupId[id] ?? []
+
+  for (const childId of childIds) {
+    ids.push(...getNodeAndDescendantIds(state, childId))
+  }
+
+  return ids
+}
+
+function prepareNodeTransform(state: CanvasState, id: NodeId) {
+  const affectedNodeIds = getNodeAndDescendantIds(state, id)
+
+  clearConnectedEdgeRoutes(state, affectedNodeIds)
+  setNodeLayoutMode(state, affectedNodeIds, 'manual')
+
+  if (state.routingAuthority === 'manual') {
+    materializeConnectedEdgePorts(state, affectedNodeIds)
+  } else {
+    clearConnectedEdgePorts(state, affectedNodeIds)
+    assignExplicitPortSlots(state)
+  }
+
+  return affectedNodeIds
+}
+
+/** Translates a node (and its group children) by a delta, invalidating connected edge routes. */
 function moveNodeByDelta(
   state: CanvasState,
   id: NodeId,
@@ -40,6 +285,8 @@ function moveNodeByDelta(
 ) {
   const node = state.nodesById[id]
   if (!node) return
+
+  prepareNodeTransform(state, id)
 
   node.x += deltaX
   node.y += deltaY
@@ -59,12 +306,19 @@ function moveNodeByDelta(
 type CanvasState = {
   nodesById: Record<NodeId, CanvasNode>
   nodeOrder: Array<NodeId>
+  edgesById: Record<EdgeId, CanvasEdge>
+  edgeOrder: Array<EdgeId>
   childIdsByGroupId: Record<NodeId, Array<NodeId>>
   selectedNodeId: NodeId | null
   selectedNodeIds: Array<NodeId>
   isMarqueeSelecting: boolean
   editingNodeId: NodeId | null
+  isStageMounted: boolean
+  stageSize: CanvasStageSize
   viewport: CanvasViewport
+  flowDirection: CanvasFlowDirection
+  routingAuthority: CanvasRoutingAuthorityMode
+  layoutOptions: LayoutOptions
   actions: CanvasActions
 }
 
@@ -72,6 +326,21 @@ export type CanvasViewport = {
   x: number
   y: number
   scale: number
+}
+
+export type CanvasStageSize = {
+  width: number
+  height: number
+}
+
+export type CanvasExportSnapshot = {
+  nodesById: Record<NodeId, CanvasNode>
+  nodeOrder: Array<NodeId>
+  edgesById: Record<EdgeId, CanvasEdge>
+  edgeOrder: Array<EdgeId>
+  viewport: CanvasViewport
+  flowDirection: CanvasFlowDirection
+  layoutOptions: LayoutOptions
 }
 
 export type MoveNodePayload = {
@@ -106,6 +375,11 @@ export type CommitNodeTextPayload = {
   contentHeight: number
 }
 
+export type SetGraphPayload = {
+  nodes: Array<CanvasNode>
+  edges: Array<CanvasEdge>
+}
+
 export type CanvasBounds = {
   x: number
   y: number
@@ -118,6 +392,7 @@ export type CanvasSelectedNodeBounds = CanvasBounds & {
   selectedNodeIds: Array<NodeId>
 }
 
+/** Computes the union bounding box of an array of rectangles. */
 function getCanvasBounds(items: Array<CanvasBounds>): CanvasBounds | null {
   if (items.length === 0) return null
 
@@ -143,6 +418,10 @@ function getCanvasBounds(items: Array<CanvasBounds>): CanvasBounds | null {
 
 type CanvasActions = {
   addNode: (node: CanvasNode) => void
+  setGraph: (payload: SetGraphPayload) => void
+  applyGraphLayout: (payload: CanvasGraphLayoutResult) => void
+  setStageMounted: (isMounted: boolean) => void
+  setStageSize: (stageSize: CanvasStageSize) => void
   selectNode: (id: NodeId | null) => void
   selectNodes: (ids: Array<NodeId>) => void
   selectNodesFromMarquee: (ids: Array<NodeId>) => void
@@ -157,17 +436,30 @@ type CanvasActions = {
   resizeNode: (payload: ResizeNodePayload) => void
   updateNodeFrame: (payload: UpdateNodeFramePayload) => void
   commitNodeText: (payload: CommitNodeTextPayload) => void
+  setFlowDirection: (flowDirection: CanvasFlowDirection) => void
+  setRoutingAuthority: (routingAuthority: CanvasRoutingAuthorityMode) => void
+  setLayoutOptions: (options: Partial<LayoutOptions>) => void
 }
 const useCanvasStore = create<CanvasState>()(
   devtools(
     immer((set) => ({
       nodesById: {},
       nodeOrder: [],
+      edgesById: {},
+      edgeOrder: [],
       childIdsByGroupId: {},
       selectedNodeId: null,
       selectedNodeIds: [],
       isMarqueeSelecting: false,
       editingNodeId: null,
+      isStageMounted: false,
+      stageSize: {
+        width: 0,
+        height: 0,
+      },
+      flowDirection: DEFAULT_CANVAS_FLOW_DIRECTION,
+      routingAuthority: 'manual',
+      layoutOptions: DEFAULT_ELK_LAYOUT_OPTIONS,
       viewport: {
         x: 0,
         y: 0,
@@ -193,6 +485,86 @@ const useCanvasStore = create<CanvasState>()(
             },
             false,
             'canvas/addNode',
+          ),
+
+        setGraph: ({ nodes, edges }) =>
+          set(
+            (state) => {
+              state.nodesById = R.indexBy(nodes, R.prop('id'))
+              state.nodeOrder = nodes.map((node) => node.id)
+              state.edgesById = R.indexBy(edges, R.prop('id'))
+              state.edgeOrder = edges.map((edge) => edge.id)
+              state.childIdsByGroupId = getChildIdsByGroupId(nodes)
+              state.selectedNodeId = null
+              state.selectedNodeIds = []
+              state.editingNodeId = null
+            },
+            false,
+            'canvas/setGraph',
+          ),
+
+        applyGraphLayout: ({ nodeFrames, edgeRoutes }) =>
+          set(
+            (state) => {
+              setNodeLayoutMode(state, state.nodeOrder, 'auto')
+
+              for (const frame of nodeFrames) {
+                const node = state.nodesById[frame.id]
+                if (!node) continue
+
+                const didChange =
+                  node.x !== frame.x ||
+                  node.y !== frame.y ||
+                  node.width !== frame.width ||
+                  node.height !== frame.height
+
+                node.x = frame.x
+                node.y = frame.y
+                node.width = frame.width
+                node.height = frame.height
+                if (didChange) {
+                  node.version += 1
+                }
+              }
+
+              clearAllExplicitEdgePorts(state)
+
+              for (const edgeRoute of edgeRoutes) {
+                const edge = state.edgesById[edgeRoute.id]
+                if (!edge) continue
+
+                edge.routePoints = edgeRoute.points
+              }
+            },
+            false,
+            'canvas/applyGraphLayout',
+          ),
+
+        setStageMounted: (isMounted) =>
+          set(
+            (state) => {
+              state.isStageMounted = isMounted
+
+              if (isMounted) {
+                return
+              }
+
+              state.stageSize = {
+                width: 0,
+                height: 0,
+              }
+            },
+            false,
+            'canvas/setStageMounted',
+          ),
+
+        setStageSize: (stageSize) =>
+          set(
+            (state) => {
+              state.stageSize = stageSize
+            },
+            false,
+            'canvas/setStageSize',
           ),
 
         selectNode: (id) =>
@@ -244,6 +616,7 @@ const useCanvasStore = create<CanvasState>()(
               const groupNode: CanvasNode = {
                 id: groupId,
                 shape: 'group',
+                layoutMode: 'manual',
                 x: bounds.x - GROUP_NODE_PADDING,
                 y: bounds.y - GROUP_NODE_PADDING,
                 width: bounds.width + GROUP_NODE_PADDING * 2,
@@ -262,6 +635,10 @@ const useCanvasStore = create<CanvasState>()(
               for (const node of selectedNodes) {
                 node.parentGroupId = groupId
               }
+              clearConnectedEdgeRoutes(
+                state,
+                selectedNodes.map((node) => node.id),
+              )
               state.selectedNodeId = groupId
               state.selectedNodeIds = [groupId]
             },
@@ -283,6 +660,7 @@ const useCanvasStore = create<CanvasState>()(
 
                 delete node.parentGroupId
               }
+              clearConnectedEdgeRoutes(state, childIds)
 
               delete state.nodesById[id]
               delete state.childIdsByGroupId[id]
@@ -345,6 +723,7 @@ const useCanvasStore = create<CanvasState>()(
 
               const deltaX = x - node.x
               const deltaY = y - node.y
+              prepareNodeTransform(state, id)
 
               node.x = x
               node.y = y
@@ -389,6 +768,7 @@ const useCanvasStore = create<CanvasState>()(
               if (!node) return
 
               const shapeDefinition = getCanvasNodeShapeDefinition(node)
+              prepareNodeTransform(state, id)
 
               node.width = Math.max(shapeDefinition.minSize.width, width)
               node.height = Math.max(shapeDefinition.minSize.height, height)
@@ -405,6 +785,7 @@ const useCanvasStore = create<CanvasState>()(
               if (!node) return
 
               const shapeDefinition = getCanvasNodeShapeDefinition(node)
+              prepareNodeTransform(state, id)
               const deltaX = x - node.x
               const deltaY = y - node.y
               const nextWidth = Math.max(shapeDefinition.minSize.width, width)
@@ -462,6 +843,41 @@ const useCanvasStore = create<CanvasState>()(
             false,
             'canvas/commitNodeText',
           ),
+
+        setFlowDirection: (flowDirection) =>
+          set(
+            (state) => {
+              state.flowDirection = flowDirection
+            },
+            false,
+            'canvas/setFlowDirection',
+          ),
+
+        setRoutingAuthority: (routingAuthority) =>
+          set(
+            (state) => {
+              state.routingAuthority = routingAuthority
+              clearConnectedEdgeRoutes(state, state.nodeOrder)
+
+              if (routingAuthority === 'manual') {
+                materializeConnectedEdgePorts(state, state.nodeOrder)
+                return
+              }
+
+              clearAllExplicitEdgePorts(state)
+            },
+            false,
+            'canvas/setRoutingAuthority',
+          ),
+
+        setLayoutOptions: (options) =>
+          set(
+            (state) => {
+              Object.assign(state.layoutOptions, options)
+            },
+            false,
+            'canvas/setLayoutOptions',
+          ),
       },
     })),
     {
@@ -471,6 +887,7 @@ const useCanvasStore = create<CanvasState>()(
   ),
 )
 
+/** Returns the current nodes map outside of React (for use in callbacks). */
 export function getCanvasNodesSnapshot() {
   return useCanvasStore.getState().nodesById
 }
@@ -479,9 +896,43 @@ export function getCanvasNodeIdsSnapshot() {
   return useCanvasStore.getState().nodeOrder
 }
 
+/** Snapshots the full layout input (nodes, edges, groups, options) for sending to the server. */
+export function getCanvasLayoutSnapshot(): CanvasLayoutInput {
+  const state = useCanvasStore.getState()
+
+  return {
+    nodesById: state.nodesById,
+    nodeOrder: state.nodeOrder,
+    childIdsByGroupId: state.childIdsByGroupId,
+    edgesById: state.edgesById,
+    edgeOrder: state.edgeOrder,
+    flowDirection: state.flowDirection,
+    layoutOptions: state.layoutOptions,
+  }
+}
+
+export function getCanvasExportSnapshot(): CanvasExportSnapshot {
+  const state = useCanvasStore.getState()
+
+  return {
+    nodesById: state.nodesById,
+    nodeOrder: state.nodeOrder,
+    edgesById: state.edgesById,
+    edgeOrder: state.edgeOrder,
+    viewport: state.viewport,
+    flowDirection: state.flowDirection,
+    layoutOptions: state.layoutOptions,
+  }
+}
+
+export function getCanvasActionsSnapshot() {
+  return useCanvasStore.getState().actions
+}
+
 export const useCanvasActions = () => useCanvasStore((state) => state.actions)
 
 export const useCanvasNodes = () => useCanvasStore((state) => state.nodesById)
+export const useCanvasEdges = () => useCanvasStore((state) => state.edgesById)
 export const useCanvasNode: (id: NodeId) => CanvasNode | undefined = (id) =>
   useCanvasStore((state) => state.nodesById[id])
 export const useCanvasNodeWidth = (id: NodeId) =>
@@ -489,6 +940,8 @@ export const useCanvasNodeWidth = (id: NodeId) =>
 
 export const useCanvasNodeIds = () =>
   useCanvasStore(useShallow((state) => state.nodeOrder))
+export const useCanvasEdgeIds = () =>
+  useCanvasStore(useShallow((state) => state.edgeOrder))
 export const useCanvasSelectedNodeBounds = () =>
   useCanvasStore(
     useShallow((state): CanvasSelectedNodeBounds | null => {
@@ -524,4 +977,14 @@ export const useIsMarqueeSelecting = () =>
   useCanvasStore((state) => state.isMarqueeSelecting)
 export const useCanvasEditingNodeId = () =>
   useCanvasStore((state) => state.editingNodeId)
+export const useCanvasIsStageMounted = () =>
+  useCanvasStore((state) => state.isStageMounted)
+export const useCanvasStageSizeValue = () =>
+  useCanvasStore((state) => state.stageSize)
 export const useCanvasViewport = () => useCanvasStore((state) => state.viewport)
+export const useCanvasFlowDirection = () =>
+  useCanvasStore((state) => state.flowDirection)
+export const useCanvasRoutingAuthority = () =>
+  useCanvasStore((state) => state.routingAuthority)
+export const useCanvasLayoutOptions = () =>
+  useCanvasStore((state) => state.layoutOptions)

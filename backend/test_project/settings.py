@@ -99,6 +99,13 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "CAMELIZE_NAMES": True,
     "COMPONENT_SPLIT_REQUEST": True,
+    "ENUM_NAME_OVERRIDES": {
+        "TemplateScopeEnum": ["owner", "global"],
+        "QuickAccessStatusEnum": ["ready", "no_record", "error"],
+        "GenerationVersionSelectionEnum": "django_schema_viz.api_choices.GENERATION_VERSION_SELECTION_CHOICES",
+        "AvailableLocalesEnum": "django_schema_viz.i18n.SUPPORTED_LOCALES",
+        "TourProgressStatusEnum": "django_schema_viz.models.TourProgress.STATUS_CHOICES",
+    },
     "POSTPROCESSING_HOOKS": [
         "drf_spectacular.hooks.postprocess_schema_enums",
         "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",

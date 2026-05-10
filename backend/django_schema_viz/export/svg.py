@@ -30,6 +30,11 @@ DEFAULT_EXPORT_WIDTH = 1920.0
 DEFAULT_EXPORT_HEIGHT = 1080.0
 DEFAULT_PADDING = 64.0
 
+_DEFAULT_RECT_RADIUS_BY_SHAPE = {
+    "box": 8.0,
+    "group": 10.0,
+}
+
 
 # ---------------------------------------------------------------------------
 # Color palettes for light / dark backgrounds
@@ -74,9 +79,14 @@ def _get_palette(background: str) -> dict[str, str]:
     return _DARK_PALETTE if _is_dark_background(background) else _LIGHT_PALETTE
 
 
+def _get_default_rect_radius(shape_key: str) -> float:
+    return _DEFAULT_RECT_RADIUS_BY_SHAPE.get(shape_key, 10.0)
+
+
 # ---------------------------------------------------------------------------
 # Rich text data structures
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class RichTextSpan:
@@ -97,6 +107,7 @@ class RichTextLine:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def export_drawing_to_svg(
     react_flow_state: dict[str, Any],
@@ -119,7 +130,10 @@ def export_drawing_to_svg(
     # Pre-fetch record fields so {{field}} templates resolve to real values.
     record_cache = _build_record_cache(raw_nodes)
 
-    nodes = [_normalize_node(node, lexical_state, record_cache, palette) for node in raw_nodes]
+    nodes = [
+        _normalize_node(node, lexical_state, record_cache, palette)
+        for node in raw_nodes
+    ]
     nodes_by_id = {node["id"]: node for node in nodes}
     edges = [
         _normalize_edge(edge, nodes_by_id, palette)
@@ -195,6 +209,7 @@ def export_drawing_to_svg(
 # Viewport transforms
 # ---------------------------------------------------------------------------
 
+
 def _current_view_transform(
     viewport: dict[str, Any],
     *,
@@ -265,6 +280,7 @@ def _extract_scale(transform) -> float:
 # Record field resolution (for {{field}} template placeholders)
 # ---------------------------------------------------------------------------
 
+
 def _build_record_cache(
     raw_nodes: list[dict[str, Any]],
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
@@ -324,6 +340,7 @@ def _record_fields_for_node(
 # ---------------------------------------------------------------------------
 # Node normalization
 # ---------------------------------------------------------------------------
+
 
 def _normalize_node(
     node: dict[str, Any],
@@ -385,17 +402,25 @@ def _normalize_node(
         "label": label,
         "rich_lines": rich_lines,
         "shape": shape_key,
-        "fill": _to_color(style.get("backgroundColor"), (palette or _LIGHT_PALETTE)["node_fill"]),
-        "stroke": _to_color(style.get("borderColor"), (palette or _LIGHT_PALETTE)["node_stroke"]),
+        "fill": _to_color(
+            style.get("backgroundColor"), (palette or _LIGHT_PALETTE)["node_fill"]
+        ),
+        "stroke": _to_color(
+            style.get("borderColor"), (palette or _LIGHT_PALETTE)["node_stroke"]
+        ),
         "text": _to_color(style.get("color"), (palette or _LIGHT_PALETTE)["node_text"]),
         "stroke_width": _to_float(style.get("borderWidth"), 1.0),
-        "radius": _to_float(style.get("borderRadius"), 10.0),
+        "radius": _to_float(
+            style.get("borderRadius"),
+            _get_default_rect_radius(shape_key),
+        ),
     }
 
 
 # ---------------------------------------------------------------------------
 # Edge normalization
 # ---------------------------------------------------------------------------
+
 
 def _normalize_edge(
     edge: dict[str, Any],
@@ -436,7 +461,9 @@ def _normalize_edge(
         "source_side": source_side,
         "target_side": target_side,
         "label": label,
-        "stroke": _to_color(style.get("stroke"), (palette or _LIGHT_PALETTE)["edge_stroke"]),
+        "stroke": _to_color(
+            style.get("stroke"), (palette or _LIGHT_PALETTE)["edge_stroke"]
+        ),
         "stroke_width": _to_float(style.get("strokeWidth"), 1.5),
         "elk_sections": elk_sections,
     }
@@ -445,6 +472,7 @@ def _normalize_edge(
 # ---------------------------------------------------------------------------
 # Anchor resolution
 # ---------------------------------------------------------------------------
+
 
 def _resolve_anchor(
     node: dict[str, Any],
@@ -514,6 +542,7 @@ def _parse_handle_position(handle_id: Any) -> str | None:
 # Node rendering
 # ---------------------------------------------------------------------------
 
+
 def _render_node(parent: Element, node: dict[str, Any], transform, scale: float = 1.0):
     x1, y1 = transform(node["x"], node["y"])
     x2, y2 = transform(node["x"] + node["width"], node["y"] + node["height"])
@@ -530,7 +559,9 @@ def _render_node(parent: Element, node: dict[str, Any], transform, scale: float 
     _render_node_label(parent, node, x1, y1, width, height, scale)
 
 
-def _render_custom_shape(parent, node, shape_def, x, y, width, height, scale: float = 1.0):
+def _render_custom_shape(
+    parent, node, shape_def, x, y, width, height, scale: float = 1.0
+):
     """Render a shape using its SVG element definitions, stretched to fit.
 
     Custom shapes use a viewBox with ``preserveAspectRatio="none"`` so
@@ -539,14 +570,18 @@ def _render_custom_shape(parent, node, shape_def, x, y, width, height, scale: fl
     stretching already makes strokes proportional to the export
     resolution.
     """
-    svg = SubElement(parent, "svg", {
-        "x": f"{x:.2f}",
-        "y": f"{y:.2f}",
-        "width": f"{width:.2f}",
-        "height": f"{height:.2f}",
-        "viewBox": shape_def.svg_viewbox,
-        "preserveAspectRatio": "none",
-    })
+    svg = SubElement(
+        parent,
+        "svg",
+        {
+            "x": f"{x:.2f}",
+            "y": f"{y:.2f}",
+            "width": f"{width:.2f}",
+            "height": f"{height:.2f}",
+            "viewBox": shape_def.svg_viewbox,
+            "preserveAspectRatio": "none",
+        },
+    )
 
     fill_color = node["fill"]
     stroke_color = node["stroke"]
@@ -596,6 +631,7 @@ def _render_rect_shape(parent, node, x, y, width, height, scale: float = 1.0):
 # Node label rendering (rich text)
 # ---------------------------------------------------------------------------
 
+
 def _render_node_label(parent, node, x, y, width, height, scale: float = 1.0):
     """Render node label as SVG text with rich formatting when available."""
     rich_lines: list[RichTextLine] = node.get("rich_lines", [])
@@ -606,7 +642,9 @@ def _render_node_label(parent, node, x, y, width, height, scale: float = 1.0):
         label_lines = [line for line in plain.split("\n") if line != ""]
         if not label_lines:
             return
-        rich_lines = [RichTextLine(spans=[RichTextSpan(text=line)]) for line in label_lines]
+        rich_lines = [
+            RichTextLine(spans=[RichTextSpan(text=line)]) for line in label_lines
+        ]
 
     # Font size is proportional to node dimensions.  The min/max clamps
     # must also scale so text stays visually consistent across export
@@ -633,14 +671,18 @@ def _render_node_label(parent, node, x, y, width, height, scale: float = 1.0):
 
         line_y = start_y + line_idx * line_height
 
-        text_el = SubElement(parent, "text", {
-            "x": f"{text_x:.2f}",
-            "y": f"{line_y:.2f}",
-            "text-anchor": text_anchor,
-            "font-family": "Arial, sans-serif",
-            "font-size": f"{base_font_size:.2f}",
-            "fill": node["text"],
-        })
+        text_el = SubElement(
+            parent,
+            "text",
+            {
+                "x": f"{text_x:.2f}",
+                "y": f"{line_y:.2f}",
+                "text-anchor": text_anchor,
+                "font-family": "Arial, sans-serif",
+                "font-size": f"{base_font_size:.2f}",
+                "fill": node["text"],
+            },
+        )
 
         for span in rich_line.spans:
             tspan_attrs: dict[str, str] = {}
@@ -663,6 +705,7 @@ def _render_node_label(parent, node, x, y, width, height, scale: float = 1.0):
 # Edge rendering
 # ---------------------------------------------------------------------------
 
+
 def _render_edge_path(
     parent: Element,
     edge: dict[str, Any],
@@ -678,7 +721,9 @@ def _render_edge_path(
     """
     elk_sections = edge.get("elk_sections")
     if elk_sections:
-        screen_points = _render_elk_edge_path(parent, edge, transform, elk_sections, scale)
+        screen_points = _render_elk_edge_path(
+            parent, edge, transform, elk_sections, scale
+        )
     else:
         screen_points = _render_smooth_step_edge_path(parent, edge, transform, scale)
 
@@ -713,12 +758,16 @@ def _render_elk_edge_path(parent, edge, transform, elk_sections, scale: float = 
         parts.append(f"L {sx:.2f} {sy:.2f}")
     d = " ".join(parts)
 
-    SubElement(parent, "path", {
-        "d": d,
-        "fill": "none",
-        "stroke": edge["stroke"],
-        "stroke-width": f"{edge['stroke_width'] * scale:.2f}",
-    })
+    SubElement(
+        parent,
+        "path",
+        {
+            "d": d,
+            "fill": "none",
+            "stroke": edge["stroke"],
+            "stroke-width": f"{edge['stroke_width'] * scale:.2f}",
+        },
+    )
 
     return screen_points
 
@@ -740,17 +789,23 @@ def _render_smooth_step_edge_path(parent, edge, transform, scale: float = 1.0):
     points = _smooth_step_points(ssx, ssy, source_side, stx, sty, target_side)
     d = _build_rounded_polyline(points, border_radius=5.0 * scale)
 
-    SubElement(parent, "path", {
-        "d": d,
-        "fill": "none",
-        "stroke": edge["stroke"],
-        "stroke-width": f"{edge['stroke_width'] * scale:.2f}",
-    })
+    SubElement(
+        parent,
+        "path",
+        {
+            "d": d,
+            "fill": "none",
+            "stroke": edge["stroke"],
+            "stroke-width": f"{edge['stroke_width'] * scale:.2f}",
+        },
+    )
 
     return points
 
 
-def _render_edge_label(parent, label, lx, ly, scale: float = 1.0, palette: dict[str, str] | None = None):
+def _render_edge_label(
+    parent, label, lx, ly, scale: float = 1.0, palette: dict[str, str] | None = None
+):
     """Shared edge label rendering: background rect + centered text.
 
     All dimensions scale with the export resolution so the label stays
@@ -766,34 +821,43 @@ def _render_edge_label(parent, label, lx, ly, scale: float = 1.0, palette: dict[
     border_w = 1.0 * scale
 
     group = SubElement(parent, "g")
-    SubElement(group, "rect", {
-        "x": f"{(lx - text_width / 2 - pad_x):.2f}",
-        "y": f"{(ly - text_height / 2 - pad_y):.2f}",
-        "width": f"{(text_width + 2 * pad_x):.2f}",
-        "height": f"{(text_height + 2 * pad_y):.2f}",
-        "rx": f"{corner_r:.2f}",
-        "ry": f"{corner_r:.2f}",
-        "fill": pal["label_bg"],
-        "fill-opacity": "0.92",
-        "stroke": pal["label_border"],
-        "stroke-opacity": "0.7",
-        "stroke-width": f"{border_w:.2f}",
-    })
-    text = SubElement(group, "text", {
-        "x": f"{lx:.2f}",
-        "y": f"{(ly + font_size * 0.35):.2f}",
-        "text-anchor": "middle",
-        "font-family": "Arial, sans-serif",
-        "font-size": f"{font_size:.2f}",
-        "font-weight": "500",
-        "fill": pal["label_text"],
-    })
+    SubElement(
+        group,
+        "rect",
+        {
+            "x": f"{(lx - text_width / 2 - pad_x):.2f}",
+            "y": f"{(ly - text_height / 2 - pad_y):.2f}",
+            "width": f"{(text_width + 2 * pad_x):.2f}",
+            "height": f"{(text_height + 2 * pad_y):.2f}",
+            "rx": f"{corner_r:.2f}",
+            "ry": f"{corner_r:.2f}",
+            "fill": pal["label_bg"],
+            "fill-opacity": "0.92",
+            "stroke": pal["label_border"],
+            "stroke-opacity": "0.7",
+            "stroke-width": f"{border_w:.2f}",
+        },
+    )
+    text = SubElement(
+        group,
+        "text",
+        {
+            "x": f"{lx:.2f}",
+            "y": f"{(ly + font_size * 0.35):.2f}",
+            "text-anchor": "middle",
+            "font-family": "Arial, sans-serif",
+            "font-size": f"{font_size:.2f}",
+            "font-weight": "500",
+            "fill": pal["label_text"],
+        },
+    )
     text.text = label
 
 
 # ---------------------------------------------------------------------------
 # Polyline midpoint (port of frontend getPathMidpoint)
 # ---------------------------------------------------------------------------
+
 
 def _polyline_midpoint(points: list[tuple[float, float]]) -> tuple[float, float]:
     """Walk segments and find the point at 50% of total path length."""
@@ -831,6 +895,7 @@ def _polyline_midpoint(points: list[tuple[float, float]]) -> tuple[float, float]
 # ---------------------------------------------------------------------------
 # SmoothStep path generation (mirrors React Flow's getSmoothStepPath)
 # ---------------------------------------------------------------------------
+
 
 def _smooth_step_points(
     sx: float,
@@ -900,7 +965,7 @@ def _build_rounded_polyline(
 
     for i in range(1, len(points) - 1):
         px, py = points[i - 1]
-        cx, cy = points[i]         # corner vertex
+        cx, cy = points[i]  # corner vertex
         nx, ny = points[i + 1]
 
         # Incoming / outgoing segment lengths
@@ -929,8 +994,11 @@ def _build_rounded_polyline(
 # Lexical rich text extraction
 # ---------------------------------------------------------------------------
 
+
 def _extract_rich_lines(
-    node_id: str, data: dict[str, Any], lexical_state: dict[str, Any],
+    node_id: str,
+    data: dict[str, Any],
+    lexical_state: dict[str, Any],
 ) -> list[RichTextLine]:
     """Try to extract rich text lines from Lexical state."""
     for key in (f"{node_id}-main", node_id):
@@ -940,7 +1008,9 @@ def _extract_rich_lines(
             if lines:
                 return lines
 
-    initial_text_content = data.get("initialTextContent") or data.get("initial_text_content")
+    initial_text_content = data.get("initialTextContent") or data.get(
+        "initial_text_content"
+    )
     if initial_text_content:
         lines = _lexical_to_rich_lines(initial_text_content, data)
         if lines:
@@ -949,7 +1019,9 @@ def _extract_rich_lines(
     return []
 
 
-def _lexical_to_rich_lines(editor_state: Any, data: dict[str, Any]) -> list[RichTextLine]:
+def _lexical_to_rich_lines(
+    editor_state: Any, data: dict[str, Any]
+) -> list[RichTextLine]:
     """Parse Lexical editor state into structured rich text lines."""
     parsed = parse_lexical_json(editor_state)
     if parsed is None:
@@ -992,14 +1064,16 @@ def _collect_spans(node: dict, data: dict[str, Any]) -> list[RichTextSpan]:
             style_str = child.get("style", "")
             inline_styles = parse_inline_style_string(style_str)
 
-            spans.append(RichTextSpan(
-                text=text,
-                bold=has_text_format(fmt, TEXT_FORMAT_BOLD),
-                italic=has_text_format(fmt, TEXT_FORMAT_ITALIC),
-                underline=has_text_format(fmt, TEXT_FORMAT_UNDERLINE),
-                color=inline_styles.get("color"),
-                font_size=inline_styles.get("font-size"),
-            ))
+            spans.append(
+                RichTextSpan(
+                    text=text,
+                    bold=has_text_format(fmt, TEXT_FORMAT_BOLD),
+                    italic=has_text_format(fmt, TEXT_FORMAT_ITALIC),
+                    underline=has_text_format(fmt, TEXT_FORMAT_UNDERLINE),
+                    color=inline_styles.get("color"),
+                    font_size=inline_styles.get("font-size"),
+                )
+            )
 
         elif child_type == "data-reference":
             field = (
@@ -1015,14 +1089,16 @@ def _collect_spans(node: dict, data: dict[str, Any]) -> list[RichTextSpan]:
             ref_styles = child.get("styles", {}) or {}
             normalized = normalize_label_styles(ref_styles)
 
-            spans.append(RichTextSpan(
-                text=text,
-                bold=normalized.get("font-weight") in ("bold", "700"),
-                italic=normalized.get("font-style") == "italic",
-                underline=normalized.get("text-decoration") == "underline",
-                color=normalized.get("color"),
-                font_size=normalized.get("font-size"),
-            ))
+            spans.append(
+                RichTextSpan(
+                    text=text,
+                    bold=normalized.get("font-weight") in ("bold", "700"),
+                    italic=normalized.get("font-style") == "italic",
+                    underline=normalized.get("text-decoration") == "underline",
+                    color=normalized.get("color"),
+                    font_size=normalized.get("font-size"),
+                )
+            )
 
     return spans
 
@@ -1031,7 +1107,10 @@ def _collect_spans(node: dict, data: dict[str, Any]) -> list[RichTextSpan]:
 # Plain text label extraction (fallback)
 # ---------------------------------------------------------------------------
 
-def _extract_label(node_id: str, data: dict[str, Any], lexical_state: dict[str, Any]) -> str:
+
+def _extract_label(
+    node_id: str, data: dict[str, Any], lexical_state: dict[str, Any]
+) -> str:
     for key in (f"{node_id}-main", node_id):
         editor_state = lexical_state.get(key)
         if editor_state:
@@ -1039,7 +1118,9 @@ def _extract_label(node_id: str, data: dict[str, Any], lexical_state: dict[str, 
             if text:
                 return _resolve_known_placeholders(text, data)
 
-    initial_text_content = data.get("initialTextContent") or data.get("initial_text_content")
+    initial_text_content = data.get("initialTextContent") or data.get(
+        "initial_text_content"
+    )
     if initial_text_content:
         text = _lexical_to_plain_text(initial_text_content)
         if text:
@@ -1078,6 +1159,7 @@ def _strip_html_breaks(value: str) -> str:
 # ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
+
 
 def _to_float(value: Any, default: float | None = None) -> float | None:
     if value is None:

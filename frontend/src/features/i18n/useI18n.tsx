@@ -32,7 +32,7 @@ function createI18nInstance(locale: Locale) {
 
   void instance.use(initReactI18next).init({
     fallbackLng: DEFAULT_LOCALE,
-    initImmediate: false,
+    initAsync: false,
     interpolation: {
       escapeValue: false,
     },

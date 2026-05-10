@@ -24,7 +24,9 @@ from .serializers import (
     DynamicModelSerializer,
     DrawingSerializer,
     GenerationRunRequestSerializer,
+    GenerationTemplateQuickAccessEntrySerializer,
     GenerationTemplateListSerializer,
+    GenerationTemplateOwnRecentQuickAccessSerializer,
     GenerationTemplateReadSerializer,
     GenerationTemplateWriteSerializer,
     GroupTemplateSerializer,
@@ -47,6 +49,7 @@ from .serializers import (
     DrawingImportSerializer,
 )
 from .drf import (
+    QuickAccessPagination,
     QueryPagination,
     SchemaVizCamelCaseJSONParser as CamelCaseJSONParser,
     SchemaVizCamelCaseJSONRenderer as CamelCaseJSONRenderer,
@@ -120,7 +123,12 @@ from .i18n import (
 from . import __version__
 
 
-def build_generation_result_response(request, generation_result):
+def build_generation_result_response(
+    request,
+    generation_result,
+    *,
+    serialize_nested: bool = True,
+):
     style_template_ids = {
         node.style_template_id
         for node in generation_result.nodes
@@ -137,16 +145,24 @@ def build_generation_result_response(request, generation_result):
 
     return {
         "result": GenerationResultSerializer(generation_result).data,
-        "style_templates": StyleTemplateSerializer(
-            style_templates,
-            many=True,
-            context={"request": request},
-        ).data,
-        "group_templates": GroupTemplateSerializer(
-            group_templates,
-            many=True,
-            context={"request": request},
-        ).data,
+        "style_templates": (
+            StyleTemplateSerializer(
+                style_templates,
+                many=True,
+                context={"request": request},
+            ).data
+            if serialize_nested
+            else list(style_templates)
+        ),
+        "group_templates": (
+            GroupTemplateSerializer(
+                group_templates,
+                many=True,
+                context={"request": request},
+            ).data
+            if serialize_nested
+            else list(group_templates)
+        ),
     }
 
 
@@ -160,8 +176,13 @@ def build_generation_run_response(
     version_label: str,
     root_model: str,
     layout_settings: dict,
+    serialize_nested: bool = True,
 ):
-    payload = build_generation_result_response(request, generation_result)
+    payload = build_generation_result_response(
+        request,
+        generation_result,
+        serialize_nested=serialize_nested,
+    )
     payload["mode"] = mode
     payload["source_version"] = {
         "kind": "inline" if template is None else "template",
@@ -174,10 +195,14 @@ def build_generation_run_response(
         "share_slug": template.export_name if template is not None else None,
     }
     if template is not None:
-        payload["template"] = GenerationTemplateListSerializer(
-            template,
-            context={"request": request},
-        ).data
+        payload["template"] = (
+            GenerationTemplateListSerializer(
+                template,
+                context={"request": request},
+            ).data
+            if serialize_nested
+            else template
+        )
     return payload
 
 
@@ -272,6 +297,7 @@ def build_generation_template_sample_payload(request, template: GenerationTempla
             ),
             root_model=version.root_model,
             layout_settings=version.layout_settings,
+            serialize_nested=False,
         ),
     }
 
@@ -285,10 +311,7 @@ def build_generation_template_quick_access_entry(
         run_payload = None
 
     return {
-        "template": GenerationTemplateListSerializer(
-            template,
-            context={"request": request},
-        ).data,
+        "template": template,
         "source": source,
         "sample_record_id": sample_payload.get("record_id"),
         "sample_record_display_name": sample_payload.get("record_display_name"),
@@ -340,80 +363,66 @@ class GenerationTemplateOwnRecentQuickAccessView(SchemaVizViewMixin, APIView):
     def get_permissions(self):
         return self._resolve_permission_category("user_data")
 
+    @extend_schema(
+        summary="Get Own Recent Generation Template Quick Access",
+        description="Returns the current user's most recently updated non-featured templates for quick access.",
+        responses={200: GenerationTemplateOwnRecentQuickAccessSerializer},
+        tags=["Generation Templates"],
+    )
     def get(self, request):
         queryset = (
             GenerationTemplate.objects.accessible_by_user(request.user)
             .filter(owner=request.user, is_global=False, is_featured=False)
             .order_by("-updated_at")[:3]
         )
-        return Response(
-            {
-                "own_recent": [
-                    build_generation_template_quick_access_entry(
-                        request,
-                        template=template,
-                        source="own",
-                    )
-                    for template in queryset
-                ]
-            }
+        payload = {
+            "own_recent": [
+                build_generation_template_quick_access_entry(
+                    request,
+                    template=template,
+                    source="own",
+                )
+                for template in queryset
+            ]
+        }
+        serializer = GenerationTemplateOwnRecentQuickAccessSerializer(
+            payload,
+            context={"request": request},
         )
+        return Response(serializer.data)
 
 
-class FeaturedGenerationTemplateQuickAccessView(SchemaVizViewMixin, APIView):
+class FeaturedGenerationTemplateQuickAccessView(SchemaVizViewMixin, GenericAPIView):
     renderer_classes = [CamelCaseJSONRenderer]
+    pagination_class = QuickAccessPagination
+    serializer_class = GenerationTemplateQuickAccessEntrySerializer
 
     def get_permissions(self):
         return self._resolve_permission_category("user_data")
 
+    @extend_schema(
+        summary="Get Featured Generation Template Quick Access",
+        description="Returns featured published templates with preview payloads and limit-offset pagination.",
+        responses={200: GenerationTemplateQuickAccessEntrySerializer(many=True)},
+        tags=["Generation Templates"],
+    )
     def get(self, request):
-        limit = parse_generation_quick_access_int(
-            request.query_params.get("limit"),
-            6,
-            minimum=1,
-        )
-        offset = parse_generation_quick_access_int(
-            request.query_params.get("offset"),
-            0,
-            minimum=0,
-        )
         queryset = (
             GenerationTemplate.objects.accessible_by_user(request.user)
             .filter(is_featured=True, published_version__isnull=False)
             .order_by("feature_rank", "-updated_at")
         )
-        count = queryset.count()
-        templates = list(queryset[offset : offset + limit])
-        next_offset = offset + limit if offset + limit < count else None
-        previous_offset = max(0, offset - limit) if offset > 0 else None
-
-        return Response(
-            {
-                "count": count,
-                "next": (
-                    build_generation_quick_access_page_url(
-                        request, limit=limit, offset=next_offset
-                    )
-                    if next_offset is not None
-                    else None
-                ),
-                "previous": (
-                    build_generation_quick_access_page_url(
-                        request, limit=limit, offset=previous_offset
-                    )
-                    if previous_offset is not None
-                    else None
-                ),
-                "results": [
-                    build_generation_template_quick_access_entry(
-                        request,
-                        template=template,
-                        source="featured",
-                    )
-                    for template in templates
-                ],
-            }
-        )
+        templates = self.paginate_queryset(queryset)
+        entries = [
+            build_generation_template_quick_access_entry(
+                request,
+                template=template,
+                source="featured",
+            )
+            for template in templates
+        ]
+        serializer = self.get_serializer(entries, many=True)
+        return self.get_paginated_response(serializer.data)
 
 
 def _serialize_shape(shape):
@@ -1322,6 +1331,7 @@ class StyleTemplateViewSet(
     viewsets.ModelViewSet,
 ):
     template_kind = "style"
+    queryset = StyleTemplate.objects.none()
     serializer_class = StyleTemplateSerializer
     pagination_class = None
     renderer_classes = [CamelCaseJSONRenderer]
@@ -1405,6 +1415,7 @@ class GroupTemplateViewSet(
     viewsets.ModelViewSet,
 ):
     template_kind = "group"
+    queryset = GroupTemplate.objects.none()
     serializer_class = GroupTemplateSerializer
     pagination_class = None
     renderer_classes = [CamelCaseJSONRenderer]
@@ -1980,6 +1991,7 @@ class GenerationTemplateViewSet(
     SchemaVizViewMixin,
     viewsets.ModelViewSet,
 ):
+    queryset = GenerationTemplate.objects.none()
     pagination_class = None
     renderer_classes = [CamelCaseJSONRenderer]
     parser_classes = [CamelCaseJSONParser]
@@ -2343,6 +2355,7 @@ class SharedGenerationTemplateView(SchemaVizViewMixin, APIView):
     renderer_classes = [CamelCaseJSONRenderer]
 
     @extend_schema(
+        operation_id="schemaVizGenerateTemplateRetrieve",
         summary="Get Shared Generation Template",
         description="Resolves the published template metadata for a share slug.",
         responses={200: GenerationTemplateReadSerializer, 404: ErrorResponseSerializer},
@@ -2372,6 +2385,7 @@ class SharedGenerationRunView(SchemaVizViewMixin, APIView):
     renderer_classes = [CamelCaseJSONRenderer]
 
     @extend_schema(
+        operation_id="schemaVizGenerateRunRetrieve",
         summary="Run Shared Generation",
         description="Runs the published template resolved by share slug and record id.",
         responses={200: None, 404: ErrorResponseSerializer},
