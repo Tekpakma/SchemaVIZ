@@ -15,7 +15,8 @@
     "format": "prettier --write . && eslint --fix",
     "check": "prettier --check .",
     "generate:api:schema": "bun ./scripts/generate-openapi-schema.ts",
-    "generate:api": "bun ./scripts/generate-api-client.ts"
+    "generate:api": "bun ./scripts/generate-api-client.ts",
+    "doctor": "bunx --bun -y react-doctor@latest ."
   },
   "dependencies": {
     "@lexical/headless": "^0.44.0",
