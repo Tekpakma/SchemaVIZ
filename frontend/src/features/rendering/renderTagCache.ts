@@ -1,7 +1,9 @@
 import { LRUCache } from 'lru-cache'
 import { layout } from 'render-tag'
 import type { CanvasNode } from '@/features/canvas/model/types'
+import type { ResolvedTheme } from '@/features/theme/constants'
 import { renderTagAccuracy } from '@/features/lexical/exportRenderTagHtml'
+import { SCHEMA_NODE_COLOR_SWAP } from '@/features/canvas/themeColors'
 
 type LayoutResult = ReturnType<typeof layout>
 
@@ -9,8 +11,12 @@ const cache = new LRUCache<string, LayoutResult>({
   max: 1000,
 })
 
-function getCacheKey(node: CanvasNode, showResolved: boolean): string {
-  return `${node.id}:${node.version}:${node.width}:${showResolved ? 'r' : 't'}`
+function getCacheKey(
+  node: CanvasNode,
+  showResolved: boolean,
+  theme: ResolvedTheme,
+): string {
+  return `${node.id}:${node.version}:${node.width}:${showResolved ? 'r' : 't'}:${theme}`
 }
 
 function unresolveDataReferences(html: string): string {
@@ -21,16 +27,29 @@ function unresolveDataReferences(html: string): string {
   )
 }
 
+function applyDarkModeColors(html: string): string {
+  let result = html
+  for (const [lightColor, darkColor] of SCHEMA_NODE_COLOR_SWAP) {
+    result = result.replaceAll(lightColor, darkColor)
+  }
+  return result
+}
+
 export function getRenderTagLayout(
   node: CanvasNode,
   showResolved = true,
+  theme: ResolvedTheme = 'light',
 ): LayoutResult {
-  const key = getCacheKey(node, showResolved)
+  const key = getCacheKey(node, showResolved, theme)
 
   const cached = cache.get(key)
   if (cached) return cached
 
-  const html = showResolved ? node.html : unresolveDataReferences(node.html)
+  let html = showResolved ? node.html : unresolveDataReferences(node.html)
+
+  if (theme === 'dark') {
+    html = applyDarkModeColors(html)
+  }
 
   const result = layout({
     html,

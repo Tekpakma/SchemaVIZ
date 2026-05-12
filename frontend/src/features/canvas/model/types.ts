@@ -72,8 +72,7 @@ export type CanvasEdge = {
   kind: CanvasEdgeKind
   sourcePort?: CanvasPortRef
   targetPort?: CanvasPortRef
-  sourceLabel?: string
-  targetLabel?: string
+  label?: string
   routePoints?: Array<CanvasPoint>
 }
 

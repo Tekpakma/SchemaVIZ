@@ -674,14 +674,14 @@ function createSchemaNodeHtml(node: SchemaGraphNode) {
     .slice(0, 6)
     .map(
       ([name = '', type = '']) =>
-        `<div style="font-size: 10px; color: ${SCHEMA_NODE_FIELD_COLOR};">${escapeHtml(name)} · ${escapeHtml(type)}</div>`,
+        `<div style="font-size: 10px; color: ${SCHEMA_NODE_FIELD_COLOR.light};">${escapeHtml(name)} · ${escapeHtml(type)}</div>`,
     )
     .join('')
 
   return `
     <div style="font-family: sans-serif; padding: 12px;">
-      <b style="color: ${SCHEMA_NODE_TITLE_COLOR};">${escapeHtml(node.name)}</b>
-      <div style="font-size: 11px; margin-top: 3px; color: ${SCHEMA_NODE_SUBTITLE_COLOR};">${escapeHtml(node.appLabel)}.${escapeHtml(node.modelName)}</div>
+      <b style="color: ${SCHEMA_NODE_TITLE_COLOR.light};">${escapeHtml(node.name)}</b>
+      <div style="font-size: 11px; margin-top: 3px; color: ${SCHEMA_NODE_SUBTITLE_COLOR.light};">${escapeHtml(node.appLabel)}.${escapeHtml(node.modelName)}</div>
       <div style="margin-top: 8px;">${fieldRows}</div>
     </div>
   `
@@ -744,8 +744,7 @@ export function createSchemaCanvasGraph(
       sourceNodeId: edge.source,
       targetNodeId: edge.target,
       kind: getSchemaEdgeKind(edge),
-      sourceLabel: edge.sourceField,
-      targetLabel: edge.targetField || edge.reverseName,
+      label: edge.sourceField,
     })),
   }
 }

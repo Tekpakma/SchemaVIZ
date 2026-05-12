@@ -862,6 +862,8 @@ const useCanvasStore = create<CanvasState>()(
           set(
             (state) => {
               state.flowDirection = flowDirection
+              clearConnectedEdgeRoutes(state, state.nodeOrder)
+              clearAllExplicitEdgePorts(state)
             },
             false,
             'canvas/setFlowDirection',

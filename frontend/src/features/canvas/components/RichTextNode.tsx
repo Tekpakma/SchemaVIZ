@@ -289,11 +289,12 @@ export const RichTextNodeText = memo(function RichTextNodeText({
   const node = useCanvasNode(nodeId)
   const editingNodeId = useCanvasEditingNodeId()
   const showResolved = useShowResolvedReferences()
+  const { resolvedTheme } = useTheme()
 
   const layoutResult = useMemo(() => {
     if (!node) return null
-    return getRenderTagLayout(node, showResolved)
-  }, [node, showResolved])
+    return getRenderTagLayout(node, showResolved, resolvedTheme)
+  }, [node, showResolved, resolvedTheme])
 
   if (
     !node ||

@@ -18,7 +18,7 @@ export const renderTagEditorStyle = {
   fontFamily: 'sans-serif',
   fontSize: 12,
   lineHeight: 1.2,
-  color: 'rgb(0, 0, 0)',
+  color: 'var(--foreground, rgb(0, 0, 0))',
   textAlign: 'center',
   overflow: 'visible',
   overflowWrap: 'break-word',

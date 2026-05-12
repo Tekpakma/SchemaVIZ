@@ -71,7 +71,7 @@ export const DEFAULT_CANVAS_EDGES: CanvasEdge[] = [
     sourceNodeId: 'node-1',
     targetNodeId: 'node-2',
     kind: 'default',
-    sourceLabel: 'reads',
+    label: 'reads',
   },
 ]
 
