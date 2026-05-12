@@ -4,8 +4,8 @@ import type { NodeId } from '../model/types'
 import {
   getCanvasNodeIdsSnapshot,
   getCanvasNodesSnapshot,
+  getCanvasViewportSnapshot,
   useCanvasActions,
-  useCanvasViewport,
   useIsMarqueeSelecting,
 } from '@/store/canvasStore'
 
@@ -51,7 +51,6 @@ function hasSameIds(left: Array<NodeId>, right: Array<NodeId>) {
  * nodes whose frame intersects the dragged rectangle.
  */
 export function useCanvasMarqueeSelection() {
-  const viewport = useCanvasViewport()
   const isMarqueeSelecting = useIsMarqueeSelecting()
   const { selectNodesFromMarquee, setMarqueeSelecting } = useCanvasActions()
   const [selection, setSelection] = useState<MarqueeSelectionState | null>(null)
@@ -63,12 +62,13 @@ export function useCanvasMarqueeSelection() {
       const pointer = stage?.getPointerPosition()
       if (!pointer) return null
 
+      const current = getCanvasViewportSnapshot()
       return {
-        x: (pointer.x - viewport.x) / viewport.scale,
-        y: (pointer.y - viewport.y) / viewport.scale,
+        x: (pointer.x - current.x) / current.scale,
+        y: (pointer.y - current.y) / current.scale,
       }
     },
-    [viewport],
+    [],
   )
 
   const selectNodesInRect = useCallback(

@@ -9,18 +9,31 @@ const cache = new LRUCache<string, LayoutResult>({
   max: 1000,
 })
 
-function getCacheKey(node: CanvasNode): string {
-  return `${node.id}:${node.version}:${node.width}`
+function getCacheKey(node: CanvasNode, showResolved: boolean): string {
+  return `${node.id}:${node.version}:${node.width}:${showResolved ? 'r' : 't'}`
 }
 
-export function getRenderTagLayout(node: CanvasNode): LayoutResult {
-  const key = getCacheKey(node)
+function unresolveDataReferences(html: string): string {
+  return html.replace(
+    /<span data-lexical-data-reference="([^"]+)">[^<]*<\/span>/g,
+    (_match, path: string) =>
+      `<span data-lexical-data-reference="${path}">{{${path}}}</span>`,
+  )
+}
+
+export function getRenderTagLayout(
+  node: CanvasNode,
+  showResolved = true,
+): LayoutResult {
+  const key = getCacheKey(node, showResolved)
 
   const cached = cache.get(key)
   if (cached) return cached
 
+  const html = showResolved ? node.html : unresolveDataReferences(node.html)
+
   const result = layout({
-    html: node.html,
+    html,
     width: node.width,
     accuracy: renderTagAccuracy,
   })

@@ -5,6 +5,7 @@ import {
   useCanvasNode,
   useSelectedNodeId,
   useSelectedNodeIds,
+  useShowResolvedReferences,
 } from '@/store/canvasStore'
 import { getRenderTagLayout } from '@/features/rendering/renderTagCache'
 import {
@@ -287,11 +288,12 @@ export const RichTextNodeText = memo(function RichTextNodeText({
 }: RichTextNodeProps) {
   const node = useCanvasNode(nodeId)
   const editingNodeId = useCanvasEditingNodeId()
+  const showResolved = useShowResolvedReferences()
 
   const layoutResult = useMemo(() => {
     if (!node) return null
-    return getRenderTagLayout(node)
-  }, [node])
+    return getRenderTagLayout(node, showResolved)
+  }, [node, showResolved])
 
   if (
     !node ||

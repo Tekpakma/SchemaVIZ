@@ -80,6 +80,84 @@ export function wrapRenderTagHtml(html: string) {
   return `<style>${renderTagCss}</style><div class="canvas-render-tag-root">${html}</div>`
 }
 
-export function exportRenderTagHtml(editor: LexicalEditor) {
-  return wrapRenderTagHtml($generateHtmlFromNodes(editor, null))
+/**
+ * Replaces `data-lexical-data-reference` spans in exported HTML with resolved
+ * field values from the record. Flat fields are resolved synchronously here;
+ * dotted paths (relations) are left as `{{path}}` templates for async
+ * resolution via {@link resolveDeepPathSpans}.
+ */
+function resolveDataReferenceSpans(
+  html: string,
+  recordFields: Record<string, unknown>,
+): string {
+  return html.replace(
+    /<span data-lexical-data-reference="([^"]+)">(?:\{\{[^}]*\}\}|[^<]*)<\/span>/g,
+    (_match, path: string) => {
+      // Deep paths need async traversal — resolved in a second pass
+      if (path.includes('.')) {
+        return `<span data-lexical-data-reference="${path}">{{${path}}}</span>`
+      }
+
+      const value = recordFields[path] ?? recordFields[`${path}_id`]
+      if (value == null) {
+        return `<span data-lexical-data-reference="${path}">{{${path}}}</span>`
+      }
+
+      const display =
+        typeof value === 'object' ? JSON.stringify(value) : String(value)
+      return `<span data-lexical-data-reference="${path}">${display}</span>`
+    },
+  )
+}
+
+export function exportRenderTagHtml(
+  editor: LexicalEditor,
+  recordFields?: Record<string, unknown>,
+) {
+  let html = $generateHtmlFromNodes(editor, null)
+  if (recordFields) {
+    html = resolveDataReferenceSpans(html, recordFields)
+  }
+  return wrapRenderTagHtml(html)
+}
+
+// ---------------------------------------------------------------------------
+// Deep-path resolution helpers (async, used at commit time)
+// ---------------------------------------------------------------------------
+
+const UNRESOLVED_DEEP_PATH_PATTERN =
+  /<span data-lexical-data-reference="([^"]+)">\{\{[^}]*\}\}<\/span>/g
+
+/**
+ * Extracts deduplicated dotted-path field names from data-reference spans that
+ * still contain unresolved `{{…}}` templates.
+ */
+export function extractUnresolvedDeepPaths(html: string): string[] {
+  const paths = new Set<string>()
+
+  for (const [, path] of html.matchAll(UNRESOLVED_DEEP_PATH_PATTERN)) {
+    if (path?.includes('.')) paths.add(path)
+  }
+
+  return [...paths]
+}
+
+/**
+ * Replaces unresolved deep-path template spans with pre-resolved display
+ * values. Pure string transform — async resolution happens upstream.
+ */
+export function resolveDeepPathSpans(
+  html: string,
+  resolvedPaths: ReadonlyMap<string, string>,
+): string {
+  if (resolvedPaths.size === 0) return html
+
+  return html.replace(
+    UNRESOLVED_DEEP_PATH_PATTERN,
+    (match, path: string) => {
+      const display = resolvedPaths.get(path)
+      if (display == null) return match
+      return `<span data-lexical-data-reference="${path}">${display}</span>`
+    },
+  )
 }

@@ -20,18 +20,21 @@ export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
     id: 'node-1',
     shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
     layoutMode: 'manual',
-    appLabel: 'demo',
+    appLabel: 'infrastructure',
     modelName: 'server',
+    recordId: '2',
     x: 80,
     y: 80,
     width: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.width,
     height: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.height,
     lexicalJson: '',
     html: `
-        <div style="font-family: sans-serif; padding: 10px; text-align: center;">
-          <b style="color: #2563eb;">SERVER_01</b>
-          <div style="font-size: 11px; margin-top: 4px;">CPU Usage</div>
-          <div style="color: gray; font-size: 10px;">Value: 42%</div>
+        <div style="font-family: sans-serif; padding: 10px;">
+          <b style="color: #2563eb;">{{hostname}}</b>
+          <div style="font-size: 11px; margin-top: 4px;">Status: {{status}}</div>
+          <div style="color: gray; font-size: 10px;">IP: {{ip_address}}</div>
+          <div style="color: gray; font-size: 10px;">Type: {{instance_type}}</div>
+          <div style="color: gray; font-size: 10px;">Env: {{environment.name}}</div>
         </div>
       `,
     contentHeight: 0,
@@ -41,18 +44,20 @@ export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
     id: 'node-2',
     shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
     layoutMode: 'manual',
-    appLabel: 'demo',
-    modelName: 'database',
+    appLabel: 'infrastructure',
+    modelName: 'server',
+    recordId: '3',
     x: 300,
     y: 200,
     width: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.width,
     height: DEFAULT_CANVAS_NODE_SHAPE.defaultSize.height,
     lexicalJson: '',
     html: `
-        <div style="font-family: sans-serif; padding: 10px; text-align: center;">
-          <b style="color: #16a34a;">DATABASE_01</b>
-          <div style="font-size: 11px; margin-top: 4px;">Connections</div>
-          <div style="color: gray; font-size: 10px;">Value: 128</div>
+        <div style="font-family: sans-serif; padding: 10px;">
+          <b style="color: #16a34a;">{{hostname}}</b>
+          <div style="font-size: 11px; margin-top: 4px;">Status: {{status}}</div>
+          <div style="color: gray; font-size: 10px;">IP: {{ip_address}}</div>
+          <div style="color: gray; font-size: 10px;">Subnet: {{subnet.cidr_block}}</div>
         </div>
       `,
     contentHeight: 0,

@@ -430,6 +430,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "cryptography" },
     { name = "django-cors-headers" },
     { name = "django-debug-toolbar" },
     { name = "django-oauth-toolkit" },
@@ -451,6 +452,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "cryptography", specifier = ">=45.0" },
     { name = "django-cors-headers", specifier = ">=4.0" },
     { name = "django-debug-toolbar", specifier = ">=6.1.0" },
     { name = "django-oauth-toolkit", specifier = ">=2.4" },

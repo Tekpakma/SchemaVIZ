@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import {
   getCanvasNodesSnapshot,
+  getCanvasViewportSnapshot,
   useCanvasActions,
   useCanvasNodeIds,
   useCanvasViewport,
@@ -62,15 +63,16 @@ export function useCanvasViewportControls(stageSize: StageSize) {
       const pointer = stage?.getPointerPosition()
       if (!pointer) return
 
+      const current = getCanvasViewportSnapshot()
       const nextScale = clampScale(
         event.evt.deltaY < 0
-          ? viewport.scale * CANVAS_SCALE_STEP
-          : viewport.scale / CANVAS_SCALE_STEP,
+          ? current.scale * CANVAS_SCALE_STEP
+          : current.scale / CANVAS_SCALE_STEP,
       )
 
-      setViewport(getZoomedViewport(viewport, pointer, nextScale))
+      setViewport(getZoomedViewport(current, pointer, nextScale))
     },
-    [setViewport, viewport],
+    [setViewport],
   )
 
   const handleStageDragMove = useCallback(
@@ -80,17 +82,17 @@ export function useCanvasViewportControls(stageSize: StageSize) {
       setViewport({
         x: event.target.x(),
         y: event.target.y(),
-        scale: viewport.scale,
+        scale: getCanvasViewportSnapshot().scale,
       })
     },
-    [setViewport, viewport.scale],
+    [setViewport],
   )
 
   const zoomAtStageCenter = useCallback(
     (nextScale: number) => {
       setViewport(
         getZoomedViewport(
-          viewport,
+          getCanvasViewportSnapshot(),
           {
             x: stageSize.width / 2,
             y: stageSize.height / 2,
@@ -99,16 +101,16 @@ export function useCanvasViewportControls(stageSize: StageSize) {
         ),
       )
     },
-    [setViewport, stageSize.height, stageSize.width, viewport],
+    [setViewport, stageSize.height, stageSize.width],
   )
 
   const zoomIn = useCallback(() => {
-    zoomAtStageCenter(viewport.scale * CANVAS_SCALE_STEP)
-  }, [viewport.scale, zoomAtStageCenter])
+    zoomAtStageCenter(getCanvasViewportSnapshot().scale * CANVAS_SCALE_STEP)
+  }, [zoomAtStageCenter])
 
   const zoomOut = useCallback(() => {
-    zoomAtStageCenter(viewport.scale / CANVAS_SCALE_STEP)
-  }, [viewport.scale, zoomAtStageCenter])
+    zoomAtStageCenter(getCanvasViewportSnapshot().scale / CANVAS_SCALE_STEP)
+  }, [zoomAtStageCenter])
 
   const fitView = useCallback(() => {
     const nodesById = getCanvasNodesSnapshot()

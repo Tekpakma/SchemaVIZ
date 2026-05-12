@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react'
+import { memo, Suspense, useEffect, useMemo } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
@@ -18,6 +18,9 @@ import { LexicalOverlayRuntimeProvider } from './LexicalOverlayRuntimeContext'
 import type { LexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
 import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
 import { TEST_IDS } from '@/constants'
+import { DataReferenceNode } from './dataReference/DataReferenceNode'
+import { DataReferencePlugin } from './dataReference/DataReferencePlugin'
+import { DataReferenceAutocomplete } from './dataReference/DataReferenceAutocomplete'
 
 function LexicalAutoFocusPlugin() {
   const [editor] = useLexicalComposerContext()
@@ -54,7 +57,9 @@ export function LexicalOverlay({ runtime }: LexicalOverlayProps) {
       }}
     >
       <style>{renderTagCss}</style>
-      <LexicalOverlayEditor runtime={runtime} />
+      <Suspense fallback={null}>
+        <LexicalOverlayEditor runtime={runtime} />
+      </Suspense>
     </div>
   )
 }
@@ -77,7 +82,7 @@ const LexicalOverlayEditor = memo(function LexicalOverlayEditor({
           underline: 'canvas-editor-underline',
         },
       },
-      nodes: [],
+      nodes: [DataReferenceNode],
     }),
     [runtime.node.lexicalJson, runtime.nodeId],
   )
@@ -100,6 +105,8 @@ const LexicalOverlayEditor = memo(function LexicalOverlayEditor({
         <HistoryPlugin />
         <LexicalAutoFocusPlugin />
         <LexicalCommitPlugin />
+        <DataReferencePlugin />
+        <DataReferenceAutocomplete />
       </LexicalComposer>
     </LexicalOverlayRuntimeProvider>
   )

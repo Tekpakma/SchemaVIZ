@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import { useQueryClient, useSuspenseQueries, useSuspenseQuery } from '@tanstack/react-query'
 import { layout } from 'render-tag'
 import {
   BLUR_COMMAND,
@@ -12,21 +13,43 @@ import {
 import { mergeRegister } from '@lexical/utils'
 
 import { useCanvasActions } from '@/store/canvasStore'
-import { exportRenderTagHtml, renderTagAccuracy } from './exportRenderTagHtml'
+import {
+  exportRenderTagHtml,
+  extractUnresolvedDeepPaths,
+  renderTagAccuracy,
+  resolveDeepPathSpans,
+} from './exportRenderTagHtml'
+import { formatReferenceDisplayValue } from './dataReference/fieldValues'
 import { useLexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
+import { SCHEMA_QUERIES } from './dataReference/schemaQueries'
 
 export function LexicalCommitPlugin() {
   const [editor] = useLexicalComposerContext()
-  const { node, nodeId } = useLexicalOverlayRuntime()
+  const queryClient = useQueryClient()
+  const { node, nodeId, dataScope } = useLexicalOverlayRuntime()
   const { commitNodeText, stopEditing } = useCanvasActions()
   const nodeWidth = node.width
   const didCommitRef = useRef(false)
+
+  const rootRef = useMemo(
+    () => ({ appLabel: dataScope.appLabel, modelName: dataScope.modelName }),
+    [dataScope.appLabel, dataScope.modelName],
+  )
+  const [{ data: modelDetails }, { data: recordData }] = useSuspenseQueries({
+    queries: [
+      SCHEMA_QUERIES.modelDetails(rootRef),
+      SCHEMA_QUERIES.record({
+        ...rootRef,
+        id: dataScope.recordId,
+      }),
+    ]
+  })
 
   useEffect(() => {
     didCommitRef.current = false
   }, [editor, nodeId])
 
-  const commit = useCallback(() => {
+  const commit = useCallback(async () => {
     if (didCommitRef.current || !nodeWidth) return true
 
     didCommitRef.current = true
@@ -34,38 +57,76 @@ export function LexicalCommitPlugin() {
     const editorState = editor.getEditorState()
     let lexicalJson = ''
     let html = ''
-    let contentHeight = 0
 
     editorState.read(() => {
       lexicalJson = JSON.stringify(editorState.toJSON())
-      html = exportRenderTagHtml(editor)
-
-      const layoutResult = layout({
-        html,
-        width: nodeWidth,
-        accuracy: renderTagAccuracy,
-      })
-
-      contentHeight = Math.ceil(layoutResult.height)
+      html = exportRenderTagHtml(editor, recordData.fields)
     })
 
-    commitNodeText({
-      id: nodeId,
-      lexicalJson,
-      html,
-      contentHeight,
-    })
+    // Resolve deep dotted paths (e.g. "environment.name") asynchronously.
+    // Flat fields were already resolved by exportRenderTagHtml above.
+    const deepPaths = extractUnresolvedDeepPaths(html)
+
+    if (deepPaths.length > 0 && dataScope.recordId) {
+      const resolved = new Map<string, string>()
+
+      await Promise.all(
+        deepPaths.map(async (path) => {
+          try {
+            const resolution = await queryClient.fetchQuery(
+              SCHEMA_QUERIES.referenceResolution(
+                rootRef,
+                path,
+                dataScope.recordId!,
+                {
+                  rootModelDetails: modelDetails,
+                  rootRecordFields: recordData.fields,
+                },
+              ),
+            )
+            if (resolution.status === 'resolved') {
+              resolved.set(
+                path,
+                formatReferenceDisplayValue(resolution.value, resolution.field),
+              )
+            }
+          } catch {
+            // Leave as {{template}} — non-critical failure
+          }
+        }),
+      )
+
+      html = resolveDeepPathSpans(html, resolved)
+    }
+
+    const contentHeight = Math.ceil(
+      layout({ html, width: nodeWidth, accuracy: renderTagAccuracy }).height,
+    )
+
+    commitNodeText({ id: nodeId, lexicalJson, html, contentHeight })
     stopEditing()
 
     return true
-  }, [editor, nodeId, nodeWidth, commitNodeText, stopEditing])
+  }, [
+    editor,
+    queryClient,
+    rootRef,
+    nodeId,
+    nodeWidth,
+    dataScope.recordId,
+    commitNodeText,
+    stopEditing,
+    recordData,
+    modelDetails,
+  ])
 
   useEffect(() => {
     return mergeRegister(
       editor.registerCommand(
         BLUR_COMMAND,
         () => {
-          return commit()
+          void commit()
+          return true
         },
         COMMAND_PRIORITY_EDITOR,
       ),
@@ -73,7 +134,8 @@ export function LexicalCommitPlugin() {
         KEY_ESCAPE_COMMAND,
         (event) => {
           event.preventDefault()
-          return commit()
+          void commit()
+          return true
         },
         COMMAND_PRIORITY_HIGH,
       ),
@@ -84,13 +146,14 @@ export function LexicalCommitPlugin() {
 
           if (event.metaKey || event.ctrlKey) {
             event.preventDefault()
-            return commit()
+            void commit()
+            return true
           }
 
           event.preventDefault()
           return editor.dispatchCommand(INSERT_LINE_BREAK_COMMAND, false)
         },
-        COMMAND_PRIORITY_HIGH,
+        COMMAND_PRIORITY_EDITOR,
       ),
     )
   }, [editor, commit])

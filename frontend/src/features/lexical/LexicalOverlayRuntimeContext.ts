@@ -1,10 +1,9 @@
 import { createContext, use } from 'react'
 import type { CanvasBoxNode, NodeId } from '@/features/canvas/model/types'
 import type { CanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
+import type { SchemaModelRef } from './dataReference/schemaQueries'
 
-export type LexicalOverlayDataScope = {
-  appLabel: string
-  modelName: string
+export type LexicalOverlayDataScope = SchemaModelRef & {
   recordId?: string
 }
 

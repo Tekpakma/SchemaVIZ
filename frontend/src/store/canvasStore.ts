@@ -318,6 +318,7 @@ type CanvasState = {
   isStageMounted: boolean
   stageSize: CanvasStageSize
   viewport: CanvasViewport
+  showResolvedReferences: boolean
   flowDirection: CanvasFlowDirection
   routingAuthority: CanvasRoutingAuthorityMode
   layoutOptions: LayoutOptions
@@ -438,6 +439,7 @@ type CanvasActions = {
   resizeNode: (payload: ResizeNodePayload) => void
   updateNodeFrame: (payload: UpdateNodeFramePayload) => void
   commitNodeText: (payload: CommitNodeTextPayload) => void
+  toggleResolvedReferences: () => void
   setFlowDirection: (flowDirection: CanvasFlowDirection) => void
   setRoutingAuthority: (routingAuthority: CanvasRoutingAuthorityMode) => void
   setLayoutOptions: (options: Partial<LayoutOptions>) => void
@@ -459,6 +461,7 @@ const useCanvasStore = create<CanvasState>()(
         width: 0,
         height: 0,
       },
+      showResolvedReferences: true,
       flowDirection: DEFAULT_CANVAS_FLOW_DIRECTION,
       routingAuthority: 'manual',
       layoutOptions: DEFAULT_ELK_LAYOUT_OPTIONS,
@@ -846,6 +849,15 @@ const useCanvasStore = create<CanvasState>()(
             'canvas/commitNodeText',
           ),
 
+        toggleResolvedReferences: () =>
+          set(
+            (state) => {
+              state.showResolvedReferences = !state.showResolvedReferences
+            },
+            false,
+            'canvas/toggleResolvedReferences',
+          ),
+
         setFlowDirection: (flowDirection) =>
           set(
             (state) => {
@@ -888,6 +900,11 @@ const useCanvasStore = create<CanvasState>()(
     },
   ),
 )
+
+/** Returns the current viewport outside of React (for use in callbacks). */
+export function getCanvasViewportSnapshot() {
+  return useCanvasStore.getState().viewport
+}
 
 /** Returns the current nodes map outside of React (for use in callbacks). */
 export function getCanvasNodesSnapshot() {
@@ -990,3 +1007,5 @@ export const useCanvasRoutingAuthority = () =>
   useCanvasStore((state) => state.routingAuthority)
 export const useCanvasLayoutOptions = () =>
   useCanvasStore((state) => state.layoutOptions)
+export const useShowResolvedReferences = () =>
+  useCanvasStore((state) => state.showResolvedReferences)
