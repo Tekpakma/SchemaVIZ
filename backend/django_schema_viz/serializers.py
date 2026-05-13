@@ -36,7 +36,12 @@ from .utils.generation_steps import (
     validate_generation_root_model,
 )
 from .utils.generation_definition import (
+    GROUP_MODE_BREAKOUT,
+    GROUP_MODE_GROUP,
+    GROUP_MODE_NONE,
+    HIDDEN_STEP,
     normalize_generation_definition,
+    VISIBLE_STEP,
     validate_generation_definition,
 )
 from .utils.qlab_access import (
@@ -961,6 +966,72 @@ class GenerationTemplateFeaturedSerializer(serializers.Serializer):
     rank = serializers.IntegerField(required=False, allow_null=True, min_value=0)
 
 
+class GenerationDefinitionStepSchemaSerializer(serializers.Serializer):
+    id = serializers.CharField(required=False)
+    parent_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    child_ids = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+    )
+    relationship = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+    resolved_model_id = serializers.CharField(required=False, allow_blank=True)
+    visibility = serializers.ChoiceField(
+        choices=[VISIBLE_STEP, HIDDEN_STEP],
+        required=False,
+        default=VISIBLE_STEP,
+    )
+    group_mode = serializers.ChoiceField(
+        choices=[GROUP_MODE_NONE, GROUP_MODE_GROUP, GROUP_MODE_BREAKOUT],
+        required=False,
+        default=GROUP_MODE_NONE,
+    )
+    style_template_id = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+    group_template_id = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+    )
+    label = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    filter = serializers.JSONField(required=False, allow_null=True)
+
+
+class GenerationDefinitionSchemaSerializer(serializers.Serializer):
+    root_step_id = serializers.CharField()
+    steps_by_id = serializers.DictField(
+        child=GenerationDefinitionStepSchemaSerializer()
+    )
+
+
+class GenerationLayoutSettingsSchemaSerializer(serializers.Serializer):
+    layout_algorithm = serializers.ChoiceField(
+        choices=["Layered", "Tree", "Force", "Radial"],
+        required=False,
+    )
+    swatches = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+    )
+
+
+@extend_schema_field(GenerationDefinitionSchemaSerializer)
+class GenerationDefinitionField(serializers.JSONField):
+    pass
+
+
+@extend_schema_field(GenerationLayoutSettingsSchemaSerializer)
+class GenerationLayoutSettingsField(serializers.JSONField):
+    pass
+
+
 class GenerationTemplatePublishedBySerializer(serializers.Serializer):
     id = serializers.IntegerField()
     display_name = serializers.SerializerMethodField()
@@ -972,7 +1043,7 @@ class GenerationTemplatePublishedBySerializer(serializers.Serializer):
 class GenerationTemplateVersionSummarySerializer(serializers.ModelSerializer):
     version_number = serializers.IntegerField(read_only=True)
     root_model = serializers.CharField(read_only=True)
-    layout_settings = serializers.JSONField(read_only=True)
+    layout_settings = GenerationLayoutSettingsField(read_only=True)
     created_by = GenerationTemplatePublishedBySerializer(
         read_only=True, allow_null=True
     )
@@ -992,7 +1063,7 @@ class GenerationTemplateVersionSummarySerializer(serializers.ModelSerializer):
 class GenerationTemplateVersionDetailSerializer(
     GenerationTemplateVersionSummarySerializer
 ):
-    definition = serializers.JSONField(read_only=True)
+    definition = GenerationDefinitionField(read_only=True)
 
     class Meta(GenerationTemplateVersionSummarySerializer.Meta):
         fields = GenerationTemplateVersionSummarySerializer.Meta.fields + [
@@ -1125,7 +1196,7 @@ class GenerationTemplateQuickAccessSourceVersionSerializer(serializers.Serialize
     version_id = serializers.CharField(allow_null=True)
     version_number = serializers.IntegerField(allow_null=True)
     root_model = serializers.CharField()
-    layout_settings = serializers.JSONField()
+    layout_settings = GenerationLayoutSettingsField()
     published_at = serializers.DateTimeField(allow_null=True)
     share_slug = serializers.CharField(allow_null=True)
 
@@ -1170,8 +1241,8 @@ class GenerationTemplateWriteSerializer(serializers.Serializer):
         allow_blank=True,
         allow_null=True,
     )
-    definition = serializers.JSONField()
-    layout_settings = serializers.JSONField(
+    definition = GenerationDefinitionField()
+    layout_settings = GenerationLayoutSettingsField(
         required=False,
         default=dict,
     )
@@ -1306,9 +1377,9 @@ class GenerationRunSourceSerializer(serializers.Serializer):
         choices=GENERATION_VERSION_SELECTION_CHOICES,
         required=False,
     )
-    inline_definition = serializers.JSONField(required=False)
+    inline_definition = GenerationDefinitionField(required=False)
     root_model = serializers.CharField(required=False)
-    layout_settings = serializers.JSONField(
+    layout_settings = GenerationLayoutSettingsField(
         required=False,
         default=dict,
     )

@@ -2080,6 +2080,124 @@ components:
         * `incompatible` - Incompatible
         * `inaccessible` - Inaccessible
         * `stale` - Stale
+    GenerationDefinitionSchema:
+      type: object
+      properties:
+        rootStepId:
+          type: string
+        stepsById:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/GenerationDefinitionStepSchema'
+      required:
+      - rootStepId
+      - stepsById
+    GenerationDefinitionSchemaRequest:
+      type: object
+      properties:
+        rootStepId:
+          type: string
+          minLength: 1
+        stepsById:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/GenerationDefinitionStepSchemaRequest'
+      required:
+      - rootStepId
+      - stepsById
+    GenerationDefinitionStepSchema:
+      type: object
+      properties:
+        id:
+          type: string
+        parentId:
+          type: string
+          nullable: true
+        childIds:
+          type: array
+          items:
+            type: string
+        relationship:
+          type: string
+          nullable: true
+        resolvedModelId:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityEnum'
+          default: visible
+        groupMode:
+          allOf:
+          - $ref: '#/components/schemas/GroupModeEnum'
+          default: none
+        styleTemplateId:
+          type: string
+          nullable: true
+        groupTemplateId:
+          type: string
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        filter:
+          nullable: true
+    GenerationDefinitionStepSchemaRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+        parentId:
+          type: string
+          nullable: true
+        childIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+        relationship:
+          type: string
+          nullable: true
+        resolvedModelId:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/VisibilityEnum'
+          default: visible
+        groupMode:
+          allOf:
+          - $ref: '#/components/schemas/GroupModeEnum'
+          default: none
+        styleTemplateId:
+          type: string
+          nullable: true
+        groupTemplateId:
+          type: string
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        filter:
+          nullable: true
+    GenerationLayoutSettingsSchema:
+      type: object
+      properties:
+        layoutAlgorithm:
+          $ref: '#/components/schemas/LayoutAlgorithmEnum'
+        swatches:
+          type: array
+          items:
+            type: string
+    GenerationLayoutSettingsSchemaRequest:
+      type: object
+      properties:
+        layoutAlgorithm:
+          $ref: '#/components/schemas/LayoutAlgorithmEnum'
+        swatches:
+          type: array
+          items:
+            type: string
+            minLength: 1
     GenerationRunRequestModeEnum:
       enum:
       - structure
@@ -2112,11 +2230,13 @@ components:
           format: uuid
         version:
           $ref: '#/components/schemas/GenerationVersionSelectionEnum'
-        inlineDefinition: {}
+        inlineDefinition:
+          $ref: '#/components/schemas/GenerationDefinitionSchemaRequest'
         rootModel:
           type: string
           minLength: 1
-        layoutSettings: {}
+        layoutSettings:
+          $ref: '#/components/schemas/GenerationLayoutSettingsSchemaRequest'
     GenerationTemplateFeatured:
       type: object
       properties:
@@ -2291,7 +2411,8 @@ components:
           nullable: true
         rootModel:
           type: string
-        layoutSettings: {}
+        layoutSettings:
+          $ref: '#/components/schemas/GenerationLayoutSettingsSchema'
         publishedAt:
           type: string
           format: date-time
@@ -2382,7 +2503,9 @@ components:
           type: integer
         rootModel:
           type: string
-        layoutSettings: {}
+        layoutSettings:
+          allOf:
+          - $ref: '#/components/schemas/GenerationLayoutSettingsSchema'
         createdBy:
           allOf:
           - $ref: '#/components/schemas/GenerationTemplatePublishedBy'
@@ -2390,7 +2513,9 @@ components:
         createdAt:
           type: string
           format: date-time
-        definition: {}
+        definition:
+          allOf:
+          - $ref: '#/components/schemas/GenerationDefinitionSchema'
       required:
       - createdAt
       - createdBy
@@ -2420,8 +2545,10 @@ components:
         shareSlug:
           type: string
           nullable: true
-        definition: {}
-        layoutSettings: {}
+        definition:
+          $ref: '#/components/schemas/GenerationDefinitionSchema'
+        layoutSettings:
+          $ref: '#/components/schemas/GenerationLayoutSettingsSchema'
       required:
       - definition
       - name
@@ -2449,8 +2576,10 @@ components:
         shareSlug:
           type: string
           nullable: true
-        definition: {}
-        layoutSettings: {}
+        definition:
+          $ref: '#/components/schemas/GenerationDefinitionSchemaRequest'
+        layoutSettings:
+          $ref: '#/components/schemas/GenerationLayoutSettingsSchemaRequest'
       required:
       - definition
       - name
@@ -2481,6 +2610,16 @@ components:
       required:
       - details
       - error
+    GroupModeEnum:
+      enum:
+      - none
+      - group
+      - breakout
+      type: string
+      description: |-
+        * `none` - none
+        * `group` - group
+        * `breakout` - breakout
     GroupTemplate:
       type: object
       properties:
@@ -2718,6 +2857,18 @@ components:
       description: |-
         * `inline` - Inline
         * `template` - Template
+    LayoutAlgorithmEnum:
+      enum:
+      - Layered
+      - Tree
+      - Force
+      - Radial
+      type: string
+      description: |-
+        * `Layered` - Layered
+        * `Tree` - Tree
+        * `Force` - Force
+        * `Radial` - Radial
     MethodInfo:
       type: object
       properties:
@@ -2937,8 +3088,10 @@ components:
         shareSlug:
           type: string
           nullable: true
-        definition: {}
-        layoutSettings: {}
+        definition:
+          $ref: '#/components/schemas/GenerationDefinitionSchemaRequest'
+        layoutSettings:
+          $ref: '#/components/schemas/GenerationLayoutSettingsSchemaRequest'
     PatchedGroupTemplateRequest:
       type: object
       properties:
@@ -4150,6 +4303,14 @@ components:
         metadata:
           type: object
           additionalProperties: {}
+    VisibilityEnum:
+      enum:
+      - visible
+      - hidden
+      type: string
+      description: |-
+        * `visible` - visible
+        * `hidden` - hidden
   securitySchemes:
     cookieAuth:
       type: apiKey
