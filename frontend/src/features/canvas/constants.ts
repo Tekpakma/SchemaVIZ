@@ -18,6 +18,7 @@ export const CANVAS_HELPER_LINE_MAX_CANDIDATE_DISTANCE = 800
 export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
   {
     id: 'node-1',
+    kind: 'editable',
     shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
     layoutMode: 'manual',
     appLabel: 'infrastructure',
@@ -42,6 +43,7 @@ export const DEFAULT_CANVAS_NODES: CanvasNode[] = [
   },
   {
     id: 'node-2',
+    kind: 'editable',
     shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
     layoutMode: 'manual',
     appLabel: 'infrastructure',

@@ -1,7 +1,26 @@
 export type NodeId = string
 export type EdgeId = string
 
+// ---------------------------------------------------------------------------
+// Node kind — behavioral category (determines editing, layout, interactions)
+// ---------------------------------------------------------------------------
+
+export type CanvasNodeKind =
+  | 'editable'
+  | 'group'
+  | 'database'
+  | 'placeholder'
+  | 'generation'
+
+// ---------------------------------------------------------------------------
+// Visual shape — rendering form (corner radius, outline, silhouette)
+// ---------------------------------------------------------------------------
+
 export type CanvasNodeShapeName = 'box' | 'group'
+
+// ---------------------------------------------------------------------------
+// Geometry / layout primitives
+// ---------------------------------------------------------------------------
 
 export type CanvasPoint = {
   x: number
@@ -12,9 +31,15 @@ export type CanvasNodeLayoutMode = 'auto' | 'manual'
 
 export type CanvasRoutingAuthorityMode = 'auto' | 'manual'
 
-type CanvasNodeBase<TShape extends CanvasNodeShapeName> = {
+// ---------------------------------------------------------------------------
+// Node types — discriminated on `kind`
+// ---------------------------------------------------------------------------
+
+type CanvasNodeBase = {
   id: NodeId
-  shape: TShape
+  kind: CanvasNodeKind
+  /** Visual shape — drives corner radius, outline style, silhouette. */
+  shape: CanvasNodeShapeName
   parentGroupId?: NodeId
   layoutMode: CanvasNodeLayoutMode
 
@@ -30,21 +55,71 @@ type CanvasNodeBase<TShape extends CanvasNodeShapeName> = {
   version: number
 }
 
-export type CanvasBoxNode = CanvasNodeBase<'box'> & {
+/** User-editable rich-text node. Can take any visual shape. */
+export type CanvasEditableNode = CanvasNodeBase & {
+  kind: 'editable'
   appLabel: string
   modelName: string
   recordId?: string
 }
 
-export type CanvasGroupNode = CanvasNodeBase<'group'>
+/** Container that clusters child nodes. */
+export type CanvasGroupNode = CanvasNodeBase & {
+  kind: 'group'
+  shape: 'group'
+}
 
-export type CanvasNode<
-  TShape extends CanvasNodeShapeName = CanvasNodeShapeName,
-> = TShape extends 'box'
-  ? CanvasBoxNode
-  : TShape extends 'group'
-    ? CanvasGroupNode
-    : never
+/** Read-only schema model display. */
+export type CanvasDatabaseNode = CanvasNodeBase & {
+  kind: 'database'
+  appLabel: string
+  modelName: string
+}
+
+/** Preview carousel of relational children. */
+export type CanvasPlaceholderNode = CanvasNodeBase & {
+  kind: 'placeholder'
+  appLabel: string
+  modelName: string
+  sourceNodeId: NodeId
+}
+
+/** Guided generation wizard step. */
+export type CanvasGenerationNode = CanvasNodeBase & {
+  kind: 'generation'
+}
+
+export type CanvasNode =
+  | CanvasEditableNode
+  | CanvasGroupNode
+  | CanvasDatabaseNode
+  | CanvasPlaceholderNode
+  | CanvasGenerationNode
+
+// ---------------------------------------------------------------------------
+// Node kind capability helpers
+// ---------------------------------------------------------------------------
+
+/** Kinds whose content is user-editable via the Lexical overlay. */
+export function isEditableNodeKind(kind: CanvasNodeKind): boolean {
+  return kind === 'editable' || kind === 'group'
+}
+
+/** Kinds that can contain child nodes. */
+export function isContainerNodeKind(kind: CanvasNodeKind): boolean {
+  return kind === 'group'
+}
+
+/** Kinds that carry a data scope (appLabel / modelName). */
+export function hasDataScope(
+  node: CanvasNode,
+): node is CanvasEditableNode | CanvasDatabaseNode | CanvasPlaceholderNode {
+  return node.kind === 'editable' || node.kind === 'database' || node.kind === 'placeholder'
+}
+
+// ---------------------------------------------------------------------------
+// Edges
+// ---------------------------------------------------------------------------
 
 export type CanvasEdgeKind =
   | 'default'
@@ -76,6 +151,10 @@ export type CanvasEdge = {
   routePoints?: Array<CanvasPoint>
 }
 
+// ---------------------------------------------------------------------------
+// Layout
+// ---------------------------------------------------------------------------
+
 export type CanvasNodeFrame = {
   id: NodeId
   x: number
@@ -93,6 +172,10 @@ export type CanvasGraphLayoutResult = {
   nodeFrames: Array<CanvasNodeFrame>
   edgeRoutes: Array<CanvasEdgeRoute>
 }
+
+// ---------------------------------------------------------------------------
+// Canvas state
+// ---------------------------------------------------------------------------
 
 export type CanvasState = {
   nodesById: Record<NodeId, CanvasNode>

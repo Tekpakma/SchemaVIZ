@@ -25,6 +25,8 @@ import type {
 } from './model/types'
 import { escapeHtml } from '@/utils/html'
 import * as R from 'remeda'
+import { layout } from 'render-tag'
+import { renderTagAccuracy } from '@/features/lexical/exportRenderTagHtml'
 import {
   SCHEMA_NODE_FIELD_COLOR,
   SCHEMA_NODE_SUBTITLE_COLOR,
@@ -349,6 +351,8 @@ function getDirectChildIds(input: CanvasLayoutInput, parentId: NodeId) {
   return input.childIdsByGroupId[parentId] ?? []
 }
 
+const GROUP_LABEL_GAP = 12
+
 /** Recursively converts a canvas node subtree into an ELK node tree and attaches fixed-side ports for routing. */
 function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
   const children = R.pipe(
@@ -363,14 +367,23 @@ function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
     }),
   )
 
+  const layoutOptions: LayoutOptions = {
+    [ELK_PORT_CONSTRAINTS_OPTION]: 'FIXED_SIDE',
+  }
+
+  // Groups with labels need extra top padding for the label area
+  if (node.kind === 'group' && node.contentHeight > 0) {
+    const topPadding = node.contentHeight + GROUP_LABEL_GAP
+    layoutOptions['elk.padding'] =
+      `[top=${topPadding},left=36,bottom=36,right=36]`
+  }
+
   return {
     id: node.id,
     width: node.width,
     height: node.height,
     ports: createElkPortsForNode(node),
-    layoutOptions: {
-      [ELK_PORT_CONSTRAINTS_OPTION]: 'FIXED_SIDE',
-    },
+    layoutOptions,
     ...(children.length > 0 ? { children } : {}),
   }
 }
@@ -687,6 +700,27 @@ function createSchemaNodeHtml(node: SchemaGraphNode) {
   `
 }
 
+export function createGroupLabelHtml(name: string) {
+  return `
+    <div style="font-family: sans-serif; padding: 8px 12px;">
+      <b style="font-size: 11px; color: ${SCHEMA_NODE_SUBTITLE_COLOR.light};">${escapeHtml(name)}</b>
+    </div>
+  `
+}
+
+export function measureGroupLabelHeight(html: string, width: number): number {
+  if (!html) return 0
+
+  try {
+    const result = layout({ html, width, accuracy: renderTagAccuracy })
+    return result.height
+  } catch {
+    // render-tag requires DOMParser; fall back to a reasonable estimate
+    // when running in non-browser environments (SSR, tests).
+    return 30
+  }
+}
+
 function getSchemaEdgeKind(edge: SchemaGraphEdge): CanvasEdgeKind {
   if (edge.isProxy) return 'proxy'
   if (edge.isSubclass) return 'subclass'
@@ -701,22 +735,30 @@ function getSchemaEdgeKind(edge: SchemaGraphEdge): CanvasEdgeKind {
 export function createSchemaCanvasGraph(
   schemaGraph: SchemaGraphPayload,
 ): SchemaCanvasGraph {
-  const groupNodes: Array<CanvasNode> = schemaGraph.groups.map((group) => ({
-    id: `${SCHEMA_GROUP_PREFIX}${group.id}`,
-    shape: 'group',
-    layoutMode: 'auto',
-    x: 0,
-    y: 0,
-    width: CANVAS_NODE_SHAPES.group.defaultSize.width,
-    height: CANVAS_NODE_SHAPES.group.defaultSize.height,
-    lexicalJson: '',
-    html: '',
-    contentHeight: 0,
-    version: 1,
-  }))
+  const groupNodes: Array<CanvasNode> = schemaGraph.groups.map((group) => {
+    const groupWidth = CANVAS_NODE_SHAPES.group.defaultSize.width
+    const html = createGroupLabelHtml(group.name)
+    const contentHeight = measureGroupLabelHeight(html, groupWidth)
+
+    return {
+      id: `${SCHEMA_GROUP_PREFIX}${group.id}`,
+      kind: 'group',
+      shape: 'group',
+      layoutMode: 'auto',
+      x: 0,
+      y: 0,
+      width: groupWidth,
+      height: CANVAS_NODE_SHAPES.group.defaultSize.height,
+      lexicalJson: '',
+      html,
+      contentHeight,
+      version: 1,
+    }
+  })
 
   const schemaNodes: Array<CanvasNode> = schemaGraph.nodes.map((node) => ({
     id: node.id,
+    kind: 'editable',
     shape: 'box',
     layoutMode: 'auto',
     appLabel: node.appLabel,

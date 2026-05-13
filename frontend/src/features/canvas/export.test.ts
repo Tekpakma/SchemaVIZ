@@ -8,6 +8,7 @@ const snapshot = {
   nodesById: {
     'box-1': {
       id: 'box-1',
+      kind: 'editable',
       shape: 'box',
       layoutMode: 'manual',
       x: 20,
@@ -29,6 +30,7 @@ const snapshot = {
     },
     'group-1': {
       id: 'group-1',
+      kind: 'group',
       shape: 'group',
       layoutMode: 'manual',
       x: 400,

@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  getActiveCanvasTabIdSnapshot,
   getCanvasActionsSnapshot,
+  getCanvasExportSnapshot,
   getCanvasLayoutSnapshot,
+  getCanvasTabActionsSnapshot,
+  resetCanvasStoreForTests,
 } from './canvasStore'
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/model/types'
 
 const nodes: Array<CanvasNode> = [
   {
     id: 'a',
+    kind: 'editable',
     shape: 'box',
     layoutMode: 'auto',
     appLabel: 'inventory',
@@ -24,6 +29,7 @@ const nodes: Array<CanvasNode> = [
   },
   {
     id: 'b',
+    kind: 'editable',
     shape: 'box',
     layoutMode: 'auto',
     appLabel: 'inventory',
@@ -54,6 +60,7 @@ const edges: Array<CanvasEdge> = [
 
 describe('canvasStore graph layout actions', () => {
   beforeEach(() => {
+    resetCanvasStoreForTests()
     getCanvasActionsSnapshot().setGraph({
       nodes,
       edges,
@@ -240,5 +247,164 @@ describe('canvasStore graph layout actions', () => {
     expect(snapshot.nodesById.b?.layoutMode).toBe('auto')
     expect(snapshot.edgesById['a-b']?.sourcePort).toBeUndefined()
     expect(snapshot.edgesById['a-b']?.targetPort).toBeUndefined()
+  })
+})
+
+describe('canvasStore document tabs', () => {
+  beforeEach(() => {
+    resetCanvasStoreForTests()
+    getCanvasActionsSnapshot().setGraph({
+      nodes,
+      edges,
+    })
+  })
+
+  it('creates, switches, renames, marks, and closes canvas tabs', () => {
+    const tabActions = getCanvasTabActionsSnapshot()
+    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const secondTabId = tabActions.createTab({
+      label: 'Schema draft',
+      nodes: [],
+      edges: [],
+    })
+
+    expect(getActiveCanvasTabIdSnapshot()).toBe(secondTabId)
+
+    tabActions.renameTab(secondTabId, 'Schema draft v2')
+    tabActions.markTabDirty(secondTabId)
+    expect(getCanvasExportSnapshot().nodeOrder).toEqual([])
+
+    tabActions.switchTab(firstTabId)
+    expect(getActiveCanvasTabIdSnapshot()).toBe(firstTabId)
+    expect(getCanvasExportSnapshot().nodeOrder).toEqual(['a', 'b'])
+
+    tabActions.closeTab(firstTabId)
+    expect(getActiveCanvasTabIdSnapshot()).toBe(firstTabId)
+
+    tabActions.closeTab(secondTabId)
+    expect(getActiveCanvasTabIdSnapshot()).toBe(firstTabId)
+    expect(getCanvasExportSnapshot().nodeOrder).toEqual(['a', 'b'])
+  })
+
+  it('isolates graph and viewport state by tab', () => {
+    const tabActions = getCanvasTabActionsSnapshot()
+    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const secondTabId = tabActions.createTab({
+      nodes: [
+        {
+          ...nodes[0]!,
+          id: 'c',
+          x: 10,
+          y: 20,
+        },
+      ],
+      edges: [],
+      viewport: {
+        x: 25,
+        y: 35,
+        scale: 1.5,
+      },
+    })
+
+    getCanvasActionsSnapshot().moveNode({
+      id: 'c',
+      x: 80,
+      y: 90,
+    })
+    getCanvasActionsSnapshot().setViewport({
+      x: 100,
+      y: 120,
+      scale: 2,
+    })
+
+    expect(getCanvasExportSnapshot().nodesById.c).toMatchObject({
+      x: 80,
+      y: 90,
+    })
+    expect(getCanvasExportSnapshot().viewport).toEqual({
+      x: 100,
+      y: 120,
+      scale: 2,
+    })
+
+    tabActions.switchTab(firstTabId)
+    expect(getCanvasExportSnapshot().nodesById.a).toMatchObject({
+      x: 0,
+      y: 0,
+    })
+    expect(getCanvasExportSnapshot().viewport).toEqual({
+      x: 0,
+      y: 0,
+      scale: 1,
+    })
+
+    tabActions.switchTab(secondTabId)
+    expect(getCanvasExportSnapshot().nodeOrder).toEqual(['c'])
+  })
+
+  it('returns active-document snapshots only', () => {
+    const tabActions = getCanvasTabActionsSnapshot()
+    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const secondTabId = tabActions.createTab({
+      label: 'Other canvas',
+      nodes: [
+        {
+          ...nodes[0]!,
+          id: 'other',
+        },
+      ],
+      edges: [],
+    })
+
+    expect(getCanvasLayoutSnapshot().nodeOrder).toEqual(['other'])
+    expect(getCanvasExportSnapshot().nodeOrder).toEqual(['other'])
+
+    tabActions.switchTab(firstTabId)
+    expect(getCanvasLayoutSnapshot().nodeOrder).toEqual(['a', 'b'])
+    expect(getCanvasExportSnapshot(secondTabId).nodeOrder).toEqual(['other'])
+  })
+
+  it('can apply stale layout results back to their source tab', () => {
+    const tabActions = getCanvasTabActionsSnapshot()
+    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const secondTabId = tabActions.createTab({
+      nodes: [
+        {
+          ...nodes[0]!,
+          id: 'c',
+        },
+      ],
+      edges: [],
+    })
+
+    expect(getActiveCanvasTabIdSnapshot()).toBe(secondTabId)
+
+    getCanvasActionsSnapshot().applyGraphLayout(
+      {
+        nodeFrames: [
+          {
+            id: 'a',
+            x: 300,
+            y: 400,
+            width: 140,
+            height: 100,
+          },
+        ],
+        edgeRoutes: [],
+      },
+      { tabId: firstTabId },
+    )
+
+    expect(getActiveCanvasTabIdSnapshot()).toBe(secondTabId)
+    expect(getCanvasExportSnapshot().nodesById.c).toBeDefined()
+    expect(getCanvasExportSnapshot().nodesById.a).toBeUndefined()
+
+    tabActions.switchTab(firstTabId)
+    expect(getCanvasExportSnapshot().nodesById.a).toMatchObject({
+      x: 300,
+      y: 400,
+      width: 140,
+      height: 100,
+    })
   })
 })

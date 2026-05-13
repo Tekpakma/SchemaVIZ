@@ -10,6 +10,7 @@ import {
   useCanvasNode,
   useCanvasViewport,
 } from '@/store/canvasStore'
+import { hasDataScope } from '@/features/canvas/model/types'
 import type { NodeId } from '@/features/canvas/model/types'
 import { CANVAS_NODE_SURFACE_CSS_VALUE } from '@/features/canvas/themeColors'
 import { getCanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
@@ -42,16 +43,20 @@ type LexicalOverlayResolverProps = {
 
 export function LexicalOverlay({ runtime }: LexicalOverlayProps) {
   const viewport = useCanvasViewport()
+  const isGroup = runtime.node.kind === 'group'
+  const editorHeight = isGroup
+    ? Math.max(runtime.node.contentHeight, 40)
+    : runtime.node.height
 
   return (
     <div
       className="absolute top-0 left-0 z-10 box-border overflow-visible"
       data-testid={TEST_IDS.LEXICAL_OVERLAY}
       style={{
-        background: CANVAS_NODE_SURFACE_CSS_VALUE,
+        background: isGroup ? 'transparent' : CANVAS_NODE_SURFACE_CSS_VALUE,
         borderRadius: runtime.shapeDefinition.cornerRadius,
         width: runtime.node.width,
-        height: runtime.node.height,
+        height: editorHeight,
         transform: `translate(${viewport.x + runtime.node.x * viewport.scale}px, ${viewport.y + runtime.node.y * viewport.scale}px) scale(${viewport.scale})`,
         transformOrigin: 'top left',
       }}
@@ -64,9 +69,18 @@ export function LexicalOverlay({ runtime }: LexicalOverlayProps) {
   )
 }
 
+const groupEditorStyle = {
+  ...renderTagEditorStyle,
+  justifyContent: 'flex-start' as const,
+  textAlign: 'left' as const,
+}
+
 const LexicalOverlayEditor = memo(function LexicalOverlayEditor({
   runtime,
 }: LexicalOverlayProps) {
+  const isGroup = runtime.node.kind === 'group'
+  const showDataReferences = runtime.dataScope !== undefined
+
   const initialConfig = useMemo(
     () => ({
       namespace: `canvas-node-${runtime.nodeId}`,
@@ -82,9 +96,9 @@ const LexicalOverlayEditor = memo(function LexicalOverlayEditor({
           underline: 'canvas-editor-underline',
         },
       },
-      nodes: [DataReferenceNode],
+      nodes: showDataReferences ? [DataReferenceNode] : [],
     }),
-    [runtime.node.lexicalJson, runtime.nodeId],
+    [runtime.node.lexicalJson, runtime.nodeId, showDataReferences],
   )
 
   return (
@@ -95,7 +109,7 @@ const LexicalOverlayEditor = memo(function LexicalOverlayEditor({
             <ContentEditable
               autoFocus
               className="canvas-render-tag-root"
-              style={renderTagEditorStyle}
+              style={isGroup ? groupEditorStyle : renderTagEditorStyle}
             />
           }
           placeholder={null}
@@ -105,8 +119,8 @@ const LexicalOverlayEditor = memo(function LexicalOverlayEditor({
         <HistoryPlugin />
         <LexicalAutoFocusPlugin />
         <LexicalCommitPlugin />
-        <DataReferencePlugin />
-        <DataReferenceAutocomplete />
+        {showDataReferences && <DataReferencePlugin />}
+        {showDataReferences && <DataReferenceAutocomplete />}
       </LexicalComposer>
     </LexicalOverlayRuntimeProvider>
   )
@@ -116,20 +130,26 @@ function LexicalOverlayResolver({ nodeId }: LexicalOverlayResolverProps) {
   const node = useCanvasNode(nodeId)
 
   const runtime = useMemo<LexicalOverlayRuntime | null>(() => {
-    if (!node || node.shape !== 'box') {
-      return null
-    }
+    if (!node) return null
 
-    return {
+    const base = {
       nodeId,
       node,
       shapeDefinition: getCanvasNodeShapeDefinition(node),
-      dataScope: {
-        appLabel: node.appLabel,
-        modelName: node.modelName,
-        recordId: node.recordId,
-      },
     }
+
+    if (hasDataScope(node)) {
+      return {
+        ...base,
+        dataScope: {
+          appLabel: node.appLabel,
+          modelName: node.modelName,
+          recordId: 'recordId' in node ? node.recordId : undefined,
+        },
+      }
+    }
+
+    return base
   }, [node, nodeId])
 
   if (!runtime) return null

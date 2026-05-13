@@ -90,7 +90,43 @@ const RichTextNodeContent = memo(function RichTextNodeContent({
         width={width}
         height={layoutResult.height}
         listening={false}
-        sceneFunc={({ _context: ctx }) => {
+        sceneFunc={(context) => {
+          const ctx = context._context
+          ctx.save()
+          drawLayout({
+            layout: layoutResult,
+            ctx,
+            width,
+            pixelRatio: 1,
+          })
+          ctx.restore()
+        }}
+      />
+    </Group>
+  )
+})
+
+type RichTextNodeGroupLabelProps = {
+  x: number
+  y: number
+  width: number
+  layoutResult: LayoutResult
+}
+
+const RichTextNodeGroupLabel = memo(function RichTextNodeGroupLabel({
+  x,
+  y,
+  width,
+  layoutResult,
+}: RichTextNodeGroupLabelProps) {
+  return (
+    <Group x={x} y={y} listening={false}>
+      <Shape
+        width={width}
+        height={layoutResult.height}
+        listening={false}
+        sceneFunc={(context) => {
+          const ctx = context._context
           ctx.save()
           drawLayout({
             layout: layoutResult,
@@ -129,15 +165,13 @@ export const RichTextNode = memo(function RichTextNode({
 
   if (!node || !shapeDefinition || editingNodeId === node.id) return null
 
-  const isGroup = node.shape === 'group'
+  const isGroup = node.kind === 'group'
 
   const selectThisNode = () => {
     selectNode(node.id)
   }
 
   const handleDoubleClick = () => {
-    if (isGroup) return
-
     startEditing(node.id)
   }
 
@@ -173,7 +207,7 @@ export const RichTextNode = memo(function RichTextNode({
     <Group
       x={node.x}
       y={node.y}
-      draggable
+      draggable={!node.parentGroupId}
       onClick={selectThisNode}
       onTap={selectThisNode}
       onDblClick={handleDoubleClick}
@@ -296,13 +330,22 @@ export const RichTextNodeText = memo(function RichTextNodeText({
     return getRenderTagLayout(node, showResolved, resolvedTheme)
   }, [node, showResolved, resolvedTheme])
 
-  if (
-    !node ||
-    node.shape === 'group' ||
-    !layoutResult ||
-    editingNodeId === node.id
-  ) {
+  if (!node || !layoutResult || editingNodeId === node.id) {
     return null
+  }
+
+  // Groups render label top-aligned; regular nodes center vertically
+  if (node.kind === 'group') {
+    if (!node.html) return null
+
+    return (
+      <RichTextNodeGroupLabel
+        x={node.x}
+        y={node.y}
+        width={node.width}
+        layoutResult={layoutResult}
+      />
+    )
   }
 
   return (

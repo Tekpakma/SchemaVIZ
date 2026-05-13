@@ -23,7 +23,7 @@ import { formatReferenceDisplayValue } from './dataReference/fieldValues'
 import { useLexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
 import { SCHEMA_QUERIES } from './dataReference/schemaQueries'
 
-export function LexicalCommitPlugin() {
+function LexicalCommitPluginWithDataScope() {
   const [editor] = useLexicalComposerContext()
   const queryClient = useQueryClient()
   const { node, nodeId, dataScope } = useLexicalOverlayRuntime()
@@ -32,17 +32,20 @@ export function LexicalCommitPlugin() {
   const didCommitRef = useRef(false)
 
   const rootRef = useMemo(
-    () => ({ appLabel: dataScope.appLabel, modelName: dataScope.modelName }),
-    [dataScope.appLabel, dataScope.modelName],
+    () => ({
+      appLabel: dataScope!.appLabel,
+      modelName: dataScope!.modelName,
+    }),
+    [dataScope],
   )
   const [{ data: modelDetails }, { data: recordData }] = useSuspenseQueries({
     queries: [
       SCHEMA_QUERIES.modelDetails(rootRef),
       SCHEMA_QUERIES.record({
         ...rootRef,
-        id: dataScope.recordId,
+        id: dataScope!.recordId,
       }),
-    ]
+    ],
   })
 
   useEffect(() => {
@@ -67,7 +70,7 @@ export function LexicalCommitPlugin() {
     // Flat fields were already resolved by exportRenderTagHtml above.
     const deepPaths = extractUnresolvedDeepPaths(html)
 
-    if (deepPaths.length > 0 && dataScope.recordId) {
+    if (deepPaths.length > 0 && dataScope!.recordId) {
       const resolved = new Map<string, string>()
 
       await Promise.all(
@@ -77,7 +80,7 @@ export function LexicalCommitPlugin() {
               SCHEMA_QUERIES.referenceResolution(
                 rootRef,
                 path,
-                dataScope.recordId!,
+                dataScope!.recordId!,
                 {
                   rootModelDetails: modelDetails,
                   rootRecordFields: recordData.fields,
@@ -113,13 +116,58 @@ export function LexicalCommitPlugin() {
     rootRef,
     nodeId,
     nodeWidth,
-    dataScope.recordId,
+    dataScope,
     commitNodeText,
     stopEditing,
     recordData,
     modelDetails,
   ])
 
+  return useLexicalCommitCommands(editor, commit)
+}
+
+function LexicalCommitPluginSimple() {
+  const [editor] = useLexicalComposerContext()
+  const { nodeId, node } = useLexicalOverlayRuntime()
+  const { commitNodeText, stopEditing } = useCanvasActions()
+  const nodeWidth = node.width
+  const didCommitRef = useRef(false)
+
+  useEffect(() => {
+    didCommitRef.current = false
+  }, [editor, nodeId])
+
+  const commit = useCallback(async () => {
+    if (didCommitRef.current || !nodeWidth) return true
+
+    didCommitRef.current = true
+
+    const editorState = editor.getEditorState()
+    let lexicalJson = ''
+    let html = ''
+
+    editorState.read(() => {
+      lexicalJson = JSON.stringify(editorState.toJSON())
+      html = exportRenderTagHtml(editor)
+    })
+
+    const contentHeight = Math.ceil(
+      layout({ html, width: nodeWidth, accuracy: renderTagAccuracy }).height,
+    )
+
+    commitNodeText({ id: nodeId, lexicalJson, html, contentHeight })
+    stopEditing()
+
+    return true
+  }, [editor, nodeId, nodeWidth, commitNodeText, stopEditing])
+
+  return useLexicalCommitCommands(editor, commit)
+}
+
+function useLexicalCommitCommands(
+  editor: ReturnType<typeof useLexicalComposerContext>[0],
+  commit: () => Promise<boolean>,
+) {
   useEffect(() => {
     return mergeRegister(
       editor.registerCommand(
@@ -159,4 +207,10 @@ export function LexicalCommitPlugin() {
   }, [editor, commit])
 
   return null
+}
+
+export function LexicalCommitPlugin() {
+  const { dataScope } = useLexicalOverlayRuntime()
+  if (dataScope) return <LexicalCommitPluginWithDataScope />
+  return <LexicalCommitPluginSimple />
 }

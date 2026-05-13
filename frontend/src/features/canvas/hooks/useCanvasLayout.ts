@@ -1,6 +1,10 @@
 import { useIsMutating, useMutation } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import { getCanvasLayoutSnapshot, useCanvasActions } from '@/store/canvasStore'
+import {
+  getActiveCanvasTabIdSnapshot,
+  getCanvasLayoutSnapshot,
+  useCanvasActions,
+} from '@/store/canvasStore'
 import { layoutCanvasGraph } from '../layout.functions'
 import { getCanvasFitViewportForFrames } from '../fitView'
 
@@ -25,20 +29,21 @@ export function useCanvasLayout(stageSize: StageSize) {
   const mutation = useMutation({
     mutationKey: CANVAS_LAYOUT_MUTATION_KEY,
     mutationFn: async () => {
+      const tabId = getActiveCanvasTabIdSnapshot()
       const layout = await layoutCanvas({
-        data: getCanvasLayoutSnapshot(),
+        data: getCanvasLayoutSnapshot(tabId),
       })
-      return layout
+      return { layout, tabId }
     },
-    onSuccess: (layout) => {
-      applyGraphLayout(layout)
+    onSuccess: ({ layout, tabId }) => {
+      applyGraphLayout(layout, { tabId })
 
       const nextViewport = getCanvasFitViewportForFrames(
         layout.nodeFrames,
         stageSize,
       )
       if (nextViewport) {
-        setViewport(nextViewport)
+        setViewport(nextViewport, { tabId })
       }
     },
   })

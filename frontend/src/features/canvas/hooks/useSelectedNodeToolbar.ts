@@ -31,7 +31,7 @@ export function useSelectedNodeToolbar(): SelectedNodeToolbarPlacement | null {
     const selectedGroupId =
       bounds.selectedCount === 1 &&
       firstSelectedNodeId &&
-      nodes[firstSelectedNodeId]?.shape === 'group'
+      nodes[firstSelectedNodeId]?.kind === 'group'
         ? firstSelectedNodeId
         : null
 
@@ -44,7 +44,7 @@ export function useSelectedNodeToolbar(): SelectedNodeToolbarPlacement | null {
         bounds.selectedCount > 1 &&
         bounds.selectedNodeIds.every((id) => {
           const node = nodes[id]
-          return Boolean(node && node.shape !== 'group' && !node.parentGroupId)
+          return Boolean(node && node.kind !== 'group' && !node.parentGroupId)
         }),
       canUngroup: Boolean(selectedGroupId),
     }

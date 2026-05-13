@@ -1,5 +1,5 @@
 import { createContext, use } from 'react'
-import type { CanvasBoxNode, NodeId } from '@/features/canvas/model/types'
+import type { CanvasNode, NodeId } from '@/features/canvas/model/types'
 import type { CanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
 import type { SchemaModelRef } from './dataReference/schemaQueries'
 
@@ -9,9 +9,9 @@ export type LexicalOverlayDataScope = SchemaModelRef & {
 
 export type LexicalOverlayRuntime = {
   nodeId: NodeId
-  node: CanvasBoxNode
+  node: CanvasNode
   shapeDefinition: CanvasNodeShapeDefinition
-  dataScope: LexicalOverlayDataScope
+  dataScope?: LexicalOverlayDataScope
 }
 
 const LexicalOverlayRuntimeContext =

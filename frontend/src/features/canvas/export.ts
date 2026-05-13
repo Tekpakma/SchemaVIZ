@@ -133,7 +133,7 @@ function createNodeData(
 function createNodeStyle(node: CanvasNode, palette: CanvasExportPalette) {
   const shapeDefinition = getCanvasNodeShapeDefinition(node)
 
-  if (node.shape === 'group') {
+  if (node.kind === 'group') {
     return {
       backgroundColor: palette.nodeSurfaceColor,
       borderColor: CANVAS_SELECT_COLOR,

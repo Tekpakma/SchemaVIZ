@@ -1,5 +1,9 @@
 import { useEffect } from 'react'
-import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
+import {
+  useActiveCanvasTabId,
+  useCanvasActions,
+  useCanvasNodeIds,
+} from '@/store/canvasStore'
 import { DEFAULT_CANVAS_EDGES, DEFAULT_CANVAS_NODES } from '../constants'
 import {
   getCanvasSeedEdgesFromSearch,
@@ -10,8 +14,9 @@ import {
  * Seeds the canvas with an initial rich-text node when it is empty.
  */
 export function useEnsureDefaultCanvasNode() {
+  const activeTabId = useActiveCanvasTabId()
   const nodeIds = useCanvasNodeIds()
-  const { setGraph } = useCanvasActions()
+  const { seedActiveDocument } = useCanvasActions()
 
   useEffect(() => {
     if (nodeIds.length > 0) return
@@ -23,9 +28,9 @@ export function useEnsureDefaultCanvasNode() {
       getCanvasSeedEdgesFromSearch(globalThis.location.search) ??
       DEFAULT_CANVAS_EDGES
 
-    setGraph({
+    seedActiveDocument({
       nodes: seedNodes,
       edges: seedEdges,
     })
-  }, [nodeIds.length, setGraph])
+  }, [activeTabId, nodeIds.length, seedActiveDocument])
 }

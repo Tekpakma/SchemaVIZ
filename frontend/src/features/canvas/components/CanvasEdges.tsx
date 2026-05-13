@@ -157,7 +157,8 @@ export const CanvasEdges = memo(function CanvasEdges() {
   return (
     <Shape
       listening={false}
-      sceneFunc={({ _context: ctx }) => {
+      sceneFunc={(context) => {
+        const ctx = context._context
         ctx.save()
         ctx.globalAlpha = 0.72
         ctx.strokeStyle = stroke

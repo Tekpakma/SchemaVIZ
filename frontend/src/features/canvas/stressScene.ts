@@ -78,6 +78,7 @@ export function createStressSceneNodes(count: number): Array<CanvasNode> {
 
     return {
       id: `stress-node-${index + 1}`,
+      kind: 'editable',
       shape: DEFAULT_CANVAS_NODE_SHAPE_NAME,
       layoutMode: 'manual',
       appLabel: 'stress',

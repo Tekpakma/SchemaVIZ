@@ -9,9 +9,10 @@ import {
   createSchemaCanvasGraph,
   getCanvasFlowDirection,
 } from './layoutAdapters'
-import type { CanvasBoxNode, CanvasEdge, CanvasNode } from './model/types'
+import type { CanvasEditableNode, CanvasEdge, CanvasNode } from './model/types'
 
 const baseNode = {
+  kind: 'editable',
   shape: 'box',
   layoutMode: 'auto',
   appLabel: 'inventory',
@@ -21,7 +22,8 @@ const baseNode = {
   contentHeight: 0,
   version: 1,
 } satisfies Pick<
-  CanvasBoxNode,
+  CanvasEditableNode,
+  | 'kind'
   | 'appLabel'
   | 'contentHeight'
   | 'html'
@@ -422,11 +424,13 @@ describe('layoutAdapters', () => {
       'inventory.Category',
     ])
     expect(graph.nodes[1]?.parentGroupId).toBe('schema-group:inventory')
+    expect(graph.nodes[0]?.html).toContain('inventory')
+    expect(graph.nodes[0]?.contentHeight).toBeGreaterThan(0)
     expect(graph.edges[0]).toMatchObject({
       sourceNodeId: 'inventory.Product',
       targetNodeId: 'inventory.Category',
       kind: 'foreign-key',
-      sourceLabel: 'category',
+      label: 'category',
     })
   })
 })

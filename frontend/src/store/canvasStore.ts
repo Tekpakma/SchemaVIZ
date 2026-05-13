@@ -16,6 +16,10 @@ import { useShallow } from 'zustand/react/shallow'
 import { getCanvasNodeShapeDefinition } from '@/features/canvas/nodeShapes'
 import type { CanvasLayoutInput } from '@/features/canvas/layout.schemas'
 import {
+  DEFAULT_CANVAS_EDGES,
+  DEFAULT_CANVAS_NODES,
+} from '@/features/canvas/constants'
+import {
   DEFAULT_CANVAS_FLOW_DIRECTION,
   DEFAULT_ELK_LAYOUT_OPTIONS,
   resolveEdgePortSide,
@@ -24,9 +28,15 @@ import type { LayoutOptions } from 'elkjs/lib/elk-api'
 import * as R from 'remeda'
 
 const GROUP_NODE_PADDING = 24
+const MAIN_CANVAS_TAB_ID = 'main'
+const INITIAL_CANVAS_TAB_LABEL = 'Untitled 1'
 
 function createNodeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
+}
+
+function createCanvasTabId() {
+  return `canvas-${crypto.randomUUID().slice(0, 8)}`
 }
 
 /** Computes the axis-aligned bounding box enclosing all given nodes. */
@@ -67,7 +77,10 @@ function getChildIdsByGroupId(nodes: Array<CanvasNode>) {
 }
 
 /** Removes cached edge routes for any edge connected to the given node IDs. */
-function clearConnectedEdgeRoutes(state: CanvasState, nodeIds: Array<NodeId>) {
+function clearConnectedEdgeRoutes(
+  state: CanvasDocumentState,
+  nodeIds: Array<NodeId>,
+) {
   const nodeIdSet = new Set(nodeIds)
 
   for (const edge of Object.values(state.edgesById)) {
@@ -82,14 +95,17 @@ function clearConnectedEdgeRoutes(state: CanvasState, nodeIds: Array<NodeId>) {
   }
 }
 
-function clearAllExplicitEdgePorts(state: CanvasState) {
+function clearAllExplicitEdgePorts(state: CanvasDocumentState) {
   for (const edge of Object.values(state.edgesById)) {
     delete edge.sourcePort
     delete edge.targetPort
   }
 }
 
-function clearConnectedEdgePorts(state: CanvasState, nodeIds: Array<NodeId>) {
+function clearConnectedEdgePorts(
+  state: CanvasDocumentState,
+  nodeIds: Array<NodeId>,
+) {
   const nodeIdSet = new Set(nodeIds)
 
   for (const edge of Object.values(state.edgesById)) {
@@ -113,7 +129,7 @@ function getNodeCenterPoint(node: CanvasNode) {
 }
 
 function getPortSlotSortValue(
-  state: CanvasState,
+  state: CanvasDocumentState,
   otherNodeId: NodeId,
   side: CanvasPortSide,
 ) {
@@ -127,10 +143,14 @@ function getPortSlotSortValue(
   return side === 'LEFT' || side === 'RIGHT' ? otherCenter.y : otherCenter.x
 }
 
-function assignExplicitPortSlots(state: CanvasState) {
+function assignExplicitPortSlots(state: CanvasDocumentState) {
   const endpointGroups = new Map<
     string,
-    Array<{ edge: CanvasEdge; endpoint: 'source' | 'target'; sortValue: number }>
+    Array<{
+      edge: CanvasEdge
+      endpoint: 'source' | 'target'
+      sortValue: number
+    }>
   >()
 
   for (const edge of Object.values(state.edgesById)) {
@@ -141,11 +161,7 @@ function assignExplicitPortSlots(state: CanvasState) {
       group.push({
         edge,
         endpoint: 'source',
-        sortValue: getPortSlotSortValue(
-          state,
-          edge.targetNodeId,
-          sourceSide,
-        ),
+        sortValue: getPortSlotSortValue(state, edge.targetNodeId, sourceSide),
       })
       endpointGroups.set(key, group)
     }
@@ -157,11 +173,7 @@ function assignExplicitPortSlots(state: CanvasState) {
       group.push({
         edge,
         endpoint: 'target',
-        sortValue: getPortSlotSortValue(
-          state,
-          edge.sourceNodeId,
-          targetSide,
-        ),
+        sortValue: getPortSlotSortValue(state, edge.sourceNodeId, targetSide),
       })
       endpointGroups.set(key, group)
     }
@@ -199,7 +211,7 @@ function assignExplicitPortSlots(state: CanvasState) {
 }
 
 function setNodeLayoutMode(
-  state: CanvasState,
+  state: CanvasDocumentState,
   nodeIds: Array<NodeId>,
   layoutMode: CanvasNodeLayoutMode,
 ) {
@@ -213,7 +225,7 @@ function setNodeLayoutMode(
 
 /** Materializes both edge endpoints once a connected node is manually transformed so anchors stop sliding. */
 function materializeConnectedEdgePorts(
-  state: CanvasState,
+  state: CanvasDocumentState,
   nodeIds: Array<NodeId>,
 ) {
   const nodeIdSet = new Set(nodeIds)
@@ -249,7 +261,7 @@ function materializeConnectedEdgePorts(
 
 /** Recursively collects a node's ID and all its descendant IDs in the group hierarchy. */
 function getNodeAndDescendantIds(
-  state: CanvasState,
+  state: CanvasDocumentState,
   id: NodeId,
 ): Array<NodeId> {
   const ids = [id]
@@ -262,7 +274,7 @@ function getNodeAndDescendantIds(
   return ids
 }
 
-function prepareNodeTransform(state: CanvasState, id: NodeId) {
+function prepareNodeTransform(state: CanvasDocumentState, id: NodeId) {
   const affectedNodeIds = getNodeAndDescendantIds(state, id)
 
   clearConnectedEdgeRoutes(state, affectedNodeIds)
@@ -280,7 +292,7 @@ function prepareNodeTransform(state: CanvasState, id: NodeId) {
 
 /** Translates a node (and its group children) by a delta, invalidating connected edge routes. */
 function moveNodeByDelta(
-  state: CanvasState,
+  state: CanvasDocumentState,
   id: NodeId,
   deltaX: number,
   deltaY: number,
@@ -293,7 +305,7 @@ function moveNodeByDelta(
   node.x += deltaX
   node.y += deltaY
 
-  if (node.shape !== 'group') return
+  if (node.kind !== 'group') return
 
   const childIds = state.childIdsByGroupId[id] ?? []
   for (const childId of childIds) {
@@ -305,7 +317,9 @@ function moveNodeByDelta(
   }
 }
 
-type CanvasState = {
+export type CanvasTabId = string
+
+export type CanvasDocumentState = {
   nodesById: Record<NodeId, CanvasNode>
   nodeOrder: Array<NodeId>
   edgesById: Record<EdgeId, CanvasEdge>
@@ -313,16 +327,33 @@ type CanvasState = {
   childIdsByGroupId: Record<NodeId, Array<NodeId>>
   selectedNodeId: NodeId | null
   selectedNodeIds: Array<NodeId>
+  viewport: CanvasViewport
+  flowDirection: CanvasFlowDirection
+  routingAuthority: CanvasRoutingAuthorityMode
+  layoutOptions: LayoutOptions
+  isSeeded: boolean
+}
+
+export type CanvasTab = {
+  id: CanvasTabId
+  label: string
+  closable: boolean
+  dirty: boolean
+  document: CanvasDocumentState
+}
+
+type CanvasState = {
+  tabsById: Record<CanvasTabId, CanvasTab>
+  tabOrder: Array<CanvasTabId>
+  activeTabId: CanvasTabId
+  nextUntitledIndex: number
   isMarqueeSelecting: boolean
   editingNodeId: NodeId | null
   isStageMounted: boolean
   stageSize: CanvasStageSize
-  viewport: CanvasViewport
   showResolvedReferences: boolean
-  flowDirection: CanvasFlowDirection
-  routingAuthority: CanvasRoutingAuthorityMode
-  layoutOptions: LayoutOptions
   actions: CanvasActions
+  tabActions: CanvasTabActions
 }
 
 export type CanvasViewport = {
@@ -383,6 +414,19 @@ export type SetGraphPayload = {
   edges: Array<CanvasEdge>
 }
 
+type TargetTabOptions = {
+  tabId?: CanvasTabId
+  markDirty?: boolean
+}
+
+type CreateCanvasTabPayload = {
+  label?: string
+  nodes?: Array<CanvasNode>
+  edges?: Array<CanvasEdge>
+  viewport?: CanvasViewport
+  closable?: boolean
+}
+
 export type CanvasBounds = {
   x: number
   y: number
@@ -421,8 +465,12 @@ function getCanvasBounds(items: Array<CanvasBounds>): CanvasBounds | null {
 
 type CanvasActions = {
   addNode: (node: CanvasNode) => void
-  setGraph: (payload: SetGraphPayload) => void
-  applyGraphLayout: (payload: CanvasGraphLayoutResult) => void
+  setGraph: (payload: SetGraphPayload, options?: TargetTabOptions) => void
+  seedActiveDocument: (payload: SetGraphPayload) => void
+  applyGraphLayout: (
+    payload: CanvasGraphLayoutResult,
+    options?: TargetTabOptions,
+  ) => void
   setStageMounted: (isMounted: boolean) => void
   setStageSize: (stageSize: CanvasStageSize) => void
   selectNode: (id: NodeId | null) => void
@@ -433,7 +481,7 @@ type CanvasActions = {
   setMarqueeSelecting: (isSelecting: boolean) => void
   startEditing: (id: NodeId) => void
   stopEditing: () => void
-  setViewport: (viewport: CanvasViewport) => void
+  setViewport: (viewport: CanvasViewport, options?: TargetTabOptions) => void
   moveNode: (payload: MoveNodePayload) => void
   moveSelectedNodes: (payload: MoveSelectedNodesPayload) => void
   resizeNode: (payload: ResizeNodePayload) => void
@@ -444,77 +492,214 @@ type CanvasActions = {
   setRoutingAuthority: (routingAuthority: CanvasRoutingAuthorityMode) => void
   setLayoutOptions: (options: Partial<LayoutOptions>) => void
 }
+
+type CanvasTabActions = {
+  createTab: (payload?: CreateCanvasTabPayload) => CanvasTabId
+  switchTab: (tabId: CanvasTabId) => void
+  closeTab: (tabId: CanvasTabId) => void
+  renameTab: (tabId: CanvasTabId, label: string) => void
+  markTabDirty: (tabId: CanvasTabId) => void
+}
+
+function cloneCanvasNode(node: CanvasNode): CanvasNode {
+  return { ...node }
+}
+
+function cloneCanvasEdge(edge: CanvasEdge): CanvasEdge {
+  const clone: CanvasEdge = {
+    ...edge,
+  }
+
+  if (edge.sourcePort) clone.sourcePort = { ...edge.sourcePort }
+  if (edge.targetPort) clone.targetPort = { ...edge.targetPort }
+  if (edge.routePoints) {
+    clone.routePoints = edge.routePoints.map((point) => ({ ...point }))
+  }
+
+  return clone
+}
+
+function createCanvasDocumentState({
+  nodes = [],
+  edges = [],
+  viewport = { x: 0, y: 0, scale: 1 },
+  isSeeded = nodes.length > 0 || edges.length > 0,
+}: {
+  nodes?: Array<CanvasNode>
+  edges?: Array<CanvasEdge>
+  viewport?: CanvasViewport
+  isSeeded?: boolean
+} = {}): CanvasDocumentState {
+  const clonedNodes = nodes.map(cloneCanvasNode)
+  const clonedEdges = edges.map(cloneCanvasEdge)
+
+  return {
+    nodesById: R.indexBy(clonedNodes, R.prop('id')),
+    nodeOrder: clonedNodes.map((node) => node.id),
+    edgesById: R.indexBy(clonedEdges, R.prop('id')),
+    edgeOrder: clonedEdges.map((edge) => edge.id),
+    childIdsByGroupId: getChildIdsByGroupId(clonedNodes),
+    selectedNodeId: null,
+    selectedNodeIds: [],
+    viewport: { ...viewport },
+    flowDirection: DEFAULT_CANVAS_FLOW_DIRECTION,
+    routingAuthority: 'manual',
+    layoutOptions: { ...DEFAULT_ELK_LAYOUT_OPTIONS },
+    isSeeded,
+  }
+}
+
+function createCanvasTab({
+  id,
+  label,
+  closable,
+  document,
+}: {
+  id: CanvasTabId
+  label: string
+  closable: boolean
+  document: CanvasDocumentState
+}): CanvasTab {
+  return {
+    id,
+    label,
+    closable,
+    dirty: false,
+    document,
+  }
+}
+
+function getActiveDocument(state: CanvasState): CanvasDocumentState {
+  return state.tabsById[state.activeTabId]!.document
+}
+
+function getTargetDocument(
+  state: CanvasState,
+  tabId?: CanvasTabId,
+): CanvasDocumentState | null {
+  return state.tabsById[tabId ?? state.activeTabId]?.document ?? null
+}
+
+function markTabDirty(
+  state: CanvasState,
+  tabId: CanvasTabId,
+  markDirty = true,
+) {
+  if (markDirty) {
+    const tab = state.tabsById[tabId]
+    if (tab) tab.dirty = true
+  }
+}
+
+function resetDocumentGraph(
+  document: CanvasDocumentState,
+  { nodes, edges }: SetGraphPayload,
+) {
+  const clonedNodes = nodes.map(cloneCanvasNode)
+  const clonedEdges = edges.map(cloneCanvasEdge)
+
+  document.nodesById = R.indexBy(clonedNodes, R.prop('id'))
+  document.nodeOrder = clonedNodes.map((node) => node.id)
+  document.edgesById = R.indexBy(clonedEdges, R.prop('id'))
+  document.edgeOrder = clonedEdges.map((edge) => edge.id)
+  document.childIdsByGroupId = getChildIdsByGroupId(clonedNodes)
+  document.selectedNodeId = null
+  document.selectedNodeIds = []
+  document.isSeeded = true
+}
+
+function createInitialCanvasState() {
+  const mainTab = createCanvasTab({
+    id: MAIN_CANVAS_TAB_ID,
+    label: INITIAL_CANVAS_TAB_LABEL,
+    closable: false,
+    document: createCanvasDocumentState({ isSeeded: false }),
+  })
+
+  return {
+    tabsById: {
+      [mainTab.id]: mainTab,
+    },
+    tabOrder: [mainTab.id],
+    activeTabId: mainTab.id,
+    nextUntitledIndex: 2,
+    isMarqueeSelecting: false,
+    editingNodeId: null,
+    isStageMounted: false,
+    stageSize: {
+      width: 0,
+      height: 0,
+    },
+    showResolvedReferences: true,
+  }
+}
 const useCanvasStore = create<CanvasState>()(
   devtools(
     immer((set) => ({
-      nodesById: {},
-      nodeOrder: [],
-      edgesById: {},
-      edgeOrder: [],
-      childIdsByGroupId: {},
-      selectedNodeId: null,
-      selectedNodeIds: [],
-      isMarqueeSelecting: false,
-      editingNodeId: null,
-      isStageMounted: false,
-      stageSize: {
-        width: 0,
-        height: 0,
-      },
-      showResolvedReferences: true,
-      flowDirection: DEFAULT_CANVAS_FLOW_DIRECTION,
-      routingAuthority: 'manual',
-      layoutOptions: DEFAULT_ELK_LAYOUT_OPTIONS,
-      viewport: {
-        x: 0,
-        y: 0,
-        scale: 1,
-      },
+      ...createInitialCanvasState(),
       actions: {
         addNode: (node) =>
           set(
             (state) => {
-              state.nodesById[node.id] = node
-              if (!state.nodeOrder.includes(node.id)) {
-                state.nodeOrder.push(node.id)
+              const document = getActiveDocument(state)
+              document.nodesById[node.id] = cloneCanvasNode(node)
+              if (!document.nodeOrder.includes(node.id)) {
+                document.nodeOrder.push(node.id)
               }
 
               if (node.parentGroupId) {
                 const childIds =
-                  state.childIdsByGroupId[node.parentGroupId] ?? []
+                  document.childIdsByGroupId[node.parentGroupId] ?? []
                 if (!childIds.includes(node.id)) {
                   childIds.push(node.id)
                 }
-                state.childIdsByGroupId[node.parentGroupId] = childIds
+                document.childIdsByGroupId[node.parentGroupId] = childIds
               }
+
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/addNode',
           ),
 
-        setGraph: ({ nodes, edges }) =>
+        setGraph: (payload, options = {}) =>
           set(
             (state) => {
-              state.nodesById = R.indexBy(nodes, R.prop('id'))
-              state.nodeOrder = nodes.map((node) => node.id)
-              state.edgesById = R.indexBy(edges, R.prop('id'))
-              state.edgeOrder = edges.map((edge) => edge.id)
-              state.childIdsByGroupId = getChildIdsByGroupId(nodes)
-              state.selectedNodeId = null
-              state.selectedNodeIds = []
+              const tabId = options.tabId ?? state.activeTabId
+              const document = getTargetDocument(state, tabId)
+              if (!document) return
+
+              resetDocumentGraph(document, payload)
               state.editingNodeId = null
+              markTabDirty(state, tabId, options.markDirty)
             },
             false,
             'canvas/setGraph',
           ),
 
-        applyGraphLayout: ({ nodeFrames, edgeRoutes }) =>
+        seedActiveDocument: (payload) =>
           set(
             (state) => {
-              setNodeLayoutMode(state, state.nodeOrder, 'auto')
+              const document = getActiveDocument(state)
+              if (document.isSeeded) return
+
+              resetDocumentGraph(document, payload)
+            },
+            false,
+            'canvas/seedActiveDocument',
+          ),
+
+        applyGraphLayout: ({ nodeFrames, edgeRoutes }, options = {}) =>
+          set(
+            (state) => {
+              const tabId = options.tabId ?? state.activeTabId
+              const document = getTargetDocument(state, tabId)
+              if (!document) return
+
+              setNodeLayoutMode(document, document.nodeOrder, 'auto')
 
               for (const frame of nodeFrames) {
-                const node = state.nodesById[frame.id]
+                const node = document.nodesById[frame.id]
                 if (!node) continue
 
                 const didChange =
@@ -532,14 +717,16 @@ const useCanvasStore = create<CanvasState>()(
                 }
               }
 
-              clearAllExplicitEdgePorts(state)
+              clearAllExplicitEdgePorts(document)
 
               for (const edgeRoute of edgeRoutes) {
-                const edge = state.edgesById[edgeRoute.id]
+                const edge = document.edgesById[edgeRoute.id]
                 if (!edge) continue
 
                 edge.routePoints = edgeRoute.points
               }
+
+              markTabDirty(state, tabId, options.markDirty)
             },
             false,
             'canvas/applyGraphLayout',
@@ -575,8 +762,9 @@ const useCanvasStore = create<CanvasState>()(
         selectNode: (id) =>
           set(
             (state) => {
-              state.selectedNodeId = id
-              state.selectedNodeIds = id ? [id] : []
+              const document = getActiveDocument(state)
+              document.selectedNodeId = id
+              document.selectedNodeIds = id ? [id] : []
             },
             false,
             'canvas/selectNode',
@@ -585,8 +773,10 @@ const useCanvasStore = create<CanvasState>()(
         selectNodes: (ids) =>
           set(
             (state) => {
-              state.selectedNodeIds = ids
-              state.selectedNodeId = ids.length === 1 ? (ids[0] ?? null) : null
+              const document = getActiveDocument(state)
+              document.selectedNodeIds = ids
+              document.selectedNodeId =
+                ids.length === 1 ? (ids[0] ?? null) : null
             },
             false,
             'canvas/selectNodes',
@@ -595,8 +785,9 @@ const useCanvasStore = create<CanvasState>()(
         selectNodesFromMarquee: (ids) =>
           set(
             (state) => {
-              state.selectedNodeIds = ids
-              state.selectedNodeId = null
+              const document = getActiveDocument(state)
+              document.selectedNodeIds = ids
+              document.selectedNodeId = null
             },
             false,
             'canvas/selectNodesFromMarquee',
@@ -605,9 +796,10 @@ const useCanvasStore = create<CanvasState>()(
         groupSelectedNodes: () =>
           set(
             (state) => {
-              const selectedNodes = state.selectedNodeIds.flatMap((id) => {
-                const node = state.nodesById[id]
-                if (!node || node.shape === 'group' || node.parentGroupId) {
+              const document = getActiveDocument(state)
+              const selectedNodes = document.selectedNodeIds.flatMap((id) => {
+                const node = document.nodesById[id]
+                if (!node || node.kind === 'group' || node.parentGroupId) {
                   return []
                 }
 
@@ -620,6 +812,7 @@ const useCanvasStore = create<CanvasState>()(
               const groupId = createNodeId('group')
               const groupNode: CanvasNode = {
                 id: groupId,
+                kind: 'group',
                 shape: 'group',
                 layoutMode: 'manual',
                 x: bounds.x - GROUP_NODE_PADDING,
@@ -632,20 +825,21 @@ const useCanvasStore = create<CanvasState>()(
                 version: 1,
               }
 
-              state.nodesById[groupId] = groupNode
-              state.nodeOrder.unshift(groupId)
-              state.childIdsByGroupId[groupId] = selectedNodes.map(
+              document.nodesById[groupId] = groupNode
+              document.nodeOrder.unshift(groupId)
+              document.childIdsByGroupId[groupId] = selectedNodes.map(
                 (node) => node.id,
               )
               for (const node of selectedNodes) {
                 node.parentGroupId = groupId
               }
               clearConnectedEdgeRoutes(
-                state,
+                document,
                 selectedNodes.map((node) => node.id),
               )
-              state.selectedNodeId = groupId
-              state.selectedNodeIds = [groupId]
+              document.selectedNodeId = groupId
+              document.selectedNodeIds = [groupId]
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/groupSelectedNodes',
@@ -654,27 +848,29 @@ const useCanvasStore = create<CanvasState>()(
         ungroupNode: (id) =>
           set(
             (state) => {
-              const groupNode = state.nodesById[id]
-              if (!groupNode || groupNode.shape !== 'group') return
+              const document = getActiveDocument(state)
+              const groupNode = document.nodesById[id]
+              if (!groupNode || groupNode.kind !== 'group') return
 
-              const childIds = state.childIdsByGroupId[id] ?? []
+              const childIds = document.childIdsByGroupId[id] ?? []
 
               for (const childId of childIds) {
-                const node = state.nodesById[childId]
+                const node = document.nodesById[childId]
                 if (!node) continue
 
                 delete node.parentGroupId
               }
-              clearConnectedEdgeRoutes(state, childIds)
+              clearConnectedEdgeRoutes(document, childIds)
 
-              delete state.nodesById[id]
-              delete state.childIdsByGroupId[id]
-              state.nodeOrder = state.nodeOrder.filter(
+              delete document.nodesById[id]
+              delete document.childIdsByGroupId[id]
+              document.nodeOrder = document.nodeOrder.filter(
                 (nodeId) => nodeId !== id,
               )
-              state.selectedNodeId =
+              document.selectedNodeId =
                 childIds.length === 1 ? (childIds[0] ?? null) : null
-              state.selectedNodeIds = childIds
+              document.selectedNodeIds = childIds
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/ungroupNode',
@@ -692,9 +888,10 @@ const useCanvasStore = create<CanvasState>()(
         startEditing: (id) =>
           set(
             (state) => {
+              const document = getActiveDocument(state)
               state.editingNodeId = id
-              state.selectedNodeId = id
-              state.selectedNodeIds = [id]
+              document.selectedNodeId = id
+              document.selectedNodeIds = [id]
             },
             false,
             'canvas/startEditing',
@@ -709,12 +906,17 @@ const useCanvasStore = create<CanvasState>()(
             'canvas/stopEditing',
           ),
 
-        setViewport: ({ x, y, scale }) =>
+        setViewport: ({ x, y, scale }, options = {}) =>
           set(
             (state) => {
-              state.viewport.x = x
-              state.viewport.y = y
-              state.viewport.scale = scale
+              const tabId = options.tabId ?? state.activeTabId
+              const document = getTargetDocument(state, tabId)
+              if (!document) return
+
+              document.viewport.x = x
+              document.viewport.y = y
+              document.viewport.scale = scale
+              markTabDirty(state, tabId, options.markDirty)
             },
             false,
             'canvas/setViewport',
@@ -723,26 +925,29 @@ const useCanvasStore = create<CanvasState>()(
         moveNode: ({ id, x, y }) =>
           set(
             (state) => {
-              const node = state.nodesById[id]
+              const document = getActiveDocument(state)
+              const node = document.nodesById[id]
               if (!node) return
 
               const deltaX = x - node.x
               const deltaY = y - node.y
-              prepareNodeTransform(state, id)
+              prepareNodeTransform(document, id)
 
               node.x = x
               node.y = y
+              markTabDirty(state, state.activeTabId)
 
-              if (node.shape !== 'group') return
+              if (node.kind !== 'group') return
 
-              const childIds = state.childIdsByGroupId[id] ?? []
+              const childIds = document.childIdsByGroupId[id] ?? []
               for (const childId of childIds) {
-                const childNode = state.nodesById[childId]
+                const childNode = document.nodesById[childId]
                 if (!childNode) continue
 
                 childNode.x += deltaX
                 childNode.y += deltaY
               }
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/moveNode',
@@ -751,15 +956,19 @@ const useCanvasStore = create<CanvasState>()(
         moveSelectedNodes: ({ deltaX, deltaY }) =>
           set(
             (state) => {
-              const selectedRootIds = state.selectedNodeIds.filter((id) => {
-                const node = state.nodesById[id]
+              const document = getActiveDocument(state)
+              const selectedRootIds = document.selectedNodeIds.filter((id) => {
+                const node = document.nodesById[id]
                 if (!node?.parentGroupId) return Boolean(node)
 
-                return !state.selectedNodeIds.includes(node.parentGroupId)
+                return !document.selectedNodeIds.includes(node.parentGroupId)
               })
 
               for (const id of selectedRootIds) {
-                moveNodeByDelta(state, id, deltaX, deltaY)
+                moveNodeByDelta(document, id, deltaX, deltaY)
+              }
+              if (selectedRootIds.length > 0) {
+                markTabDirty(state, state.activeTabId)
               }
             },
             false,
@@ -769,15 +978,17 @@ const useCanvasStore = create<CanvasState>()(
         resizeNode: ({ id, width, height }) =>
           set(
             (state) => {
-              const node = state.nodesById[id]
+              const document = getActiveDocument(state)
+              const node = document.nodesById[id]
               if (!node) return
 
               const shapeDefinition = getCanvasNodeShapeDefinition(node)
-              prepareNodeTransform(state, id)
+              prepareNodeTransform(document, id)
 
               node.width = Math.max(shapeDefinition.minSize.width, width)
               node.height = Math.max(shapeDefinition.minSize.height, height)
               node.version += 1
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/resizeNode',
@@ -786,11 +997,12 @@ const useCanvasStore = create<CanvasState>()(
         updateNodeFrame: ({ id, x, y, width, height }) =>
           set(
             (state) => {
-              const node = state.nodesById[id]
+              const document = getActiveDocument(state)
+              const node = document.nodesById[id]
               if (!node) return
 
               const shapeDefinition = getCanvasNodeShapeDefinition(node)
-              prepareNodeTransform(state, id)
+              prepareNodeTransform(document, id)
               const deltaX = x - node.x
               const deltaY = y - node.y
               const nextWidth = Math.max(shapeDefinition.minSize.width, width)
@@ -809,12 +1021,13 @@ const useCanvasStore = create<CanvasState>()(
               node.width = nextWidth
               node.height = nextHeight
               node.version += 1
+              markTabDirty(state, state.activeTabId)
 
-              if (node.shape !== 'group') return
+              if (node.kind !== 'group') return
 
-              const childIds = state.childIdsByGroupId[id] ?? []
+              const childIds = document.childIdsByGroupId[id] ?? []
               for (const childId of childIds) {
-                const childNode = state.nodesById[childId]
+                const childNode = document.nodesById[childId]
                 if (!childNode) continue
 
                 if (!didResize) {
@@ -837,13 +1050,15 @@ const useCanvasStore = create<CanvasState>()(
         commitNodeText: ({ id, lexicalJson, html, contentHeight }) =>
           set(
             (state) => {
-              const node = state.nodesById[id]
+              const document = getActiveDocument(state)
+              const node = document.nodesById[id]
               if (!node) return
 
               node.lexicalJson = lexicalJson
               node.html = html
               node.contentHeight = contentHeight
               node.version += 1
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/commitNodeText',
@@ -861,9 +1076,11 @@ const useCanvasStore = create<CanvasState>()(
         setFlowDirection: (flowDirection) =>
           set(
             (state) => {
-              state.flowDirection = flowDirection
-              clearConnectedEdgeRoutes(state, state.nodeOrder)
-              clearAllExplicitEdgePorts(state)
+              const document = getActiveDocument(state)
+              document.flowDirection = flowDirection
+              clearConnectedEdgeRoutes(document, document.nodeOrder)
+              clearAllExplicitEdgePorts(document)
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/setFlowDirection',
@@ -872,15 +1089,18 @@ const useCanvasStore = create<CanvasState>()(
         setRoutingAuthority: (routingAuthority) =>
           set(
             (state) => {
-              state.routingAuthority = routingAuthority
-              clearConnectedEdgeRoutes(state, state.nodeOrder)
+              const document = getActiveDocument(state)
+              document.routingAuthority = routingAuthority
+              clearConnectedEdgeRoutes(document, document.nodeOrder)
 
               if (routingAuthority === 'manual') {
-                materializeConnectedEdgePorts(state, state.nodeOrder)
+                materializeConnectedEdgePorts(document, document.nodeOrder)
+                markTabDirty(state, state.activeTabId)
                 return
               }
 
-              clearAllExplicitEdgePorts(state)
+              clearAllExplicitEdgePorts(document)
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/setRoutingAuthority',
@@ -889,10 +1109,106 @@ const useCanvasStore = create<CanvasState>()(
         setLayoutOptions: (options) =>
           set(
             (state) => {
-              Object.assign(state.layoutOptions, options)
+              const document = getActiveDocument(state)
+              Object.assign(document.layoutOptions, options)
+              markTabDirty(state, state.activeTabId)
             },
             false,
             'canvas/setLayoutOptions',
+          ),
+      },
+      tabActions: {
+        createTab: (payload = {}) => {
+          const id = createCanvasTabId()
+          set(
+            (state) => {
+              const label =
+                payload.label ?? `Untitled ${state.nextUntitledIndex}`
+              state.nextUntitledIndex += 1
+
+              const tab = createCanvasTab({
+                id,
+                label,
+                closable: payload.closable ?? true,
+                document: createCanvasDocumentState({
+                  nodes: payload.nodes ?? DEFAULT_CANVAS_NODES,
+                  edges: payload.edges ?? DEFAULT_CANVAS_EDGES,
+                  viewport: payload.viewport,
+                  isSeeded: true,
+                }),
+              })
+
+              state.tabsById[id] = tab
+              state.tabOrder.push(id)
+              state.activeTabId = id
+              state.editingNodeId = null
+              state.isMarqueeSelecting = false
+            },
+            false,
+            'canvasTab/create',
+          )
+
+          return id
+        },
+
+        switchTab: (tabId) =>
+          set(
+            (state) => {
+              if (!state.tabsById[tabId] || state.activeTabId === tabId) return
+
+              state.activeTabId = tabId
+              state.editingNodeId = null
+              state.isMarqueeSelecting = false
+            },
+            false,
+            'canvasTab/switch',
+          ),
+
+        closeTab: (tabId) =>
+          set(
+            (state) => {
+              const tab = state.tabsById[tabId]
+              if (!tab?.closable) return
+
+              const closingIndex = state.tabOrder.indexOf(tabId)
+              const nextTabId =
+                state.tabOrder[closingIndex - 1] ??
+                state.tabOrder[closingIndex + 1] ??
+                MAIN_CANVAS_TAB_ID
+
+              delete state.tabsById[tabId]
+              state.tabOrder = state.tabOrder.filter((id) => id !== tabId)
+
+              if (state.activeTabId === tabId) {
+                state.activeTabId = nextTabId
+                state.editingNodeId = null
+                state.isMarqueeSelecting = false
+              }
+            },
+            false,
+            'canvasTab/close',
+          ),
+
+        renameTab: (tabId, label) =>
+          set(
+            (state) => {
+              const tab = state.tabsById[tabId]
+              const nextLabel = label.trim()
+              if (!tab || !nextLabel) return
+
+              tab.label = nextLabel
+            },
+            false,
+            'canvasTab/rename',
+          ),
+
+        markTabDirty: (tabId) =>
+          set(
+            (state) => {
+              markTabDirty(state, tabId)
+            },
+            false,
+            'canvasTab/markDirty',
           ),
       },
     })),
@@ -905,44 +1221,54 @@ const useCanvasStore = create<CanvasState>()(
 
 /** Returns the current viewport outside of React (for use in callbacks). */
 export function getCanvasViewportSnapshot() {
-  return useCanvasStore.getState().viewport
+  return getActiveDocument(useCanvasStore.getState()).viewport
 }
 
 /** Returns the current nodes map outside of React (for use in callbacks). */
 export function getCanvasNodesSnapshot() {
-  return useCanvasStore.getState().nodesById
+  return getActiveDocument(useCanvasStore.getState()).nodesById
 }
 
 export function getCanvasNodeIdsSnapshot() {
-  return useCanvasStore.getState().nodeOrder
+  return getActiveDocument(useCanvasStore.getState()).nodeOrder
+}
+
+export function getActiveCanvasTabIdSnapshot() {
+  return useCanvasStore.getState().activeTabId
 }
 
 /** Snapshots the full layout input (nodes, edges, groups, options) for sending to the server. */
-export function getCanvasLayoutSnapshot(): CanvasLayoutInput {
+export function getCanvasLayoutSnapshot(
+  tabId?: CanvasTabId,
+): CanvasLayoutInput {
   const state = useCanvasStore.getState()
+  const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
 
   return {
-    nodesById: state.nodesById,
-    nodeOrder: state.nodeOrder,
-    childIdsByGroupId: state.childIdsByGroupId,
-    edgesById: state.edgesById,
-    edgeOrder: state.edgeOrder,
-    flowDirection: state.flowDirection,
-    layoutOptions: state.layoutOptions,
+    nodesById: document.nodesById,
+    nodeOrder: document.nodeOrder,
+    childIdsByGroupId: document.childIdsByGroupId,
+    edgesById: document.edgesById,
+    edgeOrder: document.edgeOrder,
+    flowDirection: document.flowDirection,
+    layoutOptions: document.layoutOptions,
   }
 }
 
-export function getCanvasExportSnapshot(): CanvasExportSnapshot {
+export function getCanvasExportSnapshot(
+  tabId?: CanvasTabId,
+): CanvasExportSnapshot {
   const state = useCanvasStore.getState()
+  const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
 
   return {
-    nodesById: state.nodesById,
-    nodeOrder: state.nodeOrder,
-    edgesById: state.edgesById,
-    edgeOrder: state.edgeOrder,
-    viewport: state.viewport,
-    flowDirection: state.flowDirection,
-    layoutOptions: state.layoutOptions,
+    nodesById: document.nodesById,
+    nodeOrder: document.nodeOrder,
+    edgesById: document.edgesById,
+    edgeOrder: document.edgeOrder,
+    viewport: document.viewport,
+    flowDirection: document.flowDirection,
+    layoutOptions: document.layoutOptions,
   }
 }
 
@@ -950,24 +1276,52 @@ export function getCanvasActionsSnapshot() {
   return useCanvasStore.getState().actions
 }
 
-export const useCanvasActions = () => useCanvasStore((state) => state.actions)
+export function getCanvasTabActionsSnapshot() {
+  return useCanvasStore.getState().tabActions
+}
 
-export const useCanvasNodes = () => useCanvasStore((state) => state.nodesById)
-export const useCanvasEdges = () => useCanvasStore((state) => state.edgesById)
+export function resetCanvasStoreForTests() {
+  useCanvasStore.setState((state) => ({
+    ...state,
+    ...createInitialCanvasState(),
+  }))
+}
+
+export const useCanvasActions = () => useCanvasStore((state) => state.actions)
+export const useCanvasTabActions = () =>
+  useCanvasStore((state) => state.tabActions)
+
+export const useCanvasTabs = () =>
+  useCanvasStore(
+    useShallow((state) =>
+      state.tabOrder.flatMap((id) => {
+        const tab = state.tabsById[id]
+        return tab ? [tab] : []
+      }),
+    ),
+  )
+export const useActiveCanvasTabId = () =>
+  useCanvasStore((state) => state.activeTabId)
+
+export const useCanvasNodes = () =>
+  useCanvasStore((state) => getActiveDocument(state).nodesById)
+export const useCanvasEdges = () =>
+  useCanvasStore((state) => getActiveDocument(state).edgesById)
 export const useCanvasNode: (id: NodeId) => CanvasNode | undefined = (id) =>
-  useCanvasStore((state) => state.nodesById[id])
+  useCanvasStore((state) => getActiveDocument(state).nodesById[id])
 export const useCanvasNodeWidth = (id: NodeId) =>
-  useCanvasStore((state) => state.nodesById[id]?.width)
+  useCanvasStore((state) => getActiveDocument(state).nodesById[id]?.width)
 
 export const useCanvasNodeIds = () =>
-  useCanvasStore(useShallow((state) => state.nodeOrder))
+  useCanvasStore(useShallow((state) => getActiveDocument(state).nodeOrder))
 export const useCanvasEdgeIds = () =>
-  useCanvasStore(useShallow((state) => state.edgeOrder))
+  useCanvasStore(useShallow((state) => getActiveDocument(state).edgeOrder))
 export const useCanvasSelectedNodeBounds = () =>
   useCanvasStore(
     useShallow((state): CanvasSelectedNodeBounds | null => {
-      const selectedBounds = state.selectedNodeIds.flatMap((id) => {
-        const node = state.nodesById[id]
+      const document = getActiveDocument(state)
+      const selectedBounds = document.selectedNodeIds.flatMap((id) => {
+        const node = document.nodesById[id]
         if (!node) return []
 
         return [
@@ -985,15 +1339,17 @@ export const useCanvasSelectedNodeBounds = () =>
 
       return {
         ...bounds,
-        selectedCount: state.selectedNodeIds.length,
-        selectedNodeIds: state.selectedNodeIds,
+        selectedCount: document.selectedNodeIds.length,
+        selectedNodeIds: document.selectedNodeIds,
       }
     }),
   )
 export const useSelectedNodeId = () =>
-  useCanvasStore((state) => state.selectedNodeId)
+  useCanvasStore((state) => getActiveDocument(state).selectedNodeId)
 export const useSelectedNodeIds = () =>
-  useCanvasStore(useShallow((state) => state.selectedNodeIds))
+  useCanvasStore(
+    useShallow((state) => getActiveDocument(state).selectedNodeIds),
+  )
 export const useIsMarqueeSelecting = () =>
   useCanvasStore((state) => state.isMarqueeSelecting)
 export const useCanvasEditingNodeId = () =>
@@ -1002,12 +1358,13 @@ export const useCanvasIsStageMounted = () =>
   useCanvasStore((state) => state.isStageMounted)
 export const useCanvasStageSizeValue = () =>
   useCanvasStore((state) => state.stageSize)
-export const useCanvasViewport = () => useCanvasStore((state) => state.viewport)
+export const useCanvasViewport = () =>
+  useCanvasStore((state) => getActiveDocument(state).viewport)
 export const useCanvasFlowDirection = () =>
-  useCanvasStore((state) => state.flowDirection)
+  useCanvasStore((state) => getActiveDocument(state).flowDirection)
 export const useCanvasRoutingAuthority = () =>
-  useCanvasStore((state) => state.routingAuthority)
+  useCanvasStore((state) => getActiveDocument(state).routingAuthority)
 export const useCanvasLayoutOptions = () =>
-  useCanvasStore((state) => state.layoutOptions)
+  useCanvasStore((state) => getActiveDocument(state).layoutOptions)
 export const useShowResolvedReferences = () =>
   useCanvasStore((state) => state.showResolvedReferences)
