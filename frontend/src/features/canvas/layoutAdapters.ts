@@ -33,6 +33,12 @@ import {
   SCHEMA_NODE_TITLE_COLOR,
 } from './themeColors'
 
+import {
+  DEFAULT_ELK_LAYOUT_OPTIONS,
+  ELK_PORT_CONSTRAINTS_OPTION,
+  ELK_PORT_SIDE_OPTION,
+} from '@/features/elk/constants'
+
 export type SchemaGraphNode = SchemaNodeOutput
 export type SchemaGraphEdge = SchemaEdgeOutput
 export type SchemaGraphPayload = SchemaGraphOutput
@@ -57,8 +63,6 @@ const ELK_PORT_SIDE_BY_CANVAS_PORT_SIDE: Record<CanvasPortSide, ElkPortSide> = {
 }
 
 const PORT_ID_SEPARATOR = ':port:'
-const ELK_PORT_CONSTRAINTS_OPTION = 'org.eclipse.elk.portConstraints'
-const ELK_PORT_SIDE_OPTION = 'org.eclipse.elk.port.side'
 
 const SOURCE_PORT_SIDE_BY_FLOW_DIRECTION: Record<
   CanvasFlowDirection,
@@ -78,18 +82,6 @@ const TARGET_PORT_SIDE_BY_FLOW_DIRECTION: Record<
   RL: 'RIGHT',
   TB: 'TOP',
   BT: 'BOTTOM',
-}
-
-export const DEFAULT_ELK_LAYOUT_OPTIONS: LayoutOptions = {
-  'elk.algorithm': 'layered',
-  'elk.direction': 'RIGHT',
-  'elk.edgeRouting': 'ORTHOGONAL',
-  'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-  'elk.padding': '[top=36,left=36,bottom=36,right=36]',
-  'elk.spacing.nodeNode': '48',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '88',
-  'elk.layered.spacing.edgeNodeBetweenLayers': '32',
-  'elk.layered.spacing.edgeEdgeBetweenLayers': '16',
 }
 
 const SCHEMA_GROUP_PREFIX = 'schema-group:'
@@ -231,7 +223,11 @@ function getFixedPortAnchorPoint(
   side: CanvasPortSide,
   portRef: CanvasPortRef,
 ) {
-  if (portRef.slot === undefined || !portRef.slotCount || portRef.slotCount < 2) {
+  if (
+    portRef.slot === undefined ||
+    !portRef.slotCount ||
+    portRef.slotCount < 2
+  ) {
     return getPortAnchorPoint(node, side, getNodeCenter(node))
   }
 
@@ -549,10 +545,9 @@ function clipRoutePointToFrameBoundary(
     addCandidate((maxY - point.y) / deltaY)
   }
 
-  const clippedCandidate = candidates.reduce<(typeof candidates)[number] | undefined>(
-    (min, c) => (!min || c.t < min.t ? c : min),
-    undefined,
-  )
+  const clippedCandidate = candidates.reduce<
+    (typeof candidates)[number] | undefined
+  >((min, c) => (!min || c.t < min.t ? c : min), undefined)
   return clippedCandidate?.point ?? point
 }
 

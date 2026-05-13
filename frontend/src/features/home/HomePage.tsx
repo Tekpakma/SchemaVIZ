@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight, Pencil } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -9,18 +10,18 @@ import type { Template } from './types'
 
 const FILTER_CHIPS = ['All', 'ERD', 'Infrastructure', 'Data flow', 'Domain']
 
-function handleOpenTemplate(tpl: Template) {
-  // TODO: Navigate to viewer route with template id
-  // e.g. navigate({ to: '/viewer/$templateId', params: { templateId: tpl.id } })
-  console.info('[POC] Open template:', tpl.id, tpl.title)
-}
-
-function handleOpenBuilder() {
-  // TODO: Navigate to builder route
-  console.info('[POC] Open builder')
-}
-
 export function HomePage() {
+  const navigate = useNavigate()
+
+  function handleOpenTemplate(tpl: Template) {
+    // TODO: Navigate to viewer route with template id
+    // e.g. navigate({ to: '/viewer/$templateId', params: { templateId: tpl.id } })
+    console.info('[POC] Open template:', tpl.id, tpl.title)
+  }
+
+  function handleOpenBuilder() {
+    navigate({ to: '/builder' })
+  }
   const featured = MOCK_TEMPLATES[0]!
   const continueRow = [MOCK_TEMPLATES[0]!, MOCK_TEMPLATES[2]!, MOCK_TEMPLATES[3]!]
   const browseRow = [

@@ -10,7 +10,7 @@ let elkPromise: Promise<ELK> | null = null
 /** Lazily initializes and caches a single ELK instance (promise-memoized to avoid races). */
 function getElk() {
   if (!elkPromise) {
-    elkPromise = import('./elkServerRuntime').then(({ createServerElk }) =>
+    elkPromise = import('@/features/elk/server').then(({ createServerElk }) =>
       createServerElk(),
     )
   }

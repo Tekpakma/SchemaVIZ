@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppBuilderRouteImport } from './routes/_app/builder'
 
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
@@ -27,27 +28,35 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppBuilderRoute = AppBuilderRouteImport.update({
+  id: '/builder',
+  path: '/builder',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/mcp': typeof McpRoute
+  '/builder': typeof AppBuilderRoute
 }
 export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
+  '/builder': typeof AppBuilderRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/mcp': typeof McpRoute
+  '/_app/builder': typeof AppBuilderRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/mcp'
+  fullPaths: '/' | '/mcp' | '/builder'
   fileRoutesByTo: FileRoutesByTo
-  to: '/mcp' | '/'
-  id: '__root__' | '/_app' | '/mcp' | '/_app/'
+  to: '/mcp' | '/builder' | '/'
+  id: '__root__' | '/_app' | '/mcp' | '/_app/builder' | '/_app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -78,14 +87,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/builder': {
+      id: '/_app/builder'
+      path: '/builder'
+      fullPath: '/builder'
+      preLoaderRoute: typeof AppBuilderRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppBuilderRoute: typeof AppBuilderRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppBuilderRoute: AppBuilderRoute,
   AppIndexRoute: AppIndexRoute,
 }
 

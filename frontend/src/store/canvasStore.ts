@@ -21,9 +21,9 @@ import {
 } from '@/features/canvas/constants'
 import {
   DEFAULT_CANVAS_FLOW_DIRECTION,
-  DEFAULT_ELK_LAYOUT_OPTIONS,
   resolveEdgePortSide,
 } from '@/features/canvas/layoutAdapters'
+import { DEFAULT_ELK_LAYOUT_OPTIONS } from '@/features/elk/constants'
 import type { LayoutOptions } from 'elkjs/lib/elk-api'
 import * as R from 'remeda'
 
