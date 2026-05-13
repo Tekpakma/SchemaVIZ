@@ -19,3 +19,5 @@ playwright-report/
 test-results/
 graphify-out/
 .graphify/
+.playwright-mcp/
+.claude/

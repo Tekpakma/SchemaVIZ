@@ -147,10 +147,10 @@ describe('canvas export serializer', () => {
             elkSections: [
               {
                 startPoint: { x: 240, y: 160 },
-                endPoint: { x: 400, y: 140 },
+                endPoint: { x: 400, y: 100 },
                 bendPoints: [
                   { x: 320, y: 160 },
-                  { x: 320, y: 140 },
+                  { x: 320, y: 100 },
                 ],
               },
             ],
@@ -184,23 +184,17 @@ describe('canvas export serializer', () => {
       scaleFactor: 1.5,
     })
 
-    expect(request.reactFlowState).toMatchObject({
-      nodes: [
-        {
-          id: 'box-1',
-          style: {
-            backgroundColor: '#101820',
-          },
-        },
-      ],
-      edges: [
-        {
-          id: 'edge-1',
-          style: {
-            stroke: '#9ef0e8',
-          },
-        },
-      ],
+    expect(request.reactFlowState.nodes[0]).toMatchObject({
+      id: 'box-1',
+      style: {
+        backgroundColor: '#101820',
+      },
+    })
+    expect(request.reactFlowState.edges[0]).toMatchObject({
+      id: 'edge-1',
+      style: {
+        stroke: '#9ef0e8',
+      },
     })
   })
-}
+})

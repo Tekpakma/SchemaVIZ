@@ -39,6 +39,10 @@ function applyResolvedTheme(resolvedTheme: ResolvedTheme) {
   document.documentElement.style.colorScheme = resolvedTheme
 }
 
+function getInitialResolvedTheme(initialTheme: ThemeMode): ResolvedTheme {
+  return resolveThemeMode(initialTheme, getSystemTheme() === 'dark')
+}
+
 export function ThemeProvider({
   children,
   initialTheme = DEFAULT_THEME_MODE,
@@ -49,7 +53,7 @@ export function ThemeProvider({
   const persistTheme = useServerFn(setThemePreference)
   const [theme, setThemeState] = useState(() => parseThemeMode(initialTheme))
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveThemeMode(parseThemeMode(initialTheme), false),
+    getInitialResolvedTheme(parseThemeMode(initialTheme)),
   )
 
   useEffect(() => {

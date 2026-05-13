@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { MainScreen } from '@/features/canvas/components/MainScreen'
+import { HomePage } from '@/features/home/HomePage'
 
 export const Route = createFileRoute('/_app/')({
-  component: MainScreen,
+  component: HomePage,
   ssr: false,
 })
