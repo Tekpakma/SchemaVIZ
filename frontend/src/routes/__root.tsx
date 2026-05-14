@@ -13,6 +13,7 @@ import { I18nProvider } from '@/features/i18n/useI18n'
 import { getLocalePreference } from '@/features/i18n/localeServerFns'
 import { ThemeProvider } from '@/features/theme/useTheme'
 import { getThemePreference } from '@/features/theme/themeServerFns'
+import { CanvasStoreProvider } from '@/store/canvasStore'
 import appCss from '../styles.css?url'
 import type { QueryClient } from '@tanstack/react-query'
 
@@ -96,15 +97,17 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider initialTheme={theme}>
-          <I18nProvider initialLocale={locale}>{children}</I18nProvider>
-        </ThemeProvider>
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={plugins}
-        />
+        <CanvasStoreProvider>
+          <ThemeProvider initialTheme={theme}>
+            <I18nProvider initialLocale={locale}>{children}</I18nProvider>
+          </ThemeProvider>
+          <TanStackDevtools
+            config={{
+              position: 'bottom-right',
+            }}
+            plugins={plugins}
+          />
+        </CanvasStoreProvider>
         <Scripts />
       </body>
     </html>
