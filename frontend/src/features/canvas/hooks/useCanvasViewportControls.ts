@@ -1,8 +1,7 @@
 import { useCallback } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import {
-  getCanvasNodesSnapshot,
-  getCanvasViewportSnapshot,
+  useCanvasSnapshotGetters,
   useCanvasActions,
   useCanvasNodeIds,
   useCanvasViewport,
@@ -54,6 +53,8 @@ export function useCanvasViewportControls(stageSize: StageSize) {
   const nodeIds = useCanvasNodeIds()
   const viewport = useCanvasViewport()
   const { setViewport } = useCanvasActions()
+  const { getCanvasViewportSnapshot, getCanvasNodesSnapshot } =
+    useCanvasSnapshotGetters()
 
   const handleWheel = useCallback(
     (event: KonvaEventObject<WheelEvent>) => {

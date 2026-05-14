@@ -13,12 +13,13 @@ import {
 /**
  * Seeds the canvas with an initial rich-text node when it is empty.
  */
-export function useEnsureDefaultCanvasNode() {
+export function useEnsureDefaultCanvasNode(enabled = true) {
   const activeTabId = useActiveCanvasTabId()
   const nodeIds = useCanvasNodeIds()
   const { seedActiveDocument } = useCanvasActions()
 
   useEffect(() => {
+    if (!enabled) return
     if (nodeIds.length > 0) return
 
     const seedNodes =
@@ -32,5 +33,5 @@ export function useEnsureDefaultCanvasNode() {
       nodes: seedNodes,
       edges: seedEdges,
     })
-  }, [activeTabId, nodeIds.length, seedActiveDocument])
+  }, [activeTabId, enabled, nodeIds.length, seedActiveDocument])
 }

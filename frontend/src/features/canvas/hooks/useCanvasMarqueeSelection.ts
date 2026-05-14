@@ -2,9 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import type { NodeId } from '../model/types'
 import {
-  getCanvasNodeIdsSnapshot,
-  getCanvasNodesSnapshot,
-  getCanvasViewportSnapshot,
+  useCanvasSnapshotGetters,
   useCanvasActions,
   useIsMarqueeSelecting,
 } from '@/store/canvasStore'
@@ -53,6 +51,11 @@ function hasSameIds(left: Array<NodeId>, right: Array<NodeId>) {
 export function useCanvasMarqueeSelection() {
   const isMarqueeSelecting = useIsMarqueeSelecting()
   const { selectNodesFromMarquee, setMarqueeSelecting } = useCanvasActions()
+  const {
+    getCanvasNodeIdsSnapshot,
+    getCanvasNodesSnapshot,
+    getCanvasViewportSnapshot,
+  } = useCanvasSnapshotGetters()
   const [selection, setSelection] = useState<MarqueeSelectionState | null>(null)
   const lastSelectedIdsRef = useRef<Array<NodeId>>([])
 

@@ -2,6 +2,8 @@ import { createFileRoute, notFound } from '@tanstack/react-router'
 import * as zod from 'zod'
 
 import { BuilderPage } from '@/features/builder/BuilderPage'
+import { BuilderTabGate } from '@/features/builder/BuilderTabGate'
+import type { BuilderOpenIntent } from '@/features/builder/builderWorkbench'
 import {
   GENERATION_TEMPLATE_QUERIES,
   isGenerationTemplateNotFoundError,
@@ -15,12 +17,24 @@ export const Route = createFileRoute('/_app/builder')({
   loaderDeps: ({ search }) => ({ id: search.templateId }),
   ssr: false,
   loader: async ({ context, deps }) => {
-    if (!deps.id) return ({ template: null })
+    if (!deps.id) {
+      return {
+        intent: {
+          type: 'draft',
+        } satisfies BuilderOpenIntent,
+      }
+    }
+
     try {
       const template = await context.queryClient.ensureQueryData(
-        GENERATION_TEMPLATE_QUERIES.detail(deps.id)
+        GENERATION_TEMPLATE_QUERIES.detail(deps.id),
       )
-      return ({ template })
+      return {
+        intent: {
+          type: 'template',
+          template,
+        } satisfies BuilderOpenIntent,
+      }
     } catch (error) {
       if (isGenerationTemplateNotFoundError(error)) {
         throw notFound()
@@ -32,7 +46,11 @@ export const Route = createFileRoute('/_app/builder')({
 })
 
 function BuilderRoute() {
-  const { template } = Route.useLoaderData()
+  const { intent } = Route.useLoaderData()
 
-  return <BuilderPage template={template} />
+  return (
+    <BuilderTabGate intent={intent}>
+      {(tabId) => <BuilderPage tabId={tabId} />}
+    </BuilderTabGate>
+  )
 }

@@ -1,9 +1,8 @@
 import { useIsMutating, useMutation } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import {
-  getActiveCanvasTabIdSnapshot,
-  getCanvasLayoutSnapshot,
   useCanvasActions,
+  useCanvasSnapshotGetters,
 } from '@/store/canvasStore'
 import { layoutCanvasGraph } from '../layout.functions'
 import { getCanvasFitViewportForFrames } from '../fitView'
@@ -22,6 +21,8 @@ export const CANVAS_LAYOUT_MUTATION_KEY = ['canvas-layout'] as const
  */
 export function useCanvasLayout(stageSize: StageSize) {
   const { applyGraphLayout, setViewport } = useCanvasActions()
+  const { getActiveCanvasTabIdSnapshot, getCanvasLayoutSnapshot } =
+    useCanvasSnapshotGetters()
   const layoutCanvas = useServerFn(layoutCanvasGraph)
   const isLayoutPending =
     useIsMutating({ mutationKey: CANVAS_LAYOUT_MUTATION_KEY }) > 0

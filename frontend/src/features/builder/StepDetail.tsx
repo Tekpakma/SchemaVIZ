@@ -1,14 +1,4 @@
-import {
-  useBuilderEdges,
-  useBuilderExamples,
-  useBuilderFilters,
-  useBuilderLayers,
-  useBuilderLayoutAlgorithm,
-  useBuilderRecipe,
-  useBuilderSwatches,
-  useBuilderActions,
-} from '@/store/builderStore'
-import type { RecipeStepKind } from './types'
+import type { LayoutAlgorithm, RecipeData, RecipeStepKind } from './types'
 import { LayersStep } from './steps/LayersStep'
 import { ExamplesStep } from './steps/ExamplesStep'
 import { TraversalStep } from './steps/TraversalStep'
@@ -18,33 +8,31 @@ import { LayoutStep } from './steps/LayoutStep'
 import { PromoteStep } from './steps/PromoteStep'
 
 interface StepDetailProps {
+  actions: {
+    setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void
+  }
   kind: RecipeStepKind
+  recipe: RecipeData
 }
 
-export function StepDetail({ kind }: StepDetailProps) {
-  const layers = useBuilderLayers()
-  const examples = useBuilderExamples()
-  const edges = useBuilderEdges()
-  const filters = useBuilderFilters()
-  const swatches = useBuilderSwatches()
-  const layoutAlgorithm = useBuilderLayoutAlgorithm()
-  const recipe = useBuilderRecipe()
-  const { setLayoutAlgorithm } = useBuilderActions()
-
+export function StepDetail({ actions, kind, recipe }: StepDetailProps) {
   switch (kind) {
     case 'layers':
-      return <LayersStep layers={layers} />
+      return <LayersStep layers={recipe.layers} />
     case 'examples':
-      return <ExamplesStep examples={examples} />
+      return <ExamplesStep examples={recipe.examples} />
     case 'traversal':
-      return <TraversalStep edges={edges} />
+      return <TraversalStep edges={recipe.edges} />
     case 'filters':
-      return <FiltersStep filters={filters} />
+      return <FiltersStep filters={recipe.filters} />
     case 'style':
-      return <StyleStep swatches={swatches} />
+      return <StyleStep swatches={recipe.swatches} />
     case 'layout':
       return (
-        <LayoutStep selected={layoutAlgorithm} onSelect={setLayoutAlgorithm} />
+        <LayoutStep
+          selected={recipe.layoutAlgorithm}
+          onSelect={actions.setLayoutAlgorithm}
+        />
       )
     case 'promote':
       return (

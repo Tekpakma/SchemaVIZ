@@ -1,13 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { createCanvasStore } from './canvasStore'
+import { getActiveDocument, getTargetDocument } from '@/store/canvasStore'
 
-import {
-  getActiveCanvasTabIdSnapshot,
-  getCanvasActionsSnapshot,
-  getCanvasExportSnapshot,
-  getCanvasLayoutSnapshot,
-  getCanvasTabActionsSnapshot,
-  resetCanvasStoreForTests,
-} from './canvasStore'
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/model/types'
 
 const nodes: Array<CanvasNode> = [
@@ -59,9 +53,38 @@ const edges: Array<CanvasEdge> = [
 ]
 
 describe('canvasStore graph layout actions', () => {
+  let store: ReturnType<typeof createCanvasStore>
+  
+  const getCanvasLayoutSnapshot = (tabId?: string) => {
+    const state = store.getState()
+    const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
+    return {
+      nodesById: document.nodesById,
+      nodeOrder: document.nodeOrder,
+      childIdsByGroupId: document.childIdsByGroupId,
+      edgesById: document.edgesById,
+      edgeOrder: document.edgeOrder,
+      flowDirection: document.flowDirection,
+      layoutOptions: document.layoutOptions,
+    }
+  }
+
+  const getCanvasExportSnapshot = (tabId?: string) => {
+    const state = store.getState()
+    const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
+    return {
+      nodesById: document.nodesById,
+      nodeOrder: document.nodeOrder,
+      edgesById: document.edgesById,
+      edgeOrder: document.edgeOrder,
+      viewport: document.viewport,
+      flowDirection: document.flowDirection,
+      layoutOptions: document.layoutOptions,
+    }
+  }
   beforeEach(() => {
-    resetCanvasStoreForTests()
-    getCanvasActionsSnapshot().setGraph({
+    store = createCanvasStore()
+    store.getState().actions.setGraph({
       nodes,
       edges,
     })
@@ -76,7 +99,7 @@ describe('canvasStore graph layout actions', () => {
   })
 
   it('applies node frames and edge routes', () => {
-    getCanvasActionsSnapshot().applyGraphLayout({
+    store.getState().actions.applyGraphLayout({
       nodeFrames: [
         {
           id: 'a',
@@ -112,7 +135,7 @@ describe('canvasStore graph layout actions', () => {
   })
 
   it('clears connected edge routes and materializes fixed ports when a node moves', () => {
-    getCanvasActionsSnapshot().moveNode({
+    store.getState().actions.moveNode({
       id: 'a',
       x: 40,
       y: 50,
@@ -137,7 +160,7 @@ describe('canvasStore graph layout actions', () => {
   })
 
   it('keeps sliding ports when routing authority is auto', () => {
-    const actions = getCanvasActionsSnapshot()
+    const actions = store.getState().actions
 
     actions.setRoutingAuthority('auto')
     actions.moveNode({
@@ -154,7 +177,7 @@ describe('canvasStore graph layout actions', () => {
   })
 
   it('recomputes routes and explicit ports when routing authority changes', () => {
-    getCanvasActionsSnapshot().setGraph({
+    store.getState().actions.setGraph({
       nodes,
       edges: [
         {
@@ -180,7 +203,7 @@ describe('canvasStore graph layout actions', () => {
       ],
     })
 
-    const actions = getCanvasActionsSnapshot()
+    const actions = store.getState().actions
 
     actions.setRoutingAuthority('auto')
 
@@ -207,13 +230,13 @@ describe('canvasStore graph layout actions', () => {
   })
 
   it('returns nodes to auto layout and clears fixed ports after applying graph layout', () => {
-    getCanvasActionsSnapshot().moveNode({
+    store.getState().actions.moveNode({
       id: 'a',
       x: 40,
       y: 50,
     })
 
-    getCanvasActionsSnapshot().applyGraphLayout({
+    store.getState().actions.applyGraphLayout({
       nodeFrames: [
         {
           id: 'a',
@@ -251,44 +274,73 @@ describe('canvasStore graph layout actions', () => {
 })
 
 describe('canvasStore document tabs', () => {
+  let store: ReturnType<typeof createCanvasStore>
+  
+  const getCanvasLayoutSnapshot = (tabId?: string) => {
+    const state = store.getState()
+    const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
+    return {
+      nodesById: document.nodesById,
+      nodeOrder: document.nodeOrder,
+      childIdsByGroupId: document.childIdsByGroupId,
+      edgesById: document.edgesById,
+      edgeOrder: document.edgeOrder,
+      flowDirection: document.flowDirection,
+      layoutOptions: document.layoutOptions,
+    }
+  }
+
+  const getCanvasExportSnapshot = (tabId?: string) => {
+    const state = store.getState()
+    const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
+    return {
+      nodesById: document.nodesById,
+      nodeOrder: document.nodeOrder,
+      edgesById: document.edgesById,
+      edgeOrder: document.edgeOrder,
+      viewport: document.viewport,
+      flowDirection: document.flowDirection,
+      layoutOptions: document.layoutOptions,
+    }
+  }
   beforeEach(() => {
-    resetCanvasStoreForTests()
-    getCanvasActionsSnapshot().setGraph({
+    store = createCanvasStore()
+    store.getState().actions.setGraph({
       nodes,
       edges,
     })
   })
 
   it('creates, switches, renames, marks, and closes canvas tabs', () => {
-    const tabActions = getCanvasTabActionsSnapshot()
-    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const tabActions = store.getState().tabActions
+    const firstTabId = store.getState().activeTabId
     const secondTabId = tabActions.createTab({
       label: 'Schema draft',
       nodes: [],
       edges: [],
     })
 
-    expect(getActiveCanvasTabIdSnapshot()).toBe(secondTabId)
+    expect(store.getState().activeTabId).toBe(secondTabId)
 
     tabActions.renameTab(secondTabId, 'Schema draft v2')
     tabActions.markTabDirty(secondTabId)
     expect(getCanvasExportSnapshot().nodeOrder).toEqual([])
 
     tabActions.switchTab(firstTabId)
-    expect(getActiveCanvasTabIdSnapshot()).toBe(firstTabId)
+    expect(store.getState().activeTabId).toBe(firstTabId)
     expect(getCanvasExportSnapshot().nodeOrder).toEqual(['a', 'b'])
 
     tabActions.closeTab(firstTabId)
-    expect(getActiveCanvasTabIdSnapshot()).toBe(firstTabId)
+    expect(store.getState().activeTabId).toBe(firstTabId)
 
     tabActions.closeTab(secondTabId)
-    expect(getActiveCanvasTabIdSnapshot()).toBe(firstTabId)
+    expect(store.getState().activeTabId).toBe(firstTabId)
     expect(getCanvasExportSnapshot().nodeOrder).toEqual(['a', 'b'])
   })
 
   it('isolates graph and viewport state by tab', () => {
-    const tabActions = getCanvasTabActionsSnapshot()
-    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const tabActions = store.getState().tabActions
+    const firstTabId = store.getState().activeTabId
     const secondTabId = tabActions.createTab({
       nodes: [
         {
@@ -306,12 +358,12 @@ describe('canvasStore document tabs', () => {
       },
     })
 
-    getCanvasActionsSnapshot().moveNode({
+    store.getState().actions.moveNode({
       id: 'c',
       x: 80,
       y: 90,
     })
-    getCanvasActionsSnapshot().setViewport({
+    store.getState().actions.setViewport({
       x: 100,
       y: 120,
       scale: 2,
@@ -343,8 +395,8 @@ describe('canvasStore document tabs', () => {
   })
 
   it('returns active-document snapshots only', () => {
-    const tabActions = getCanvasTabActionsSnapshot()
-    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const tabActions = store.getState().tabActions
+    const firstTabId = store.getState().activeTabId
     const secondTabId = tabActions.createTab({
       label: 'Other canvas',
       nodes: [
@@ -365,8 +417,8 @@ describe('canvasStore document tabs', () => {
   })
 
   it('can apply stale layout results back to their source tab', () => {
-    const tabActions = getCanvasTabActionsSnapshot()
-    const firstTabId = getActiveCanvasTabIdSnapshot()
+    const tabActions = store.getState().tabActions
+    const firstTabId = store.getState().activeTabId
     const secondTabId = tabActions.createTab({
       nodes: [
         {
@@ -377,9 +429,9 @@ describe('canvasStore document tabs', () => {
       edges: [],
     })
 
-    expect(getActiveCanvasTabIdSnapshot()).toBe(secondTabId)
+    expect(store.getState().activeTabId).toBe(secondTabId)
 
-    getCanvasActionsSnapshot().applyGraphLayout(
+    store.getState().actions.applyGraphLayout(
       {
         nodeFrames: [
           {
@@ -395,7 +447,7 @@ describe('canvasStore document tabs', () => {
       { tabId: firstTabId },
     )
 
-    expect(getActiveCanvasTabIdSnapshot()).toBe(secondTabId)
+    expect(store.getState().activeTabId).toBe(secondTabId)
     expect(getCanvasExportSnapshot().nodesById.c).toBeDefined()
     expect(getCanvasExportSnapshot().nodesById.a).toBeUndefined()
 

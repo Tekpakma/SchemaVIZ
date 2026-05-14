@@ -1,13 +1,21 @@
 import { FileText, LayoutGrid, Network, Users } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-const NAVIGATION_TABS = [
+type NavigationTab = {
+  active?: boolean
+  badge?: number
+  icon: LucideIcon
+  label: string
+}
+
+const NAVIGATION_TABS: NavigationTab[] = [
   { label: 'Templates', icon: LayoutGrid, active: true },
   { label: 'Landscapes', icon: Network },
   { label: 'Shared', icon: Users },
   { label: 'Drafts', icon: FileText, badge: 3 },
-] as const
+]
 
 export function NavigationTabs() {
   return (
@@ -28,13 +36,13 @@ export function NavigationTabs() {
             className={cn('size-3.5', tab.active && 'text-primary-foreground')}
           />
           {tab.label}
-          {'badge' in tab && tab.badge != null ? (
+          {tab.badge !== undefined ? (
             <span
               className={cn(
-                  'ml-0.5 rounded-full px-1.5 py-px font-mono text-[9.5px]',
-                  tab.active
-                    ? 'bg-primary-foreground/20 text-primary-foreground'
-                    : 'bg-brand-muted text-brand',
+                'ml-0.5 rounded-full px-1.5 py-px font-mono text-[9.5px]',
+                tab.active
+                  ? 'bg-primary-foreground/20 text-primary-foreground'
+                  : 'bg-brand-muted text-brand',
               )}
             >
               {tab.badge}

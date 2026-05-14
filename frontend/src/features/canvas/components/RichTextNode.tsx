@@ -28,6 +28,8 @@ import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
 
 type RichTextNodeProps = {
   nodeId: NodeId
+  onDragEnd?: () => void
+  readOnly?: boolean
 }
 
 type RichTextNodeSurfaceProps = {
@@ -143,12 +145,14 @@ const RichTextNodeGroupLabel = memo(function RichTextNodeGroupLabel({
 
 export const RichTextNode = memo(function RichTextNode({
   nodeId,
+  onDragEnd,
+  readOnly = false,
 }: RichTextNodeProps) {
   const node = useCanvasNode(nodeId)
   const editingNodeId = useCanvasEditingNodeId()
   const selectedNodeIds = useSelectedNodeIds()
   const { startEditing, selectNode, moveNode } = useCanvasActions()
-  const { clearHelperLines, snapFrame } = useCanvasHelperLines()
+  const { snapFrame } = useCanvasHelperLines()
   const { resolvedTheme } = useTheme()
   const isSelected = selectedNodeIds.includes(nodeId)
 
@@ -168,14 +172,17 @@ export const RichTextNode = memo(function RichTextNode({
   const isGroup = node.kind === 'group'
 
   const selectThisNode = () => {
+    if (readOnly) return
     selectNode(node.id)
   }
 
   const handleDoubleClick = () => {
+    if (readOnly) return
     startEditing(node.id)
   }
 
   const handleDragMove = (event: KonvaEventObject<DragEvent>) => {
+    if (readOnly) return
     const target = event.target
     const snappedPosition = snapFrame(
       {
@@ -199,15 +206,16 @@ export const RichTextNode = memo(function RichTextNode({
   }
 
   const handleDragEnd = (event: KonvaEventObject<DragEvent>) => {
+    if (readOnly) return
     handleDragMove(event)
-    clearHelperLines()
+    onDragEnd?.()
   }
 
   return (
     <Group
       x={node.x}
       y={node.y}
-      draggable={!node.parentGroupId}
+      draggable={!readOnly && !node.parentGroupId}
       onClick={selectThisNode}
       onTap={selectThisNode}
       onDblClick={handleDoubleClick}
@@ -266,25 +274,21 @@ export const RichTextNodeControls = memo(function RichTextNodeControls({
     [node, updateNodeFrame],
   )
 
-  const {
-    nodeRef,
-    transformerRef,
-    handleTransformEnd,
-    transformerProps,
-  } = useNodeResizeTransformer({
-    isEnabled: Boolean(node && shapeDefinition && isSingleSelected),
-    frame: {
-      x: node?.x ?? 0,
-      y: node?.y ?? 0,
-      width: node?.width ?? 0,
-      height: node?.height ?? 0,
-    },
-    minSize: shapeDefinition?.minSize ?? {
-      width: 0,
-      height: 0,
-    },
-    onResizeEnd: handleResizeEnd,
-  })
+  const { nodeRef, transformerRef, handleTransformEnd, transformerProps } =
+    useNodeResizeTransformer({
+      isEnabled: Boolean(node && shapeDefinition && isSingleSelected),
+      frame: {
+        x: node?.x ?? 0,
+        y: node?.y ?? 0,
+        width: node?.width ?? 0,
+        height: node?.height ?? 0,
+      },
+      minSize: shapeDefinition?.minSize ?? {
+        width: 0,
+        height: 0,
+      },
+      onResizeEnd: handleResizeEnd,
+    })
 
   if (
     !node ||
@@ -303,16 +307,9 @@ export const RichTextNodeControls = memo(function RichTextNodeControls({
         y={node.y}
         onTransformEnd={handleTransformEnd}
       >
-        <Rect
-          width={node.width}
-          height={node.height}
-          listening={false}
-        />
+        <Rect width={node.width} height={node.height} listening={false} />
       </Group>
-      <Transformer
-        ref={transformerRef}
-        {...transformerProps}
-      />
+      <Transformer ref={transformerRef} {...transformerProps} />
     </>
   )
 })

@@ -1,6 +1,5 @@
 import type {
   ExampleRecord,
-  LayoutAlgorithm,
   RecipeData,
   RecipeFilter,
   RecipeLayer,

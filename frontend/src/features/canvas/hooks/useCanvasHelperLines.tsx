@@ -8,8 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import {
-  getCanvasNodeIdsSnapshot,
-  getCanvasNodesSnapshot,
+  useCanvasSnapshotGetters,
 } from '@/store/canvasStore'
 import {
   createHelperLineCandidates,
@@ -80,6 +79,8 @@ export function CanvasHelperLinesProvider({
   const [activeLines, setActiveLines] = useState<Array<CanvasHelperLine>>([])
   const [isEnabled, setIsEnabled] = useState(true)
   const candidateCacheRef = useRef<CandidateCache | null>(null)
+  const { getCanvasNodeIdsSnapshot, getCanvasNodesSnapshot } =
+    useCanvasSnapshotGetters()
 
   const clearHelperLines = useCallback(() => {
     setActiveLines((current) => (current.length === 0 ? current : []))
@@ -115,7 +116,7 @@ export function CanvasHelperLinesProvider({
     }
 
     return candidates
-  }, [])
+  }, [getCanvasNodeIdsSnapshot, getCanvasNodesSnapshot])
 
   const snapFrame = useCallback(
     (frame: CanvasNodeFrame, options: CanvasHelperLineSnapOptions = {}) => {

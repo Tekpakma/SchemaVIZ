@@ -1,41 +1,25 @@
-import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  useBuilderActions,
-  useBuilderActiveStep,
-  useBuilderActiveStepIndex,
-  useBuilderRecipe,
-  useBuilderSteps,
-} from '@/store/builderStore'
-import { MOCK_RECIPE } from './mockData'
+import type { WorkbenchTabId } from '@/store/workbenchStore'
 import { StepCard } from './StepCard'
 import { StepDetail } from './StepDetail'
 import { BuilderPreview } from './BuilderPreview'
+import { useBuilderDocumentView } from './builderWorkbench'
 
-export function BuilderPage() {
+export function BuilderPage({ tabId }: { tabId: WorkbenchTabId }) {
   const navigate = useNavigate()
-  const steps = useBuilderSteps()
-  const activeStepIndex = useBuilderActiveStepIndex()
-  const activeStep = useBuilderActiveStep()
-  const recipe = useBuilderRecipe()
-  const actions = useBuilderActions()
+  const builder = useBuilderDocumentView(tabId)
   const { t } = useTranslation()
 
-  // Seed the store with mock data for the POC
-  // TODO: Replace with API fetch — load template by ID or create blank
-  useEffect(() => {
-    if (recipe.layers.length > 0) return
-    for (const l of MOCK_RECIPE.layers) actions.addLayer(l)
-    for (const e of MOCK_RECIPE.examples) actions.addExample(e)
-    for (const edge of MOCK_RECIPE.edges) actions.addEdge(edge)
-    for (const f of MOCK_RECIPE.filters) actions.addFilter(f)
-    actions.setTitle(MOCK_RECIPE.title)
-  }, [])
+  if (!builder) {
+    return null
+  }
+
+  const { actions, activeStep, activeStepIndex, recipe, steps } = builder
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
@@ -112,8 +96,8 @@ export function BuilderPage() {
               Live preview
             </span>
           </div>
-          <div className="w-full max-w-[800px] px-6">
-            <BuilderPreview />
+          <div className="w-full max-w-[960px] px-6">
+            <BuilderPreview recipe={recipe} />
           </div>
         </div>
 
@@ -132,7 +116,11 @@ export function BuilderPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-4">
-            <StepDetail kind={activeStep.kind} />
+            <StepDetail
+              actions={actions}
+              kind={activeStep.kind}
+              recipe={recipe}
+            />
           </div>
 
           <footer className="flex items-center justify-between border-t border-border px-5 py-3">

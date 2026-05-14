@@ -10,6 +10,7 @@ import type {
   RecipeStep,
   TraversalEdge,
 } from '@/features/builder/types'
+import type { WorkbenchTabId } from './workbenchStore'
 
 const RECIPE_STEPS: RecipeStep[] = [
   {
@@ -56,36 +57,46 @@ const RECIPE_STEPS: RecipeStep[] = [
   },
 ]
 
-type BuilderState = {
+export type BuilderDocumentState = {
   activeStepIndex: number
   recipe: RecipeData
+  isSeeded: boolean
+}
+
+type BuilderState = {
+  documentsByTabId: Record<WorkbenchTabId, BuilderDocumentState>
   steps: RecipeStep[]
   actions: BuilderActions
 }
 
 type BuilderActions = {
-  setActiveStep: (index: number) => void
-  nextStep: () => void
-  prevStep: () => void
-  setTitle: (title: string) => void
+  ensureDocument: (tabId: WorkbenchTabId) => void
+  seedDocument: (tabId: WorkbenchTabId, recipe: RecipeData) => boolean
+  setActiveStep: (tabId: WorkbenchTabId, index: number) => void
+  nextStep: (tabId: WorkbenchTabId) => void
+  prevStep: (tabId: WorkbenchTabId) => void
+  setTitle: (tabId: WorkbenchTabId, title: string) => void
 
-  addLayer: (layer: RecipeLayer) => void
-  removeLayer: (id: string) => void
-  reorderLayers: (layers: RecipeLayer[]) => void
+  addLayer: (tabId: WorkbenchTabId, layer: RecipeLayer) => void
+  removeLayer: (tabId: WorkbenchTabId, id: string) => void
+  reorderLayers: (tabId: WorkbenchTabId, layers: RecipeLayer[]) => void
 
-  addExample: (example: ExampleRecord) => void
-  removeExample: (id: string) => void
-  setDefaultExample: (id: string) => void
+  addExample: (tabId: WorkbenchTabId, example: ExampleRecord) => void
+  removeExample: (tabId: WorkbenchTabId, id: string) => void
+  setDefaultExample: (tabId: WorkbenchTabId, id: string) => void
 
-  addEdge: (edge: TraversalEdge) => void
-  removeEdge: (id: string) => void
-  toggleEdgeAuto: (id: string) => void
+  addEdge: (tabId: WorkbenchTabId, edge: TraversalEdge) => void
+  removeEdge: (tabId: WorkbenchTabId, id: string) => void
+  toggleEdgeAuto: (tabId: WorkbenchTabId, id: string) => void
 
-  addFilter: (filter: RecipeFilter) => void
-  removeFilter: (id: string) => void
+  addFilter: (tabId: WorkbenchTabId, filter: RecipeFilter) => void
+  removeFilter: (tabId: WorkbenchTabId, id: string) => void
 
-  setSwatch: (index: number, color: string) => void
-  setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void
+  setSwatch: (tabId: WorkbenchTabId, index: number, color: string) => void
+  setLayoutAlgorithm: (
+    tabId: WorkbenchTabId,
+    algorithm: LayoutAlgorithm,
+  ) => void
 }
 
 function createInitialRecipe(): RecipeData {
@@ -103,17 +114,94 @@ function createInitialRecipe(): RecipeData {
   }
 }
 
+function cloneRecipe(recipe: RecipeData): RecipeData {
+  return {
+    ...recipe,
+    layers: recipe.layers.map((layer) => ({ ...layer })),
+    examples: recipe.examples.map((example) => ({ ...example })),
+    edges: recipe.edges.map((edge) => ({ ...edge })),
+    filters: recipe.filters.map((filter) => ({ ...filter })),
+    swatches: [...recipe.swatches],
+  }
+}
+
+function createBuilderDocumentState(
+  recipe = createInitialRecipe(),
+): BuilderDocumentState {
+  return {
+    activeStepIndex: 0,
+    recipe: cloneRecipe(recipe),
+    isSeeded: false,
+  }
+}
+
+function createInitialBuilderState() {
+  return {
+    documentsByTabId: {},
+    steps: RECIPE_STEPS,
+  }
+}
+
+function getBuilderDocument(
+  state: BuilderState,
+  tabId: WorkbenchTabId | null | undefined,
+) {
+  return tabId ? state.documentsByTabId[tabId] : null
+}
+
+function ensureBuilderDocument(
+  state: BuilderState,
+  tabId: WorkbenchTabId,
+): BuilderDocumentState {
+  state.documentsByTabId[tabId] ??= createBuilderDocumentState()
+  return state.documentsByTabId[tabId]
+}
+
+function seedBuilderDocument(
+  state: BuilderState,
+  tabId: WorkbenchTabId,
+  recipe: RecipeData,
+): boolean {
+  const document = ensureBuilderDocument(state, tabId)
+  if (document.isSeeded) return false
+
+  document.recipe = cloneRecipe(recipe)
+  document.isSeeded = true
+  return true
+}
+
 const useBuilderStore = create<BuilderState>()(
   devtools(
     immer((set) => ({
-      activeStepIndex: 0,
-      recipe: createInitialRecipe(),
-      steps: RECIPE_STEPS,
+      ...createInitialBuilderState(),
       actions: {
-        setActiveStep: (index) =>
+        ensureDocument: (tabId) =>
           set(
             (state) => {
-              state.activeStepIndex = Math.max(
+              ensureBuilderDocument(state, tabId)
+            },
+            false,
+            'builder/ensureDocument',
+          ),
+
+        seedDocument: (tabId, recipe) => {
+          let didSeed = false
+          set(
+            (state) => {
+              didSeed = seedBuilderDocument(state, tabId, recipe)
+            },
+            false,
+            'builder/seedDocument',
+          )
+
+          return didSeed
+        },
+
+        setActiveStep: (tabId, index) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              document.activeStepIndex = Math.max(
                 0,
                 Math.min(index, state.steps.length - 1),
               )
@@ -122,11 +210,12 @@ const useBuilderStore = create<BuilderState>()(
             'builder/setActiveStep',
           ),
 
-        nextStep: () =>
+        nextStep: (tabId) =>
           set(
             (state) => {
-              state.activeStepIndex = Math.min(
-                state.activeStepIndex + 1,
+              const document = ensureBuilderDocument(state, tabId)
+              document.activeStepIndex = Math.min(
+                document.activeStepIndex + 1,
                 state.steps.length - 1,
               )
             },
@@ -134,147 +223,172 @@ const useBuilderStore = create<BuilderState>()(
             'builder/nextStep',
           ),
 
-        prevStep: () =>
+        prevStep: (tabId) =>
           set(
             (state) => {
-              state.activeStepIndex = Math.max(state.activeStepIndex - 1, 0)
+              const document = ensureBuilderDocument(state, tabId)
+              document.activeStepIndex = Math.max(
+                document.activeStepIndex - 1,
+                0,
+              )
             },
             false,
             'builder/prevStep',
           ),
 
-        setTitle: (title) =>
+        setTitle: (tabId, title) =>
           set(
             (state) => {
-              state.recipe.title = title
+              ensureBuilderDocument(state, tabId).recipe.title = title
             },
             false,
             'builder/setTitle',
           ),
 
-        addLayer: (layer) =>
+        addLayer: (tabId, layer) =>
           set(
             (state) => {
-              state.recipe.layers.push(layer)
+              ensureBuilderDocument(state, tabId).recipe.layers.push({
+                ...layer,
+              })
             },
             false,
             'builder/addLayer',
           ),
 
-        removeLayer: (id) =>
+        removeLayer: (tabId, id) =>
           set(
             (state) => {
-              state.recipe.layers = state.recipe.layers.filter(
-                (l) => l.id !== id,
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.layers = document.recipe.layers.filter(
+                (layer) => layer.id !== id,
               )
             },
             false,
             'builder/removeLayer',
           ),
 
-        reorderLayers: (layers) =>
+        reorderLayers: (tabId, layers) =>
           set(
             (state) => {
-              state.recipe.layers = layers
+              ensureBuilderDocument(state, tabId).recipe.layers = layers.map(
+                (layer) => ({ ...layer }),
+              )
             },
             false,
             'builder/reorderLayers',
           ),
 
-        addExample: (example) =>
+        addExample: (tabId, example) =>
           set(
             (state) => {
-              state.recipe.examples.push(example)
+              ensureBuilderDocument(state, tabId).recipe.examples.push({
+                ...example,
+              })
             },
             false,
             'builder/addExample',
           ),
 
-        removeExample: (id) =>
+        removeExample: (tabId, id) =>
           set(
             (state) => {
-              state.recipe.examples = state.recipe.examples.filter(
-                (e) => e.id !== id,
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.examples = document.recipe.examples.filter(
+                (example) => example.id !== id,
               )
             },
             false,
             'builder/removeExample',
           ),
 
-        setDefaultExample: (id) =>
+        setDefaultExample: (tabId, id) =>
           set(
             (state) => {
-              for (const ex of state.recipe.examples) {
-                ex.isDefault = ex.id === id
+              for (const example of ensureBuilderDocument(state, tabId).recipe
+                .examples) {
+                example.isDefault = example.id === id
               }
             },
             false,
             'builder/setDefaultExample',
           ),
 
-        addEdge: (edge) =>
+        addEdge: (tabId, edge) =>
           set(
             (state) => {
-              state.recipe.edges.push(edge)
+              ensureBuilderDocument(state, tabId).recipe.edges.push({ ...edge })
             },
             false,
             'builder/addEdge',
           ),
 
-        removeEdge: (id) =>
+        removeEdge: (tabId, id) =>
           set(
             (state) => {
-              state.recipe.edges = state.recipe.edges.filter((e) => e.id !== id)
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.edges = document.recipe.edges.filter(
+                (edge) => edge.id !== id,
+              )
             },
             false,
             'builder/removeEdge',
           ),
 
-        toggleEdgeAuto: (id) =>
+        toggleEdgeAuto: (tabId, id) =>
           set(
             (state) => {
-              const edge = state.recipe.edges.find((e) => e.id === id)
+              const edge = ensureBuilderDocument(
+                state,
+                tabId,
+              ).recipe.edges.find((candidate) => candidate.id === id)
               if (edge) edge.auto = !edge.auto
             },
             false,
             'builder/toggleEdgeAuto',
           ),
 
-        addFilter: (filter) =>
+        addFilter: (tabId, filter) =>
           set(
             (state) => {
-              state.recipe.filters.push(filter)
+              ensureBuilderDocument(state, tabId).recipe.filters.push({
+                ...filter,
+              })
             },
             false,
             'builder/addFilter',
           ),
 
-        removeFilter: (id) =>
+        removeFilter: (tabId, id) =>
           set(
             (state) => {
-              state.recipe.filters = state.recipe.filters.filter(
-                (f) => f.id !== id,
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.filters = document.recipe.filters.filter(
+                (filter) => filter.id !== id,
               )
             },
             false,
             'builder/removeFilter',
           ),
 
-        setSwatch: (index, color) =>
+        setSwatch: (tabId, index, color) =>
           set(
             (state) => {
-              if (index >= 0 && index < state.recipe.swatches.length) {
-                state.recipe.swatches[index] = color
+              const swatches = ensureBuilderDocument(state, tabId).recipe
+                .swatches
+              if (index >= 0 && index < swatches.length) {
+                swatches[index] = color
               }
             },
             false,
             'builder/setSwatch',
           ),
 
-        setLayoutAlgorithm: (algorithm) =>
+        setLayoutAlgorithm: (tabId, algorithm) =>
           set(
             (state) => {
-              state.recipe.layoutAlgorithm = algorithm
+              ensureBuilderDocument(state, tabId).recipe.layoutAlgorithm =
+                algorithm
             },
             false,
             'builder/setLayoutAlgorithm',
@@ -288,24 +402,53 @@ const useBuilderStore = create<BuilderState>()(
   ),
 )
 
+export function getBuilderActionsSnapshot() {
+  return useBuilderStore.getState().actions
+}
+
+export function getBuilderDocumentSnapshot(tabId: WorkbenchTabId) {
+  const document = getBuilderDocument(useBuilderStore.getState(), tabId)
+  return document
+    ? {
+        activeStepIndex: document.activeStepIndex,
+        recipe: cloneRecipe(document.recipe),
+        isSeeded: document.isSeeded,
+      }
+    : null
+}
+
+export function getBuilderRecipeSnapshot(tabId: WorkbenchTabId) {
+  const document = getBuilderDocumentSnapshot(tabId)
+  if (!document) return null
+
+  return document.recipe
+}
+
+export function getBuilderActiveStepIndexSnapshot(tabId: WorkbenchTabId) {
+  return getBuilderDocument(useBuilderStore.getState(), tabId)?.activeStepIndex
+}
+
+export function resetBuilderStoreForTests() {
+  useBuilderStore.setState((state) => ({
+    ...state,
+    ...createInitialBuilderState(),
+  }))
+}
+
 export const useBuilderActions = () => useBuilderStore((state) => state.actions)
-export const useBuilderActiveStepIndex = () =>
-  useBuilderStore((state) => state.activeStepIndex)
 export const useBuilderSteps = () => useBuilderStore((state) => state.steps)
-export const useBuilderActiveStep = () =>
-  useBuilderStore((state) => state.steps[state.activeStepIndex]!)
-export const useBuilderRecipe = () => useBuilderStore((state) => state.recipe)
-export const useBuilderTitle = () =>
-  useBuilderStore((state) => state.recipe.title)
-export const useBuilderLayers = () =>
-  useBuilderStore((state) => state.recipe.layers)
-export const useBuilderExamples = () =>
-  useBuilderStore((state) => state.recipe.examples)
-export const useBuilderEdges = () =>
-  useBuilderStore((state) => state.recipe.edges)
-export const useBuilderFilters = () =>
-  useBuilderStore((state) => state.recipe.filters)
-export const useBuilderSwatches = () =>
-  useBuilderStore((state) => state.recipe.swatches)
-export const useBuilderLayoutAlgorithm = () =>
-  useBuilderStore((state) => state.recipe.layoutAlgorithm)
+
+export function useBuilderDocument(tabId: WorkbenchTabId | null | undefined) {
+  return useBuilderStore((state) => getBuilderDocument(state, tabId))
+}
+
+export function useBuilderDocumentSelector<T>(
+  tabId: WorkbenchTabId | null | undefined,
+  selector: (state: BuilderState, document: BuilderDocumentState) => T,
+  fallback: T,
+) {
+  return useBuilderStore((state) => {
+    const document = getBuilderDocument(state, tabId)
+    return document ? selector(state, document) : fallback
+  })
+}
