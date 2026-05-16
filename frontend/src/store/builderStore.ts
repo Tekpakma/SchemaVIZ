@@ -7,9 +7,16 @@ import type {
   RecipeData,
   RecipeFilter,
   RecipeLayer,
+  RecipeModel,
   RecipeStep,
   TraversalEdge,
 } from '@/features/builder/types'
+import {
+  DEFAULT_SWATCHES,
+  createDefaultLayer,
+  createRecipeLayer,
+  ensureRecipeHasLayer,
+} from '@/features/builder/recipeDefaults'
 import type { WorkbenchTabId } from './workbenchStore'
 
 const RECIPE_STEPS: RecipeStep[] = [
@@ -58,6 +65,7 @@ const RECIPE_STEPS: RecipeStep[] = [
 ]
 
 export type BuilderDocumentState = {
+  activeExampleId: string | null
   activeStepIndex: number
   recipe: RecipeData
   isSeeded: boolean
@@ -80,10 +88,19 @@ type BuilderActions = {
   addLayer: (tabId: WorkbenchTabId, layer: RecipeLayer) => void
   removeLayer: (tabId: WorkbenchTabId, id: string) => void
   reorderLayers: (tabId: WorkbenchTabId, layers: RecipeLayer[]) => void
+  addModel: (tabId: WorkbenchTabId, model: RecipeModel) => void
+  removeModel: (tabId: WorkbenchTabId, id: string) => void
+  reorderModels: (tabId: WorkbenchTabId, models: RecipeModel[]) => void
+  setModelLayer: (
+    tabId: WorkbenchTabId,
+    modelId: string,
+    layerId: string,
+  ) => void
 
   addExample: (tabId: WorkbenchTabId, example: ExampleRecord) => void
   removeExample: (tabId: WorkbenchTabId, id: string) => void
   setDefaultExample: (tabId: WorkbenchTabId, id: string) => void
+  setActiveExample: (tabId: WorkbenchTabId, id: string | null) => void
 
   addEdge: (tabId: WorkbenchTabId, edge: TraversalEdge) => void
   removeEdge: (tabId: WorkbenchTabId, id: string) => void
@@ -102,11 +119,12 @@ type BuilderActions = {
 function createInitialRecipe(): RecipeData {
   return {
     title: '',
-    layers: [],
+    layers: [createDefaultLayer()],
+    models: [],
     examples: [],
     edges: [],
     filters: [],
-    swatches: ['#C4006A', '#1D8B68', '#6A2B4D', '#18181B'],
+    swatches: [...DEFAULT_SWATCHES],
     layoutAlgorithm: 'Layered',
     promoteOrg: '',
     promoteVisibility: 'org-wide',
@@ -115,20 +133,27 @@ function createInitialRecipe(): RecipeData {
 }
 
 function cloneRecipe(recipe: RecipeData): RecipeData {
-  return {
+  const clonedRecipe: RecipeData = {
     ...recipe,
-    layers: recipe.layers.map((layer) => ({ ...layer })),
+    layers: ensureRecipeHasLayer(recipe.layers),
+    models: [],
     examples: recipe.examples.map((example) => ({ ...example })),
     edges: recipe.edges.map((edge) => ({ ...edge })),
     filters: recipe.filters.map((filter) => ({ ...filter })),
     swatches: [...recipe.swatches],
   }
+  clonedRecipe.models = normalizeModelsForLayerRules(
+    clonedRecipe,
+    recipe.models,
+  )
+  return clonedRecipe
 }
 
 function createBuilderDocumentState(
   recipe = createInitialRecipe(),
 ): BuilderDocumentState {
   return {
+    activeExampleId: null,
     activeStepIndex: 0,
     recipe: cloneRecipe(recipe),
     isSeeded: false,
@@ -155,6 +180,59 @@ function ensureBuilderDocument(
 ): BuilderDocumentState {
   state.documentsByTabId[tabId] ??= createBuilderDocumentState()
   return state.documentsByTabId[tabId]
+}
+
+function ensureSecondaryLayer(recipe: RecipeData) {
+  if (recipe.layers.length > 1) return recipe.layers[1]!.id
+
+  const layer = createRecipeLayer(`L${recipe.layers.length + 1}`)
+  recipe.layers.push(layer)
+  return layer.id
+}
+
+function normalizeModelsForLayerRules(
+  recipe: RecipeData,
+  models: RecipeModel[],
+) {
+  const layers = ensureRecipeHasLayer(recipe.layers)
+  recipe.layers = layers
+
+  const validLayerIds = new Set(layers.map((layer) => layer.id))
+  const startLayerId = layers[0]!.id
+  let hasStartModel = false
+
+  return models.map((model) => {
+    const requestedLayerId = validLayerIds.has(model.layerId)
+      ? model.layerId
+      : startLayerId
+
+    if (requestedLayerId !== startLayerId) {
+      return { ...model, layerId: requestedLayerId }
+    }
+
+    if (!hasStartModel) {
+      hasStartModel = true
+      return { ...model, layerId: startLayerId }
+    }
+
+    return {
+      ...model,
+      layerId: ensureSecondaryLayer(recipe),
+    }
+  })
+}
+
+function canPlaceModelInLayer(
+  recipe: RecipeData,
+  modelId: string | null,
+  layerId: string,
+) {
+  const startLayerId = recipe.layers[0]?.id
+  if (layerId !== startLayerId) return true
+
+  return !recipe.models.some(
+    (model) => model.layerId === startLayerId && model.id !== modelId,
+  )
 }
 
 function seedBuilderDocument(
@@ -260,8 +338,26 @@ const useBuilderStore = create<BuilderState>()(
           set(
             (state) => {
               const document = ensureBuilderDocument(state, tabId)
+
+              // Always keep at least one layer
+              if (document.recipe.layers.length <= 1) return
+
               document.recipe.layers = document.recipe.layers.filter(
                 (layer) => layer.id !== id,
+              )
+
+              // Relabel remaining layers sequentially: L1, L2, L3...
+              for (let i = 0; i < document.recipe.layers.length; i++) {
+                document.recipe.layers[i]!.label = `L${i + 1}`
+              }
+
+              document.recipe.models = normalizeModelsForLayerRules(
+                document.recipe,
+                document.recipe.models.map((model) =>
+                  model.layerId === id
+                    ? { ...model, layerId: document.recipe.layers[0]!.id }
+                    : model,
+                ),
               )
             },
             false,
@@ -271,12 +367,89 @@ const useBuilderStore = create<BuilderState>()(
         reorderLayers: (tabId, layers) =>
           set(
             (state) => {
-              ensureBuilderDocument(state, tabId).recipe.layers = layers.map(
-                (layer) => ({ ...layer }),
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.layers = ensureRecipeHasLayer(layers)
+
+              const layerIds = new Set(
+                document.recipe.layers.map((layer) => layer.id),
+              )
+              const fallbackLayerId = document.recipe.layers[0]!.id
+              document.recipe.models = normalizeModelsForLayerRules(
+                document.recipe,
+                document.recipe.models.map((model) =>
+                  layerIds.has(model.layerId)
+                    ? model
+                    : { ...model, layerId: fallbackLayerId },
+                ),
               )
             },
             false,
             'builder/reorderLayers',
+          ),
+
+        addModel: (tabId, model) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              const layerIds = new Set(
+                document.recipe.layers.map((layer) => layer.id),
+              )
+              const layerId = layerIds.has(model.layerId)
+                ? model.layerId
+                : document.recipe.layers[0]!.id
+              if (!canPlaceModelInLayer(document.recipe, null, layerId)) return
+
+              document.recipe.models.push({
+                ...model,
+                layerId,
+              })
+            },
+            false,
+            'builder/addModel',
+          ),
+
+        removeModel: (tabId, id) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.models = document.recipe.models.filter(
+                (model) => model.id !== id,
+              )
+              document.recipe.edges = document.recipe.edges.filter(
+                (edge) => edge.fromModelId !== id && edge.toModelId !== id,
+              )
+            },
+            false,
+            'builder/removeModel',
+          ),
+
+        reorderModels: (tabId, models) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.models = normalizeModelsForLayerRules(
+                document.recipe,
+                models,
+              )
+            },
+            false,
+            'builder/reorderModels',
+          ),
+
+        setModelLayer: (tabId, modelId, layerId) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              if (!canPlaceModelInLayer(document.recipe, modelId, layerId)) {
+                return
+              }
+              const model = document.recipe.models.find(
+                (candidate) => candidate.id === modelId,
+              )
+              if (model) model.layerId = layerId
+            },
+            false,
+            'builder/setModelLayer',
           ),
 
         addExample: (tabId, example) =>
@@ -312,6 +485,15 @@ const useBuilderStore = create<BuilderState>()(
             },
             false,
             'builder/setDefaultExample',
+          ),
+
+        setActiveExample: (tabId, id) =>
+          set(
+            (state) => {
+              ensureBuilderDocument(state, tabId).activeExampleId = id
+            },
+            false,
+            'builder/setActiveExample',
           ),
 
         addEdge: (tabId, edge) =>

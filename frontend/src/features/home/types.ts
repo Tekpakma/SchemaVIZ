@@ -1,11 +1,6 @@
 export type TemplateHue = 'pink' | 'green' | 'plum'
 
-export type PromotionLevel =
-  | 'featured'
-  | 'org'
-  | 'team'
-  | 'personal'
-  | 'system'
+export type PromotionLevel = 'featured' | 'personal' | 'system'
 
 export interface TemplateStart {
   id: string

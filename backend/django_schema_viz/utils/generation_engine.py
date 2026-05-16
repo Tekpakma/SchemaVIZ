@@ -7,9 +7,6 @@ are traversed but not rendered; their visible descendants connect back to the
 nearest visible ancestor.
 """
 
-from dataclasses import dataclass, field
-from typing import Any
-
 from django.apps import apps
 from django.db import models
 
@@ -25,50 +22,13 @@ from .generation_definition import (
 )
 from .generation_steps import build_step_filter
 from .generation_steps import GenerationStepValidationError
+from .generation_types import (  # noqa: F401 — re-exported for existing importers
+    GeneratedEdge,
+    GeneratedNode,
+    GenerationResult,
+    GenerationResultSerializer,
+)
 from .qlab_access import is_model_accessible_for_user
-from rest_framework_dataclasses.serializers import DataclassSerializer
-
-
-@dataclass
-class GeneratedNode:
-    """A single node in the generated diagram."""
-
-    id: str
-    app_label: str
-    model_name: str
-    record_pk: str
-    label: str | None
-    display_name: str
-    fields: dict[str, Any]
-    style_template_id: str | None
-    group_template_id: str | None = None
-    parent_id: str | None = None
-    is_group: bool = False
-    step_ui_ids: list[str] = field(default_factory=list)
-
-
-@dataclass
-class GeneratedEdge:
-    """An edge connecting two visible nodes."""
-
-    source: str
-    target: str
-    relationship: str  # the original relationship name that caused this edge
-
-
-@dataclass
-class GenerationResult:
-    """Complete output of a template execution."""
-
-    nodes: list[GeneratedNode] = field(default_factory=list)
-    edges: list[GeneratedEdge] = field(default_factory=list)
-
-
-class GenerationResultSerializer(DataclassSerializer):
-    """Complete output of a template execution."""
-
-    class Meta:
-        dataclass = GenerationResult
 
 
 class GenerationEngine:

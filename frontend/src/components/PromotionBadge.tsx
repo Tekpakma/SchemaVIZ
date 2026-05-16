@@ -6,17 +6,7 @@ const BADGE_CONFIG = {
     label: 'Featured · org',
     icon: '★',
     className: 'bg-brand-muted text-brand',
-  },
-  org: {
-    label: 'Org-wide',
-    icon: '◆',
-    className: 'bg-muted text-foreground',
-  },
-  team: {
-    label: 'Team',
-    icon: '●',
-    className: 'bg-muted text-chart-2',
-  },
+  }
 } as const
 
 interface PromotionBadgeProps {
@@ -32,8 +22,6 @@ export function PromotionBadge({
 }: PromotionBadgeProps) {
   if (promotion === 'system' || promotion === 'personal') return null
   const config = BADGE_CONFIG[promotion]
-  if (!config) return null
-
   return (
     <span
       className={cn(

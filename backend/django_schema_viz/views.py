@@ -24,6 +24,7 @@ from .serializers import (
     DynamicModelSerializer,
     DrawingSerializer,
     GenerationRunRequestSerializer,
+    GenerationRunResponseSerializer,
     GenerationTemplateQuickAccessEntrySerializer,
     GenerationTemplateListSerializer,
     GenerationTemplateOwnRecentQuickAccessSerializer,
@@ -2237,7 +2238,7 @@ class GenerationRunView(SchemaVizViewMixin, APIView):
         ),
         request=GenerationRunRequestSerializer,
         responses={
-            200: None,
+            200: GenerationRunResponseSerializer,
             400: ErrorResponseSerializer,
             404: ErrorResponseSerializer,
         },

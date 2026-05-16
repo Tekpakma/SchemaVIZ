@@ -7,7 +7,10 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from 'lucide-react'
-import { useCanvasActions, useShowResolvedReferences } from '@/store/canvasStore'
+import {
+  useCanvasActions,
+  useShowResolvedReferences,
+} from '@/store/canvasStore'
 import { useCanvasHelperLines } from '../hooks/useCanvasHelperLines'
 
 type CanvasViewportPanelProps = {
@@ -19,6 +22,7 @@ type CanvasViewportPanelProps = {
   onLayout: () => void
   onZoomIn: () => void
   onZoomOut: () => void
+  showEditActions?: boolean
 }
 
 type ViewportPanelButtonProps = {
@@ -40,8 +44,9 @@ function ViewportPanelButton({
     <button
       aria-label={label}
       aria-pressed={pressed || undefined}
-      className={`flex size-8 items-center justify-center hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 ${pressed ? 'bg-accent text-foreground' : 'text-muted-foreground'
-        }`}
+      className={`flex size-8 items-center justify-center hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 ${
+        pressed ? 'bg-accent text-foreground' : 'text-muted-foreground'
+      }`}
       disabled={disabled}
       onClick={onClick}
       type="button"
@@ -60,6 +65,7 @@ export const CanvasViewportPanel = memo(function CanvasViewportPanel({
   onLayout,
   onZoomIn,
   onZoomOut,
+  showEditActions = true,
 }: CanvasViewportPanelProps) {
   return (
     <div className="absolute bottom-4 left-4 z-20 flex flex-col overflow-hidden rounded-md border border-border bg-popover shadow-sm">
@@ -78,15 +84,19 @@ export const CanvasViewportPanel = memo(function CanvasViewportPanel({
       >
         <ZoomOutIcon className="size-4" />
       </ViewportPanelButton>
-      <div className="h-px bg-border" />
-      <ViewportPanelButton
-        label="Layout graph"
-        disabled={!canFitView || isLayoutPending}
-        pressed={isLayoutPending}
-        onClick={onLayout}
-      >
-        <WorkflowIcon className="size-4" />
-      </ViewportPanelButton>
+      {showEditActions ? (
+        <>
+          <div className="h-px bg-border" />
+          <ViewportPanelButton
+            label="Layout graph"
+            disabled={!canFitView || isLayoutPending}
+            pressed={isLayoutPending}
+            onClick={onLayout}
+          >
+            <WorkflowIcon className="size-4" />
+          </ViewportPanelButton>
+        </>
+      ) : null}
       <div className="h-px bg-border" />
       <ViewportPanelButton
         label="Fit view"
@@ -95,10 +105,14 @@ export const CanvasViewportPanel = memo(function CanvasViewportPanel({
       >
         <ScanIcon className="size-4" />
       </ViewportPanelButton>
-      <div className="h-px bg-border" />
-      <HelperLinesButton />
-      <div className="h-px bg-border" />
-      <ReferenceValuesButton />
+      {showEditActions ? (
+        <>
+          <div className="h-px bg-border" />
+          <HelperLinesButton />
+          <div className="h-px bg-border" />
+          <ReferenceValuesButton />
+        </>
+      ) : null}
     </div>
   )
 })

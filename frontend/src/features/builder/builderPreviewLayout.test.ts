@@ -6,12 +6,13 @@ import {
   getBuilderPreviewEdges,
   getBuilderPreviewNodes,
 } from './builderPreviewLayout'
-import type { RecipeData } from './types'
+import type { RecipeData, RecipeModel } from './types'
 
 function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
   return {
     title: 'Preview',
     layers: [],
+    models: [],
     examples: [],
     edges: [],
     filters: [],
@@ -24,30 +25,61 @@ function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
   }
 }
 
+function createModel(overrides: Partial<RecipeModel>): RecipeModel {
+  const id = overrides.id ?? 'model-service'
+  const modelName = overrides.modelName ?? id.replace(/^model-/, '')
+
+  return {
+    id,
+    appLabel: overrides.appLabel ?? 'app',
+    appVerboseName: overrides.appVerboseName ?? 'App',
+    modelName,
+    modelId: overrides.modelId ?? `app.${modelName}`,
+    displayName: overrides.displayName ?? modelName,
+    layerId: overrides.layerId ?? 'service',
+    alias: overrides.alias,
+  }
+}
+
 describe('builder preview layout', () => {
-  it('uses recipe layers as preview nodes', () => {
+  it('uses recipe models as preview nodes', () => {
     const nodes = getBuilderPreviewNodes(
       createRecipe({
         layers: [
           { id: 'service', label: 'Services' },
           { id: 'database', label: 'Data' },
         ],
+        models: [
+          createModel({
+            id: 'service-model',
+            displayName: 'Service',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'database-model',
+            displayName: 'Database',
+            layerId: 'database',
+          }),
+        ],
       }),
     )
 
     expect(nodes).toMatchObject([
-      { accent: '#111111', index: 0, label: 'Services' },
-      { accent: '#222222', index: 1, label: 'Data' },
+      { accent: '#111111', index: 0, label: 'Service', layerId: 'service' },
+      { accent: '#222222', index: 1, label: 'Database', layerId: 'database' },
     ])
-    expect(nodes[0]?.x).toBeLessThan(nodes[1]?.x ?? 0)
   })
 
-  it('produces one column per unique layer label', () => {
+  it('produces one column per visual layer', () => {
     const columns = getBuilderPreviewColumns(
       createRecipe({
         layers: [
           { id: 'service', label: 'Services' },
           { id: 'database', label: 'Data' },
+        ],
+        models: [
+          createModel({ id: 'service-model', layerId: 'service' }),
+          createModel({ id: 'database-model', layerId: 'database' }),
         ],
       }),
     )
@@ -56,16 +88,31 @@ describe('builder preview layout', () => {
       { index: 0, label: 'Services', nodeCount: 1 },
       { index: 1, label: 'Data', nodeCount: 1 },
     ])
-    expect(columns[0]?.x).toBeLessThan(columns[1]?.x ?? 0)
   })
 
-  it('groups duplicate layer labels into a single column with multiple nodes', () => {
+  it('supports multiple backend models in one layer', () => {
     const columns = getBuilderPreviewColumns(
       createRecipe({
         layers: [
-          { id: 'svc-a', label: 'Services' },
-          { id: 'svc-b', label: 'Services' },
+          { id: 'services', label: 'Services' },
           { id: 'database', label: 'Data' },
+        ],
+        models: [
+          createModel({
+            id: 'svc-a',
+            displayName: 'Service',
+            layerId: 'services',
+          }),
+          createModel({
+            id: 'svc-b',
+            displayName: 'Endpoint',
+            layerId: 'services',
+          }),
+          createModel({
+            id: 'database',
+            displayName: 'Database',
+            layerId: 'database',
+          }),
         ],
       }),
     )
@@ -75,21 +122,37 @@ describe('builder preview layout', () => {
     expect(columns[1]).toMatchObject({ label: 'Data', nodeCount: 1 })
   })
 
-  it('stacks nodes vertically when multiple models share a layer', () => {
+  it('groups nodes by layer via shared layerId', () => {
     const nodes = getBuilderPreviewNodes(
       createRecipe({
         layers: [
-          { id: 'svc-a', label: 'Services' },
-          { id: 'svc-b', label: 'Services' },
+          { id: 'services', label: 'Services' },
           { id: 'database', label: 'Data' },
+        ],
+        models: [
+          createModel({
+            id: 'svc-a',
+            displayName: 'Service',
+            layerId: 'services',
+          }),
+          createModel({
+            id: 'svc-b',
+            displayName: 'Endpoint',
+            layerId: 'services',
+          }),
+          createModel({
+            id: 'database',
+            displayName: 'Database',
+            layerId: 'database',
+          }),
         ],
       }),
     )
 
-    const serviceNodes = nodes.filter((n) => n.label.startsWith('Services'))
+    const serviceNodes = nodes.filter((n) => n.layerId === 'services')
     expect(serviceNodes).toHaveLength(2)
-    expect(serviceNodes[0]!.x).toBe(serviceNodes[1]!.x)
-    expect(serviceNodes[0]!.y).toBeLessThan(serviceNodes[1]!.y)
+    expect(serviceNodes[0]!.layerLabel).toBe('Services')
+    expect(serviceNodes[1]!.layerLabel).toBe('Services')
   })
 
   it('maps recipe edges to matching preview nodes', () => {
@@ -98,11 +161,25 @@ describe('builder preview layout', () => {
         { id: 'service', label: 'Services' },
         { id: 'database', label: 'Data' },
       ],
+      models: [
+        createModel({
+          id: 'service-model',
+          displayName: 'Service',
+          layerId: 'service',
+        }),
+        createModel({
+          id: 'database-model',
+          displayName: 'Data',
+          layerId: 'database',
+        }),
+      ],
       edges: [
         {
           id: 'edge-service-data',
           from: 'Service',
           to: 'Data',
+          fromModelId: 'service-model',
+          toModelId: 'database-model',
           via: 'persists',
           auto: true,
           cost: 1,
@@ -115,7 +192,7 @@ describe('builder preview layout', () => {
       {
         id: 'edge-service-data',
         label: 'persists',
-        from: { label: 'Services' },
+        from: { label: 'Service' },
         to: { label: 'Data' },
       },
     ])
@@ -128,11 +205,25 @@ describe('builder preview layout', () => {
           { id: 'service', label: 'Services' },
           { id: 'database', label: 'Data' },
         ],
+        models: [
+          createModel({
+            id: 'service-model',
+            displayName: 'Service',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'database-model',
+            displayName: 'Data',
+            layerId: 'database',
+          }),
+        ],
         edges: [
           {
             id: 'edge-service-data',
             from: 'Service',
             to: 'Data',
+            fromModelId: 'service-model',
+            toModelId: 'database-model',
             via: 'persists',
             auto: true,
             cost: 1,
@@ -150,19 +241,24 @@ describe('builder preview layout', () => {
     )
 
     expect(graph.columns).toHaveLength(2)
-    expect(graph.nodes).toMatchObject([
-      {
-        kind: 'generation',
-        layoutMode: 'manual',
-        shape: 'box',
-      },
-      {
-        kind: 'generation',
-        layoutMode: 'manual',
-        shape: 'box',
-      },
+
+    // First two nodes are ELK layer groups, then model nodes
+    const groupNodes = graph.nodes.filter((n) => n.kind === 'group')
+    const modelNodes = graph.nodes.filter((n) => n.kind === 'generation')
+    expect(groupNodes).toHaveLength(2)
+    expect(groupNodes).toMatchObject([
+      { kind: 'group', shape: 'group', layoutMode: 'auto' },
+      { kind: 'group', shape: 'group', layoutMode: 'auto' },
     ])
-    expect(graph.nodes[0]?.html).toContain('1 filter')
+    expect(modelNodes).toMatchObject([
+      { kind: 'generation', layoutMode: 'auto', shape: 'box' },
+      { kind: 'generation', layoutMode: 'auto', shape: 'box' },
+    ])
+    // Model nodes reference their parent group
+    expect(modelNodes[0]?.parentGroupId).toContain('service')
+    expect(modelNodes[1]?.parentGroupId).toContain('database')
+    expect(modelNodes[0]?.html).toContain('1 filter')
+
     expect(graph.edges).toMatchObject([
       {
         id: 'edge-service-data',
@@ -170,12 +266,19 @@ describe('builder preview layout', () => {
         label: 'persists',
       },
     ])
-    expect(graph.key).toContain('builder-preview-v1')
+    expect(graph.key).toContain('builder-preview-v3')
   })
 
   it('changes the canvas remount key only when preview graph inputs change', () => {
     const baseRecipe = createRecipe({
       layers: [{ id: 'service', label: 'Services' }],
+      models: [
+        createModel({
+          id: 'service-model',
+          displayName: 'Service',
+          layerId: 'service',
+        }),
+      ],
       filters: [
         {
           id: 'filter-service',
@@ -205,5 +308,50 @@ describe('builder preview layout', () => {
 
     expect(changedFilterExpressionKey).toBe(baseKey)
     expect(changedLayerKey).not.toBe(baseKey)
+  })
+
+  it('produces different key when model order changes within a layer', () => {
+    const modelA = createModel({
+      id: 'model-a',
+      displayName: 'Alpha',
+      layerId: 'layer-1',
+    })
+    const modelB = createModel({
+      id: 'model-b',
+      displayName: 'Beta',
+      layerId: 'layer-1',
+    })
+    const modelC = createModel({
+      id: 'model-c',
+      displayName: 'Gamma',
+      layerId: 'layer-1',
+    })
+
+    const originalRecipe = createRecipe({
+      layers: [{ id: 'layer-1', label: 'L1' }],
+      models: [modelA, modelB, modelC],
+    })
+    const reorderedRecipe = createRecipe({
+      layers: [{ id: 'layer-1', label: 'L1' }],
+      models: [modelB, modelA, modelC],
+    })
+
+    const originalGraph = getBuilderPreviewCanvasGraph(originalRecipe)
+    const reorderedGraph = getBuilderPreviewCanvasGraph(reorderedRecipe)
+
+    // Key must change so canvas remounts
+    expect(reorderedGraph.key).not.toBe(originalGraph.key)
+
+    // Model nodes (after group nodes) should swap: Alpha was first, now Beta is first
+    const originalModels = originalGraph.nodes.filter(
+      (n) => n.kind === 'generation',
+    )
+    const reorderedModels = reorderedGraph.nodes.filter(
+      (n) => n.kind === 'generation',
+    )
+    expect(originalModels[0]?.html).toContain('Alpha')
+    expect(originalModels[1]?.html).toContain('Beta')
+    expect(reorderedModels[0]?.html).toContain('Beta')
+    expect(reorderedModels[1]?.html).toContain('Alpha')
   })
 })

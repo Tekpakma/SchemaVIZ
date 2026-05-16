@@ -1,16 +1,24 @@
 import { GenerationDefinitionSchema } from '@/api/generated/zod/generationDefinitionSchema.zod'
 import { GenerationLayoutSettingsSchema } from '@/api/generated/zod/generationLayoutSettingsSchema.zod'
 import type { GenerationDefinitionSchemaOutput } from '@/api/generated/zod/generationDefinitionSchema.zod'
-import type { GenerationTemplateRead } from '@/api/contracts'
+import type {
+  GenerationRunRequestRequest,
+  GenerationTemplateRead,
+} from '@/api/contracts'
 import type {
   LayoutAlgorithm,
   RecipeData,
   RecipeFilter,
   RecipeLayer,
+  RecipeModel,
   TraversalEdge,
 } from './types'
-
-const DEFAULT_SWATCHES = ['#C4006A', '#1D8B68', '#6A2B4D', '#18181B']
+import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
+import {
+  DEFAULT_SWATCHES,
+  createDefaultLayer,
+  ensureRecipeHasLayer,
+} from './recipeDefaults'
 
 type DefinitionStep = GenerationDefinitionSchemaOutput['stepsById'][string] & {
   id: string
@@ -24,7 +32,8 @@ type DefinitionStep = GenerationDefinitionSchemaOutput['stepsById'][string] & {
 export function createBlankRecipe(): RecipeData {
   return {
     title: '',
-    layers: [],
+    layers: [createDefaultLayer()],
+    models: [],
     examples: [],
     edges: [],
     filters: [],
@@ -39,10 +48,14 @@ export function createBlankRecipe(): RecipeData {
 function getStepLabel(step: DefinitionStep) {
   if (step.label) return step.label
 
-  const modelName = step.resolvedModelId.split('.').pop()
-  return modelName || step.id
+  const parsed = splitModelId(step.resolvedModelId)
+  return parsed?.modelName || step.id
 }
 
+/**
+ * Reads backend generation steps in traversal order, then appends disconnected steps.
+ * Templates may contain stale or hidden branches, so this keeps conversion deterministic.
+ */
 function readOrderedDefinitionSteps(definition: unknown) {
   const parsedDefinition = GenerationDefinitionSchema.safeParse(definition)
   if (!parsedDefinition.success) return []
@@ -119,10 +132,30 @@ export function createRecipeFromTemplate(
   const visibleSteps = steps.filter((step) => step.visibility !== 'hidden')
   const stepsById = new Map(steps.map((step) => [step.id, step]))
 
-  const layers: RecipeLayer[] = visibleSteps.map((step) => ({
-    id: step.id,
-    label: getStepLabel(step),
+  const layers: RecipeLayer[] = visibleSteps.map((step, index) => ({
+    id: `layer-${step.id}`,
+    label: `L${index + 1}`,
   }))
+  const normalizedLayers = ensureRecipeHasLayer(layers)
+  const layerIdByStepId = new Map(
+    visibleSteps.map((step) => [step.id, `layer-${step.id}`]),
+  )
+  const models: RecipeModel[] = visibleSteps.map((step) => {
+    const parsed = splitModelId(step.resolvedModelId)
+    const appLabel = parsed?.appLabel ?? ''
+    const modelName = parsed?.modelName ?? step.resolvedModelId
+
+    return {
+      id: step.id,
+      appLabel,
+      appVerboseName: appLabel,
+      modelName,
+      modelId: step.resolvedModelId,
+      displayName: getStepLabel(step),
+      layerId: layerIdByStepId.get(step.id) ?? `layer-${step.id}`,
+      alias: step.label ?? undefined,
+    }
+  })
 
   const edges: TraversalEdge[] = visibleSteps.flatMap((step) => {
     if (!step.parentId || !step.relationship) return []
@@ -135,6 +168,8 @@ export function createRecipeFromTemplate(
         id: `edge-${step.id}`,
         from: getStepLabel(parent),
         to: getStepLabel(step),
+        fromModelId: parent.id,
+        toModelId: step.id,
         via: step.relationship,
         auto: true,
         cost: 1,
@@ -159,12 +194,152 @@ export function createRecipeFromTemplate(
   return {
     ...createBlankRecipe(),
     title: template.name,
-    layers,
+    layers: normalizedLayers,
+    models,
     edges,
     filters,
     swatches: readSwatches(version?.layoutSettings),
     layoutAlgorithm: readLayoutAlgorithm(version?.layoutSettings),
     promoteVisibility: template.scope === 'global' ? 'org-wide' : 'private',
     promoteAudience: template.scope === 'global' ? 'All users' : '',
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recipe → inline generation definition (for preview execution)
+// ---------------------------------------------------------------------------
+
+type GenerationSource = GenerationRunRequestRequest['source']
+
+export type InlineDefinition = NonNullable<GenerationSource['inlineDefinition']>
+
+type InlineDefinitionStep = InlineDefinition['stepsById'][string]
+
+export type InlineGenerationSource = Required<
+  Pick<GenerationSource, 'inlineDefinition' | 'rootModel' | 'layoutSettings'>
+>
+
+function getModelLabel(model: RecipeModel) {
+  return model.alias || model.displayName
+}
+
+function getFilterByModelLabel(filters: RecipeFilter[]) {
+  const filterByModelLabel = new Map<string, string>()
+  for (const filter of filters) {
+    filterByModelLabel.set(filter.layer.trim().toLowerCase(), filter.expr)
+  }
+  return filterByModelLabel
+}
+
+function getFilterForModel(
+  model: RecipeModel,
+  filterByModelLabel: Map<string, string>,
+) {
+  const filterExpr = filterByModelLabel.get(
+    getModelLabel(model).trim().toLowerCase(),
+  )
+
+  return filterExpr ? { raw: filterExpr } : null
+}
+
+function getFallbackRouteStep(edge: TraversalEdge) {
+  if (!edge.fromModelId || !edge.toModelId) return null
+
+  return {
+    fromModel: edge.fromModelId,
+    toModel: edge.toModelId,
+    viaField: edge.via,
+    isForward: true,
+    isMany: true,
+  }
+}
+
+function getSyntheticStepId(edge: TraversalEdge, index: number) {
+  return `${edge.id}:hop-${index + 1}`
+}
+
+/**
+ * Converts a builder recipe back into the inline generation definition
+ * format that the generation-runs API accepts.
+ *
+ * The recipe's traversal edges encode parent→child relationships; models
+ * become definition steps keyed by their recipe id.
+ */
+export function recipeToInlineDefinition(
+  recipe: RecipeData,
+): InlineGenerationSource | null {
+  if (recipe.models.length === 0) return null
+
+  const startModel = recipe.models[0]!
+  const rootStepId = startModel.id
+
+  const filterByModelLabel = getFilterByModelLabel(recipe.filters)
+  const modelsById = new Map(recipe.models.map((model) => [model.id, model]))
+  const stepsById: Record<string, InlineDefinitionStep> = {}
+
+  for (const model of recipe.models) {
+    stepsById[model.id] = {
+      id: model.id,
+      parentId: null,
+      childIds: [],
+      relationship: null,
+      resolvedModelId: model.modelId,
+      visibility: 'visible',
+      groupMode: 'none',
+      label: getModelLabel(model),
+      filter: getFilterForModel(model, filterByModelLabel),
+    }
+  }
+
+  for (const edge of recipe.edges) {
+    if (!edge.fromModelId || !edge.toModelId) continue
+
+    const routeSteps = edge.routeSteps?.length
+      ? edge.routeSteps
+      : [getFallbackRouteStep(edge)].filter((step) => step != null)
+
+    if (routeSteps.length === 0) continue
+
+    let parentStepId = edge.fromModelId
+
+    for (const [index, routeStep] of routeSteps.entries()) {
+      const isLastStep = index === routeSteps.length - 1
+      const stepId = isLastStep
+        ? edge.toModelId
+        : getSyntheticStepId(edge, index)
+      const existingStep = stepsById[stepId]
+      const targetModel = isLastStep ? modelsById.get(edge.toModelId) : null
+      const parentStep = stepsById[parentStepId]
+
+      if (!parentStep) break
+
+      parentStep.childIds = [...(parentStep.childIds ?? []), stepId]
+
+      stepsById[stepId] = {
+        id: stepId,
+        parentId: parentStepId,
+        childIds: existingStep?.childIds ?? [],
+        relationship: routeStep.viaField,
+        resolvedModelId: routeStep.toModel,
+        visibility: isLastStep ? 'visible' : 'hidden',
+        groupMode: existingStep?.groupMode ?? 'none',
+        label: targetModel ? getModelLabel(targetModel) : null,
+        filter:
+          isLastStep && targetModel
+            ? getFilterForModel(targetModel, filterByModelLabel)
+            : null,
+      }
+
+      parentStepId = stepId
+    }
+  }
+
+  return {
+    inlineDefinition: { rootStepId, stepsById },
+    rootModel: startModel.modelId,
+    layoutSettings: {
+      layoutAlgorithm: recipe.layoutAlgorithm,
+      swatches: recipe.swatches,
+    },
   }
 }

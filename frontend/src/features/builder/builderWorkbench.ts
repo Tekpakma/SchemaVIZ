@@ -18,12 +18,38 @@ import type {
   RecipeData,
   RecipeFilter,
   RecipeLayer,
+  RecipeModel,
   TraversalEdge,
 } from './types'
 import { createBlankRecipe, createRecipeFromTemplate } from './templateRecipe'
 
 const DEFAULT_BUILDER_DRAFT_LOCAL_ID = 'default'
 const UNTITLED_BUILDER_TITLE = 'Untitled template'
+
+export type BuilderDocumentActions = {
+  setActiveStep: (index: number) => void
+  nextStep: () => void
+  prevStep: () => void
+  setTitle: (title: string) => void
+  addLayer: (layer: RecipeLayer) => void
+  removeLayer: (id: string) => void
+  reorderLayers: (layers: RecipeLayer[]) => void
+  addModel: (model: RecipeModel) => void
+  removeModel: (id: string) => void
+  reorderModels: (models: RecipeModel[]) => void
+  setModelLayer: (modelId: string, layerId: string) => void
+  addExample: (example: ExampleRecord) => void
+  removeExample: (id: string) => void
+  setDefaultExample: (id: string) => void
+  setActiveExample: (id: string | null) => void
+  addEdge: (edge: TraversalEdge) => void
+  removeEdge: (id: string) => void
+  toggleEdgeAuto: (id: string) => void
+  addFilter: (filter: RecipeFilter) => void
+  removeFilter: (id: string) => void
+  setSwatch: (index: number, color: string) => void
+  setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void
+}
 
 export type BuilderOpenIntent =
   | {
@@ -126,6 +152,7 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
 
     return {
       tabId,
+      activeExampleId: document.activeExampleId,
       activeStep: steps[document.activeStepIndex]!,
       activeStepIndex: document.activeStepIndex,
       recipe: document.recipe,
@@ -155,6 +182,22 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
           builderActions.reorderLayers(tabId, layers)
           markDirty()
         },
+        addModel: (model: RecipeModel) => {
+          builderActions.addModel(tabId, model)
+          markDirty()
+        },
+        removeModel: (id: string) => {
+          builderActions.removeModel(tabId, id)
+          markDirty()
+        },
+        reorderModels: (models: RecipeModel[]) => {
+          builderActions.reorderModels(tabId, models)
+          markDirty()
+        },
+        setModelLayer: (modelId: string, layerId: string) => {
+          builderActions.setModelLayer(tabId, modelId, layerId)
+          markDirty()
+        },
         addExample: (example: ExampleRecord) => {
           builderActions.addExample(tabId, example)
           markDirty()
@@ -166,6 +209,9 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
         setDefaultExample: (id: string) => {
           builderActions.setDefaultExample(tabId, id)
           markDirty()
+        },
+        setActiveExample: (id: string | null) => {
+          builderActions.setActiveExample(tabId, id)
         },
         addEdge: (edge: TraversalEdge) => {
           builderActions.addEdge(tabId, edge)
@@ -195,7 +241,7 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
           builderActions.setLayoutAlgorithm(tabId, algorithm)
           markDirty()
         },
-      },
+      } satisfies BuilderDocumentActions,
     }
   }, [builderActions, document, steps, tabId, workbenchActions])
 }

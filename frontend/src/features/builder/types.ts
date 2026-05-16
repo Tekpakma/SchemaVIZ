@@ -1,5 +1,6 @@
 import type { ParseKeys } from 'i18next'
 
+import type { SchemaRoute } from '@/api/contracts'
 import type { LayoutAlgorithm } from '@/features/elk/algorithms'
 
 export type RecipeStepKind =
@@ -18,6 +19,17 @@ export interface RecipeLayer {
   label: string
 }
 
+export interface RecipeModel {
+  id: string
+  appLabel: string
+  appVerboseName: string
+  modelName: string
+  modelId: string
+  displayName: string
+  layerId: string
+  alias?: string
+}
+
 export interface ExampleRecord {
   id: string
   label: string
@@ -30,11 +42,16 @@ export interface TraversalEdge {
   id: string
   from: string
   to: string
+  fromModelId?: string
+  toModelId?: string
   via: string
+  routeSteps?: TraversalRouteStep[]
   auto: boolean
   cost: number
   alt?: boolean
 }
+
+export type TraversalRouteStep = SchemaRoute['route'][number]
 
 export interface RecipeFilter {
   id: string
@@ -56,6 +73,7 @@ export interface RecipeStep {
 export interface RecipeData {
   title: string
   layers: RecipeLayer[]
+  models: RecipeModel[]
   examples: ExampleRecord[]
   edges: TraversalEdge[]
   filters: RecipeFilter[]

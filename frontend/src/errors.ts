@@ -10,3 +10,7 @@ export function isGenerationTemplateNotFoundError(
 ): error is GenerationTemplateNotFoundError {
   return error instanceof GenerationTemplateNotFoundError
 }
+
+export function getPreviewErrorMessage(error: unknown) {
+  return error instanceof Error && error.message.trim() ? error.message : null
+}

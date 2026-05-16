@@ -1,4 +1,5 @@
 import { getRequestHeader } from '@tanstack/react-start/server'
+import { parse as parseCookie } from 'cookie-es'
 import type { ELK } from 'elkjs/lib/elk-api'
 import * as R from 'remeda'
 
@@ -27,10 +28,15 @@ export async function runElkLayout(input: CanvasLayoutInput) {
 
 export function getForwardedBackendHeaders() {
   const headers = new Headers({ accept: 'application/json' })
+  const cookie = getRequestHeader('cookie')
+  const csrfToken =
+    getRequestHeader('x-csrftoken') ??
+    (cookie ? parseCookie(cookie).csrftoken : undefined)
 
   const authHeaders = {
     authorization: getRequestHeader('authorization'),
-    cookie: getRequestHeader('cookie'),
+    cookie,
+    'x-csrftoken': csrfToken,
   }
 
   R.pipe(

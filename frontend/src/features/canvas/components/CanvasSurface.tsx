@@ -1,14 +1,10 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Stage, Layer, Rect } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 
 import { TEST_IDS } from '@/constants'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
-import {
-  useCanvasActions,
-  useCanvasNodeIds,
-  useCanvasViewport,
-} from '@/store/canvasStore'
+import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
 import { CanvasEdges } from './CanvasEdges'
 import { CanvasHelperLines } from './CanvasHelperLines'
 import { CanvasTabBar } from './CanvasTabBar'
@@ -37,6 +33,7 @@ type CanvasSurfaceFitWorld = {
 type CanvasSurfaceProps = {
   backgroundLayer?: React.ReactNode
   fitWorld?: CanvasSurfaceFitWorld
+  interactionMode?: 'edit' | 'viewport' | 'static'
   readOnly?: boolean
   seedDefaultNode?: boolean
   showChrome?: boolean
@@ -47,10 +44,10 @@ function useFitWorldViewport(
   fitWorld: CanvasSurfaceFitWorld | undefined,
   stageSize: { width: number; height: number },
 ) {
-  const viewport = useCanvasViewport()
   const { setViewport } = useCanvasActions()
   const fitWorldWidth = fitWorld?.width
   const fitWorldHeight = fitWorld?.height
+  const appliedFitKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (
@@ -62,6 +59,9 @@ function useFitWorldViewport(
       return
     }
 
+    const fitKey = `${fitWorldWidth}:${fitWorldHeight}:${stageSize.width}:${stageSize.height}`
+    if (appliedFitKeyRef.current === fitKey) return
+
     const scale = Math.min(
       stageSize.width / fitWorldWidth,
       stageSize.height / fitWorldHeight,
@@ -72,35 +72,30 @@ function useFitWorldViewport(
       scale,
     }
 
-    if (
-      viewport.x === nextViewport.x &&
-      viewport.y === nextViewport.y &&
-      viewport.scale === nextViewport.scale
-    ) {
-      return
-    }
-
     setViewport(nextViewport, { markDirty: false })
+    appliedFitKeyRef.current = fitKey
   }, [
     fitWorldHeight,
     fitWorldWidth,
     setViewport,
     stageSize.height,
     stageSize.width,
-    viewport.scale,
-    viewport.x,
-    viewport.y,
   ])
 }
 
 export function CanvasSurface({
   backgroundLayer,
   fitWorld,
+  interactionMode,
   readOnly = false,
   seedDefaultNode = true,
   showChrome = true,
   showTabBar = true,
 }: CanvasSurfaceProps) {
+  const resolvedInteractionMode =
+    interactionMode ?? (readOnly ? 'static' : 'edit')
+  const canEditCanvas = resolvedInteractionMode === 'edit'
+  const canUseViewport = resolvedInteractionMode !== 'static'
   const { ref: stageContainerRef, size } = useCanvasStageSize()
   const nodeIds = useCanvasNodeIds()
   const { selectNode } = useCanvasActions()
@@ -124,6 +119,7 @@ export function CanvasSurface({
     handleMarqueeMouseMove,
     handleMarqueeMouseUp,
   } = useCanvasMarqueeSelection()
+  const hasStageSize = size.width > 0 && size.height > 0
 
   useFitWorldViewport(fitWorld, size)
 
@@ -131,55 +127,55 @@ export function CanvasSurface({
 
   const handleStagePointerDown = useCallback(
     (event: KonvaEventObject<MouseEvent>) => {
-      if (readOnly) return
+      if (!canEditCanvas) return
       if (handleMarqueeMouseDown(event)) return
       if (event.target !== event.currentTarget) return
 
       selectNode(null)
     },
-    [handleMarqueeMouseDown, readOnly, selectNode],
+    [canEditCanvas, handleMarqueeMouseDown, selectNode],
   )
 
   const handleStageTouchStart = useCallback(
     (event: KonvaEventObject<TouchEvent>) => {
-      if (readOnly) return
+      if (!canEditCanvas) return
       if (event.target !== event.currentTarget) return
 
       selectNode(null)
     },
-    [readOnly, selectNode],
+    [canEditCanvas, selectNode],
   )
 
   const handleStageMouseMove = useCallback(
     (event: KonvaEventObject<MouseEvent>) => {
-      if (readOnly) return
+      if (!canEditCanvas) return
       handleMarqueeMouseMove(event)
     },
-    [handleMarqueeMouseMove, readOnly],
+    [canEditCanvas, handleMarqueeMouseMove],
   )
 
   const handleStageMouseUp = useCallback(
     (_event: KonvaEventObject<MouseEvent>) => {
-      if (readOnly) return
+      if (!canEditCanvas) return
       handleMarqueeMouseUp()
     },
-    [handleMarqueeMouseUp, readOnly],
+    [canEditCanvas, handleMarqueeMouseUp],
   )
 
   const handleStageWheel = useCallback(
     (event: KonvaEventObject<WheelEvent>) => {
-      if (readOnly) return
+      if (!canUseViewport) return
       handleWheel(event)
     },
-    [handleWheel, readOnly],
+    [canUseViewport, handleWheel],
   )
 
   const handleStageDrag = useCallback(
     (event: KonvaEventObject<DragEvent>) => {
-      if (readOnly) return
+      if (!canUseViewport) return
       handleStageDragMove(event)
     },
-    [handleStageDragMove, readOnly],
+    [canUseViewport, handleStageDragMove],
   )
 
   const handleNodeDragEnd = useCallback(() => {
@@ -201,71 +197,73 @@ export function CanvasSurface({
           overflow: 'hidden',
         }}
       >
-        <Stage
-          width={size.width}
-          height={size.height}
-          x={viewport.x}
-          y={viewport.y}
-          scaleX={viewport.scale}
-          scaleY={viewport.scale}
-          draggable={!readOnly && !isSelecting}
-          onDragMove={handleStageDrag}
-          onDragEnd={handleStageDrag}
-          onWheel={handleStageWheel}
-          onMouseDown={handleStagePointerDown}
-          onMouseMove={handleStageMouseMove}
-          onMouseUp={handleStageMouseUp}
-          onTouchStart={handleStageTouchStart}
-        >
-          {backgroundLayer ? (
-            <Layer listening={false}>{backgroundLayer}</Layer>
-          ) : null}
-          <Layer listening={false}>
-            <CanvasEdges />
-          </Layer>
-          <Layer listening={!readOnly}>
-            {nodeIds.map((id: NodeId) => (
-              <RichTextNode
-                key={id}
-                nodeId={id}
-                onDragEnd={handleNodeDragEnd}
-                readOnly={readOnly}
-              />
-            ))}
-          </Layer>
-          <Layer listening={false}>
-            {nodeIds.map((id: NodeId) => (
-              <RichTextNodeText key={id} nodeId={id} />
-            ))}
-          </Layer>
-          {!readOnly ? (
-            <Layer>
-              <SelectedNodesFrame />
+        {hasStageSize ? (
+          <Stage
+            width={size.width}
+            height={size.height}
+            x={viewport.x}
+            y={viewport.y}
+            scaleX={viewport.scale}
+            scaleY={viewport.scale}
+            draggable={canUseViewport && !isSelecting}
+            onDragMove={handleStageDrag}
+            onDragEnd={handleStageDrag}
+            onWheel={handleStageWheel}
+            onMouseDown={handleStagePointerDown}
+            onMouseMove={handleStageMouseMove}
+            onMouseUp={handleStageMouseUp}
+            onTouchStart={handleStageTouchStart}
+          >
+            {backgroundLayer ? (
+              <Layer listening={false}>{backgroundLayer}</Layer>
+            ) : null}
+            <Layer listening={false}>
+              <CanvasEdges />
+            </Layer>
+            <Layer listening={canEditCanvas}>
               {nodeIds.map((id: NodeId) => (
-                <RichTextNodeControls key={id} nodeId={id} />
+                <RichTextNode
+                  key={id}
+                  nodeId={id}
+                  onDragEnd={handleNodeDragEnd}
+                  readOnly={!canEditCanvas}
+                />
               ))}
             </Layer>
-          ) : null}
-          {!readOnly ? (
-            <Layer>
-              {selectionRect && (
-                <Rect
-                  x={selectionRect.x}
-                  y={selectionRect.y}
-                  width={selectionRect.width}
-                  height={selectionRect.height}
-                  fill={CANVAS_MARQUEE_FILL}
-                  stroke={CANVAS_SELECT_COLOR}
-                  strokeWidth={1}
-                  strokeScaleEnabled={false}
-                  listening={false}
-                />
-              )}
-              <CanvasHelperLines viewport={viewport} stageSize={size} />
+            <Layer listening={false}>
+              {nodeIds.map((id: NodeId) => (
+                <RichTextNodeText key={id} nodeId={id} />
+              ))}
             </Layer>
-          ) : null}
-        </Stage>
-        {showChrome && !readOnly ? (
+            {canEditCanvas ? (
+              <Layer>
+                <SelectedNodesFrame />
+                {nodeIds.map((id: NodeId) => (
+                  <RichTextNodeControls key={id} nodeId={id} />
+                ))}
+              </Layer>
+            ) : null}
+            {canEditCanvas ? (
+              <Layer>
+                {selectionRect && (
+                  <Rect
+                    x={selectionRect.x}
+                    y={selectionRect.y}
+                    width={selectionRect.width}
+                    height={selectionRect.height}
+                    fill={CANVAS_MARQUEE_FILL}
+                    stroke={CANVAS_SELECT_COLOR}
+                    strokeWidth={1}
+                    strokeScaleEnabled={false}
+                    listening={false}
+                  />
+                )}
+                <CanvasHelperLines viewport={viewport} stageSize={size} />
+              </Layer>
+            ) : null}
+          </Stage>
+        ) : null}
+        {showChrome && canUseViewport ? (
           <>
             <CanvasViewportPanel
               canFitView={canFitView}
@@ -276,9 +274,14 @@ export function CanvasSurface({
               onLayout={handleLayoutGraph}
               onZoomIn={zoomIn}
               onZoomOut={zoomOut}
+              showEditActions={canEditCanvas}
             />
-            <SelectedNodeToolbar />
-            <LexicalOverlayWrapper />
+            {canEditCanvas ? (
+              <>
+                <SelectedNodeToolbar />
+                <LexicalOverlayWrapper />
+              </>
+            ) : null}
           </>
         ) : null}
       </div>

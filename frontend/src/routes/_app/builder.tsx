@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import * as zod from 'zod'
 
 import { BuilderPage } from '@/features/builder/BuilderPage'
-import { BuilderTabGate } from '@/features/builder/BuilderTabGate'
-import type { BuilderOpenIntent } from '@/features/builder/builderWorkbench'
+import {
+  openBuilderTabFromIntent
+
+} from '@/features/builder/builderWorkbench'
+import type { BuilderOpenIntent } from '@/features/builder/builderWorkbench';
 import {
   GENERATION_TEMPLATE_QUERIES,
   isGenerationTemplateNotFoundError,
@@ -47,10 +51,7 @@ export const Route = createFileRoute('/_app/builder')({
 
 function BuilderRoute() {
   const { intent } = Route.useLoaderData()
+  const [tabId] = useState(() => openBuilderTabFromIntent(intent))
 
-  return (
-    <BuilderTabGate intent={intent}>
-      {(tabId) => <BuilderPage tabId={tabId} />}
-    </BuilderTabGate>
-  )
+  return <BuilderPage tabId={tabId} />
 }

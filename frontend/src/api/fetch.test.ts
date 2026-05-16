@@ -69,4 +69,53 @@ describe('schemaVizFetch', () => {
     expect(response.status).toBe(500)
     expect(response.data).toEqual({ error: 'boom' })
   })
+
+  it('adds the Django CSRF header for unsafe browser requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('document', {
+      cookie: 'csrftoken=test-token; sessionid=session-token',
+    })
+
+    await schemaVizFetch('/schema-viz/query/records/', {
+      method: 'POST',
+    })
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const headers = requestInit.headers as Headers
+    expect(headers.get('X-CSRFToken')).toBe('test-token')
+  })
+
+  it('does not replace an explicit CSRF header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('document', {
+      cookie: 'csrftoken=cookie-token',
+    })
+
+    await schemaVizFetch('/schema-viz/query/records/', {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': 'explicit-token',
+      },
+    })
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const headers = requestInit.headers as Headers
+    expect(headers.get('X-CSRFToken')).toBe('explicit-token')
+  })
 })

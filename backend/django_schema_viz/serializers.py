@@ -31,6 +31,7 @@ from .template_uniqueness import (
     build_template_uniqueness_errors,
     normalize_export_name,
 )
+from .utils.generation_types import GenerationResultSerializer
 from .utils.generation_steps import (
     GenerationStepValidationError,
     validate_generation_root_model,
@@ -1451,6 +1452,26 @@ class GenerationRunRequestSerializer(serializers.Serializer):
             attrs["record_id"] = None
 
         return attrs
+
+
+class GenerationRunSourceVersionSerializer(serializers.Serializer):
+    kind = serializers.ChoiceField(choices=GENERATION_SOURCE_KIND_CHOICES)
+    selection = serializers.CharField()
+    version_id = serializers.CharField(allow_null=True)
+    version_number = serializers.IntegerField(allow_null=True)
+    root_model = serializers.CharField()
+    layout_settings = GenerationLayoutSettingsField()
+    published_at = serializers.DateTimeField(allow_null=True)
+    share_slug = serializers.CharField(allow_null=True)
+
+
+class GenerationRunResponseSerializer(serializers.Serializer):
+    mode = serializers.ChoiceField(choices=GENERATION_RUN_MODE_CHOICES)
+    result = GenerationResultSerializer()
+    source_version = GenerationRunSourceVersionSerializer()
+    style_templates = StyleTemplateSerializer(many=True)
+    group_templates = GroupTemplateSerializer(many=True)
+    template = GenerationTemplateListSerializer(required=False)
 
 
 class TemplateUniquenessRequestSerializer(serializers.Serializer):

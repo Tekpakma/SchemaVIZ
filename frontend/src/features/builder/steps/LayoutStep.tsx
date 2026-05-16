@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next'
+import * as R from 'remeda'
+
+import { ELK_ALGORITHMS } from '@/features/elk/algorithms'
 import { cn } from '@/lib/utils'
 import type { LayoutAlgorithm } from '../types'
 
-import { ELK_ALGORITHMS } from '@/features/elk/algorithms'
-import * as R from "remeda"
 const LAYOUT_OPTIONS = R.keys(ELK_ALGORITHMS)
 
 interface LayoutStepProps {
@@ -11,6 +13,8 @@ interface LayoutStepProps {
 }
 
 export function LayoutStep({ selected, onSelect }: LayoutStepProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex flex-col gap-1.5">
       {/* TODO: Wire to backend layout engine — each option maps to an ELK/dagre config */}
@@ -29,7 +33,7 @@ export function LayoutStep({ selected, onSelect }: LayoutStepProps) {
           <span>{opt}</span>
           {opt === selected && (
             <span className="font-mono text-[10px] uppercase tracking-wider text-brand">
-              selected
+              {t('builder.layout.selected')}
             </span>
           )}
         </button>

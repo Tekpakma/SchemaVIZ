@@ -14,6 +14,7 @@ import type {
   DrawingRequest,
   ErrorResponse,
   GenerationRunRequestRequest,
+  GenerationRunResponse,
   GenerationTemplateList,
   GenerationTemplateOwnRecentQuickAccess,
   GenerationTemplateRead,
@@ -593,7 +594,7 @@ export const schemaVizGenerateRunRetrieve = async (shareSlug: string,
 
 
 export type schemaVizGenerationRunsCreateResponse200 = {
-  data: void
+  data: GenerationRunResponse
   status: 200
 }
 

@@ -374,7 +374,11 @@ paths:
       - cookieAuth: []
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationRunResponse'
+          description: ''
         '400':
           content:
             application/json:
@@ -2080,6 +2084,62 @@ components:
         * `incompatible` - Incompatible
         * `inaccessible` - Inaccessible
         * `stale` - Stale
+    GeneratedEdge:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        relationship:
+          type: string
+      required:
+      - relationship
+      - source
+      - target
+    GeneratedNode:
+      type: object
+      properties:
+        id:
+          type: string
+        appLabel:
+          type: string
+        modelName:
+          type: string
+        recordPk:
+          type: string
+        label:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+        fields:
+          type: object
+          additionalProperties: {}
+        styleTemplateId:
+          type: string
+          nullable: true
+        groupTemplateId:
+          type: string
+          nullable: true
+        parentId:
+          type: string
+          nullable: true
+        isGroup:
+          type: boolean
+        stepUiIds:
+          type: array
+          items:
+            type: string
+      required:
+      - appLabel
+      - displayName
+      - fields
+      - id
+      - label
+      - modelName
+      - recordPk
+      - styleTemplateId
     GenerationDefinitionSchema:
       type: object
       properties:
@@ -2198,21 +2258,23 @@ components:
           items:
             type: string
             minLength: 1
-    GenerationRunRequestModeEnum:
-      enum:
-      - structure
-      - live
-      - share
-      type: string
-      description: |-
-        * `structure` - Structure
-        * `live` - Live
-        * `share` - Share
+    GenerationResult:
+      type: object
+      description: Complete output of a template execution.
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneratedEdge'
     GenerationRunRequestRequest:
       type: object
       properties:
         mode:
-          $ref: '#/components/schemas/GenerationRunRequestModeEnum'
+          $ref: '#/components/schemas/Mode524Enum'
         recordId:
           type: string
           nullable: true
@@ -2222,6 +2284,31 @@ components:
       required:
       - mode
       - source
+    GenerationRunResponse:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/Mode524Enum'
+        result:
+          $ref: '#/components/schemas/GenerationResult'
+        sourceVersion:
+          $ref: '#/components/schemas/GenerationRunSourceVersion'
+        styleTemplates:
+          type: array
+          items:
+            $ref: '#/components/schemas/StyleTemplate'
+        groupTemplates:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupTemplate'
+        template:
+          $ref: '#/components/schemas/GenerationTemplateList'
+      required:
+      - groupTemplates
+      - mode
+      - result
+      - sourceVersion
+      - styleTemplates
     GenerationRunSourceRequest:
       type: object
       properties:
@@ -2237,6 +2324,39 @@ components:
           minLength: 1
         layoutSettings:
           $ref: '#/components/schemas/GenerationLayoutSettingsSchemaRequest'
+    GenerationRunSourceVersion:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        selection:
+          type: string
+        versionId:
+          type: string
+          nullable: true
+        versionNumber:
+          type: integer
+          nullable: true
+        rootModel:
+          type: string
+        layoutSettings:
+          $ref: '#/components/schemas/GenerationLayoutSettingsSchema'
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        shareSlug:
+          type: string
+          nullable: true
+      required:
+      - kind
+      - layoutSettings
+      - publishedAt
+      - rootModel
+      - selection
+      - shareSlug
+      - versionId
+      - versionNumber
     GenerationTemplateFeatured:
       type: object
       properties:
@@ -2882,6 +3002,16 @@ components:
           nullable: true
       required:
       - name
+    Mode524Enum:
+      enum:
+      - structure
+      - live
+      - share
+      type: string
+      description: |-
+        * `structure` - Structure
+        * `live` - Live
+        * `share` - Share
     ModelDetailBadRequest:
       type: object
       properties:

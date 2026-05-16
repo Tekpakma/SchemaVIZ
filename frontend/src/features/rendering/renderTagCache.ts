@@ -39,11 +39,14 @@ export function getRenderTagLayout(
   node: CanvasNode,
   showResolved = true,
   theme: ResolvedTheme = 'light',
-): LayoutResult {
+): LayoutResult | null {
   const key = getCacheKey(node, showResolved, theme)
 
   const cached = cache.get(key)
   if (cached) return cached
+
+  // render-tag requires width > 0 — bail early if the node hasn't been sized yet
+  if (node.width <= 0) return null
 
   let html = showResolved ? node.html : unresolveDataReferences(node.html)
 

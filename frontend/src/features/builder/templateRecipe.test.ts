@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
-import { createRecipeFromTemplate } from './templateRecipe'
+import { createRecipeFromTemplate, recipeToInlineDefinition } from './templateRecipe'
 
 type GenerationTemplateVersion = NonNullable<
   GenerationTemplateRead['draftVersion']
@@ -79,12 +79,26 @@ describe('builder template recipe conversion', () => {
       title: 'Cloud overview',
       layers: [
         {
+          id: 'layer-provider',
+          label: 'L1',
+        },
+        {
+          id: 'layer-region',
+          label: 'L2',
+        },
+      ],
+      models: [
+        {
           id: 'provider',
-          label: 'Provider',
+          modelId: 'cloud.Provider',
+          displayName: 'Provider',
+          layerId: 'layer-provider',
         },
         {
           id: 'region',
-          label: 'Region',
+          modelId: 'cloud.Region',
+          displayName: 'Region',
+          layerId: 'layer-region',
         },
       ],
       edges: [
@@ -92,6 +106,8 @@ describe('builder template recipe conversion', () => {
           id: 'edge-region',
           from: 'Provider',
           to: 'Region',
+          fromModelId: 'provider',
+          toModelId: 'region',
           via: 'regions',
         },
       ],
@@ -132,11 +148,108 @@ describe('builder template recipe conversion', () => {
 
     expect(recipe).toMatchObject({
       title: 'Template',
-      layers: [],
+      layers: [
+        {
+          label: 'L1',
+        },
+      ],
+      models: [],
       edges: [],
       filters: [],
       swatches: ['#C4006A', '#1D8B68', '#6A2B4D', '#18181B'],
       layoutAlgorithm: 'Layered',
+    })
+  })
+
+  it('expands multi-hop traversal routes into hidden generation steps', () => {
+    const previewSource = recipeToInlineDefinition({
+      ...createRecipeFromTemplate(createTemplate()),
+      models: [
+        {
+          id: 'provider',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'CloudProvider',
+          modelId: 'infrastructure.CloudProvider',
+          displayName: 'Cloud provider',
+          layerId: 'layer-provider',
+        },
+        {
+          id: 'server',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'Server',
+          modelId: 'infrastructure.Server',
+          displayName: 'Server',
+          layerId: 'layer-server',
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-provider--server-r0',
+          from: 'Cloud provider',
+          to: 'Server',
+          fromModelId: 'provider',
+          toModelId: 'server',
+          via: 'regions -> networks -> servers',
+          routeSteps: [
+            {
+              fromModel: 'infrastructure.CloudProvider',
+              toModel: 'infrastructure.Region',
+              viaField: 'regions',
+              isForward: false,
+              isMany: true,
+            },
+            {
+              fromModel: 'infrastructure.Region',
+              toModel: 'infrastructure.Network',
+              viaField: 'networks',
+              isForward: false,
+              isMany: true,
+            },
+            {
+              fromModel: 'infrastructure.Network',
+              toModel: 'infrastructure.Server',
+              viaField: 'servers',
+              isForward: false,
+              isMany: true,
+            },
+          ],
+          auto: false,
+          cost: 3,
+        },
+      ],
+    })
+
+    expect(previewSource?.inlineDefinition).toMatchObject({
+      rootStepId: 'provider',
+      stepsById: {
+        provider: {
+          childIds: ['edge-provider--server-r0:hop-1'],
+          resolvedModelId: 'infrastructure.CloudProvider',
+          visibility: 'visible',
+        },
+        'edge-provider--server-r0:hop-1': {
+          parentId: 'provider',
+          childIds: ['edge-provider--server-r0:hop-2'],
+          relationship: 'regions',
+          resolvedModelId: 'infrastructure.Region',
+          visibility: 'hidden',
+        },
+        'edge-provider--server-r0:hop-2': {
+          parentId: 'edge-provider--server-r0:hop-1',
+          childIds: ['server'],
+          relationship: 'networks',
+          resolvedModelId: 'infrastructure.Network',
+          visibility: 'hidden',
+        },
+        server: {
+          parentId: 'edge-provider--server-r0:hop-2',
+          relationship: 'servers',
+          resolvedModelId: 'infrastructure.Server',
+          visibility: 'visible',
+        },
+      },
     })
   })
 })

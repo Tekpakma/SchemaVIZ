@@ -3,6 +3,7 @@ import type {
   RecipeData,
   RecipeFilter,
   RecipeLayer,
+  RecipeModel,
   TraversalEdge,
 } from './types'
 
@@ -44,11 +45,52 @@ export const MOCK_EXAMPLES: ExampleRecord[] = [
   },
 ]
 
+export const MOCK_MODELS: RecipeModel[] = [
+  {
+    id: 'm1',
+    appLabel: 'org',
+    appVerboseName: 'Organization',
+    modelName: 'businessgroup',
+    modelId: 'org.businessgroup',
+    displayName: 'Business group',
+    layerId: 'l1',
+  },
+  {
+    id: 'm2',
+    appLabel: 'service',
+    appVerboseName: 'Services',
+    modelName: 'service',
+    modelId: 'service.service',
+    displayName: 'Service',
+    layerId: 'l2',
+  },
+  {
+    id: 'm3',
+    appLabel: 'compute',
+    appVerboseName: 'Compute',
+    modelName: 'server',
+    modelId: 'compute.server',
+    displayName: 'Server',
+    layerId: 'l3',
+  },
+  {
+    id: 'm4',
+    appLabel: 'data',
+    appVerboseName: 'Data',
+    modelName: 'database',
+    modelId: 'data.database',
+    displayName: 'Database',
+    layerId: 'l4',
+  },
+]
+
 export const MOCK_EDGES: TraversalEdge[] = [
   {
     id: 'e1',
     from: 'Business group',
     to: 'Service',
+    fromModelId: 'm1',
+    toModelId: 'm2',
     via: 'uses',
     auto: true,
     cost: 1,
@@ -57,6 +99,8 @@ export const MOCK_EDGES: TraversalEdge[] = [
     id: 'e2',
     from: 'Service',
     to: 'Server',
+    fromModelId: 'm2',
+    toModelId: 'm3',
     via: 'runs-on',
     auto: true,
     cost: 1,
@@ -65,6 +109,8 @@ export const MOCK_EDGES: TraversalEdge[] = [
     id: 'e3',
     from: 'Service',
     to: 'Server',
+    fromModelId: 'm2',
+    toModelId: 'm3',
     via: 'fallback-on',
     auto: false,
     cost: 2,
@@ -74,6 +120,8 @@ export const MOCK_EDGES: TraversalEdge[] = [
     id: 'e4',
     from: 'Server',
     to: 'Database',
+    fromModelId: 'm3',
+    toModelId: 'm4',
     via: 'persists',
     auto: true,
     cost: 1,
@@ -110,6 +158,7 @@ export const MOCK_FILTERS: RecipeFilter[] = [
 export const MOCK_RECIPE: RecipeData = {
   title: 'SAP Cloud Landscape',
   layers: MOCK_LAYERS,
+  models: MOCK_MODELS,
   examples: MOCK_EXAMPLES,
   edges: MOCK_EDGES,
   filters: MOCK_FILTERS,

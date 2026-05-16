@@ -86,6 +86,8 @@ const RichTextNodeContent = memo(function RichTextNodeContent({
     ? height / 2 - (textBounds.top + textBounds.bottom) / 2
     : 0
 
+  if (width <= 0 || layoutResult.height <= 0) return null
+
   return (
     <Group x={x} y={y + contentOffsetY} listening={false}>
       <Shape
@@ -121,6 +123,8 @@ const RichTextNodeGroupLabel = memo(function RichTextNodeGroupLabel({
   width,
   layoutResult,
 }: RichTextNodeGroupLabelProps) {
+  if (width <= 0 || layoutResult.height <= 0) return null
+
   return (
     <Group x={x} y={y} listening={false}>
       <Shape

@@ -69,6 +69,15 @@ describe('builderStore workbench documents', () => {
       id: 'layer-1',
       label: 'Layer 1',
     })
+    builderActions.addModel(firstTabId, {
+      id: 'model-1',
+      appLabel: 'app',
+      appVerboseName: 'App',
+      modelName: 'first',
+      modelId: 'app.first',
+      displayName: 'First',
+      layerId: 'layer-1',
+    })
     builderActions.setSwatch(firstTabId, 0, '#111111')
     builderActions.setActiveStep(firstTabId, 2)
 
@@ -102,27 +111,33 @@ describe('builderStore workbench documents', () => {
     expect(getBuilderActiveStepIndexSnapshot(secondTabId)).toBe(0)
 
     workbenchActions.switchTab(firstTabId)
-    expect(getBuilderRecipeSnapshot(firstTabId)).toMatchObject({
+    const firstRecipe = getBuilderRecipeSnapshot(firstTabId)
+    expect(firstRecipe).toMatchObject({
       title: 'First recipe',
-      layers: [
+      models: [
         {
-          id: 'layer-1',
+          id: 'model-1',
+          layerId: 'layer-1',
         },
       ],
       swatches: ['#111111', '#1D8B68', '#6A2B4D', '#18181B'],
     })
+    expect(firstRecipe?.layers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'layer-1' })]),
+    )
     expect(getBuilderActiveStepIndexSnapshot(firstTabId)).toBe(2)
 
     workbenchActions.switchTab(secondTabId)
     expect(getBuilderRecipeSnapshot(secondTabId)).toMatchObject({
       title: 'Second recipe',
-      layers: [],
+      models: [],
       filters: [
         {
           id: 'filter-1',
         },
       ],
     })
+    expect(getBuilderRecipeSnapshot(secondTabId)?.layers).toHaveLength(1)
   })
 
   it('keeps document mutations independent from workbench tab metadata', () => {
@@ -143,6 +158,291 @@ describe('builderStore workbench documents', () => {
         id: tabId,
         title: 'Draft',
         dirty: false,
+      },
+    ])
+  })
+
+  it('reorders layers inside one builder document', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Sortable layers',
+      resource: {
+        type: 'draft',
+        localId: 'sortable-layers',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+
+    builderActions.addLayer(tabId, {
+      id: 'layer-1',
+      label: 'Layer 1',
+    })
+    builderActions.addLayer(tabId, {
+      id: 'layer-2',
+      label: 'Layer 2',
+    })
+    builderActions.addLayer(tabId, {
+      id: 'layer-3',
+      label: 'Layer 3',
+    })
+    builderActions.reorderLayers(tabId, [
+      {
+        id: 'layer-2',
+        label: 'Layer 2',
+      },
+      {
+        id: 'layer-3',
+        label: 'Layer 3',
+      },
+      {
+        id: 'layer-1',
+        label: 'Layer 1',
+      },
+    ])
+
+    expect(getBuilderRecipeSnapshot(tabId)?.layers).toMatchObject([
+      {
+        id: 'layer-2',
+      },
+      {
+        id: 'layer-3',
+      },
+      {
+        id: 'layer-1',
+      },
+    ])
+  })
+
+  it('keeps backend models separate from visual layers', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Model lanes',
+      resource: {
+        type: 'draft',
+        localId: 'model-lanes',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+
+    builderActions.addLayer(tabId, {
+      id: 'layer-app',
+      label: 'Application',
+    })
+    builderActions.addModel(tabId, {
+      id: 'model-service',
+      appLabel: 'catalog',
+      appVerboseName: 'Catalog',
+      modelName: 'service',
+      modelId: 'catalog.service',
+      displayName: 'Service',
+      layerId: 'layer-app',
+    })
+    builderActions.addModel(tabId, {
+      id: 'model-database',
+      appLabel: 'catalog',
+      appVerboseName: 'Catalog',
+      modelName: 'database',
+      modelId: 'catalog.database',
+      displayName: 'Database',
+      layerId: 'layer-app',
+    })
+    builderActions.reorderModels(tabId, [
+      {
+        id: 'model-database',
+        appLabel: 'catalog',
+        appVerboseName: 'Catalog',
+        modelName: 'database',
+        modelId: 'catalog.database',
+        displayName: 'Database',
+        layerId: 'layer-app',
+      },
+      {
+        id: 'model-service',
+        appLabel: 'catalog',
+        appVerboseName: 'Catalog',
+        modelName: 'service',
+        modelId: 'catalog.service',
+        displayName: 'Service',
+        layerId: 'layer-app',
+      },
+    ])
+
+    const recipe = getBuilderRecipeSnapshot(tabId)
+    expect(recipe).toMatchObject({
+      models: [
+        {
+          id: 'model-database',
+          layerId: 'layer-app',
+        },
+        {
+          id: 'model-service',
+          layerId: 'layer-app',
+        },
+      ],
+    })
+    expect(recipe?.layers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'layer-app' })]),
+    )
+  })
+
+  it('keeps the first layer limited to one start model', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Start lane',
+      resource: {
+        type: 'draft',
+        localId: 'start-lane',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+    builderActions.ensureDocument(tabId)
+    const startLayerId = getBuilderRecipeSnapshot(tabId)!.layers[0]!.id
+
+    builderActions.addModel(tabId, {
+      id: 'model-environment',
+      appLabel: 'infrastructure',
+      appVerboseName: 'Infrastructure',
+      modelName: 'environment',
+      modelId: 'infrastructure.environment',
+      displayName: 'Environment',
+      layerId: startLayerId,
+    })
+    builderActions.addModel(tabId, {
+      id: 'model-datacenter',
+      appLabel: 'infrastructure',
+      appVerboseName: 'Infrastructure',
+      modelName: 'datacenter',
+      modelId: 'infrastructure.datacenter',
+      displayName: 'Datacenter',
+      layerId: startLayerId,
+    })
+
+    expect(
+      getBuilderRecipeSnapshot(tabId)?.models.filter(
+        (model) => model.layerId === startLayerId,
+      ),
+    ).toMatchObject([
+      {
+        id: 'model-environment',
+      },
+    ])
+
+    builderActions.addLayer(tabId, {
+      id: 'layer-2',
+      label: 'L2',
+    })
+    builderActions.addModel(tabId, {
+      id: 'model-rack',
+      appLabel: 'infrastructure',
+      appVerboseName: 'Infrastructure',
+      modelName: 'rack',
+      modelId: 'infrastructure.rack',
+      displayName: 'Rack',
+      layerId: 'layer-2',
+    })
+    builderActions.setModelLayer(tabId, 'model-rack', startLayerId)
+
+    expect(getBuilderRecipeSnapshot(tabId)?.models).toMatchObject([
+      {
+        id: 'model-environment',
+        layerId: startLayerId,
+      },
+      {
+        id: 'model-rack',
+        layerId: 'layer-2',
+      },
+    ])
+  })
+
+  it('moves overflow seeded start models into a secondary layer', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Seeded start lane',
+      resource: {
+        type: 'draft',
+        localId: 'seeded-start-lane',
+      },
+    })
+
+    seedBuilderDocumentForTab(tabId, {
+      title: 'Seeded start lane',
+      layers: [
+        {
+          id: 'layer-start',
+          label: 'L1',
+        },
+      ],
+      models: [
+        {
+          id: 'model-environment',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'environment',
+          modelId: 'infrastructure.environment',
+          displayName: 'Environment',
+          layerId: 'layer-start',
+        },
+        {
+          id: 'model-datacenter',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'datacenter',
+          modelId: 'infrastructure.datacenter',
+          displayName: 'Datacenter',
+          layerId: 'layer-start',
+        },
+      ],
+      examples: [],
+      edges: [],
+      filters: [],
+      swatches: ['#000000'],
+      layoutAlgorithm: 'Tree',
+      promoteOrg: '',
+      promoteVisibility: 'private',
+      promoteAudience: '',
+    })
+
+    const recipe = getBuilderRecipeSnapshot(tabId)
+    expect(recipe?.layers).toHaveLength(2)
+    expect(recipe?.models).toMatchObject([
+      {
+        id: 'model-environment',
+        layerId: 'layer-start',
+      },
+      {
+        id: 'model-datacenter',
+        layerId: recipe!.layers[1]!.id,
+      },
+    ])
+  })
+
+  it('normalizes seeded recipes to keep at least one layer', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Seed target',
+      resource: {
+        type: 'draft',
+        localId: 'empty-layer-seed-target',
+      },
+    })
+
+    seedBuilderDocumentForTab(tabId, {
+      title: 'Empty layer seed',
+      layers: [],
+      models: [],
+      examples: [],
+      edges: [],
+      filters: [],
+      swatches: ['#000000'],
+      layoutAlgorithm: 'Tree',
+      promoteOrg: '',
+      promoteVisibility: 'private',
+      promoteAudience: '',
+    })
+
+    expect(getBuilderRecipeSnapshot(tabId)?.layers).toMatchObject([
+      {
+        label: 'L1',
       },
     ])
   })
@@ -221,6 +521,7 @@ describe('builderStore workbench documents', () => {
           label: 'Layer 1',
         },
       ],
+      models: [],
       examples: [],
       edges: [],
       filters: [],
@@ -233,6 +534,7 @@ describe('builderStore workbench documents', () => {
     seedBuilderDocumentForTab(tabId, {
       title: 'Second seed',
       layers: [],
+      models: [],
       examples: [],
       edges: [],
       filters: [],

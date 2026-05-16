@@ -1,3 +1,4 @@
+import { parse as parseCookie } from 'cookie-es'
 import { getAppEnv } from '../utils/env'
 
 export class SchemaVizApiError extends Error {
@@ -38,27 +39,48 @@ async function parseResponseBody(response: Response) {
   return text.length === 0 ? undefined : text
 }
 
-const resolvedBaseUrl = getAppEnv().VITE_SCHEMA_VIZ_BACKEND_BASE_URL.replace(
-  /\/+$/,
-  '',
-)
+function getResolvedBaseUrl() {
+  return getAppEnv().VITE_SCHEMA_VIZ_BACKEND_BASE_URL.replace(/\/+$/, '')
+}
 
 function resolveRequestUrl(url: string) {
   const normalizedPath = url.replace(/^\/+/, '')
 
-  return new URL(`${resolvedBaseUrl}/${normalizedPath}`).toString()
+  return new URL(`${getResolvedBaseUrl()}/${normalizedPath}`).toString()
+}
+
+function isUnsafeMethod(method: string | undefined) {
+  return !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(
+    (method ?? 'GET').toUpperCase(),
+  )
+}
+
+function getBrowserCsrfToken() {
+  if (typeof document === 'undefined') return undefined
+
+  return parseCookie(document.cookie).csrftoken
+}
+
+function createRequestHeaders(options: RequestInit) {
+  const headers = new Headers(options.headers)
+
+  if (isUnsafeMethod(options.method) && !headers.has('X-CSRFToken')) {
+    const csrfToken = getBrowserCsrfToken()
+    if (csrfToken) headers.set('X-CSRFToken', csrfToken)
+  }
+
+  return headers
 }
 
 export async function schemaVizFetch<T>(
   url: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const { headers, ...requestInit } = options
   const fullUrl = resolveRequestUrl(url)
   const response = await fetch(fullUrl, {
-    ...requestInit,
-    credentials: requestInit.credentials ?? 'include',
-    headers: new Headers(headers),
+    ...options,
+    credentials: options.credentials ?? 'include',
+    headers: createRequestHeaders(options),
   })
   const body = await parseResponseBody(response)
 
