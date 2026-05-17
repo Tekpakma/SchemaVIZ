@@ -5,7 +5,6 @@ import type { LayoutAlgorithm } from '@/features/elk/algorithms'
 
 export type RecipeStepKind =
   | 'layers'
-  | 'examples'
   | 'traversal'
   | 'filters'
   | 'grouping'
@@ -54,11 +53,14 @@ export interface TraversalEdge {
 
 export type TraversalRouteStep = SchemaRoute['route'][number]
 
+export type GroupMode = 'none' | 'group' | 'breakout'
+
 export interface RecipeGroupRule {
   id: string
   parentModelId: string
   childModelId: string
   via: string
+  mode: GroupMode
 }
 
 export interface RecipeFilter {
@@ -66,6 +68,8 @@ export interface RecipeFilter {
   layer: string
   expr: string
   suggested: boolean
+  modelId?: string
+  filterFields?: Record<string, unknown>
 }
 
 export interface RecipeStep {

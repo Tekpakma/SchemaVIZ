@@ -116,6 +116,10 @@ describe('builder template recipe conversion', () => {
           id: 'filter-region',
           layer: 'Region',
           expr: '{"active":true}',
+          modelId: 'region',
+          filterFields: {
+            active: true,
+          },
         },
       ],
       swatches: ['#111111', '#222222'],
@@ -250,6 +254,72 @@ describe('builder template recipe conversion', () => {
           visibility: 'visible',
         },
       },
+    })
+  })
+
+  it('emits QLab filterFields in inline generation definitions', () => {
+    const previewSource = recipeToInlineDefinition({
+      ...createRecipeFromTemplate(createTemplate()),
+      models: [
+        {
+          id: 'provider',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'CloudProvider',
+          modelId: 'infrastructure.CloudProvider',
+          displayName: 'Cloud provider',
+          layerId: 'layer-provider',
+        },
+        {
+          id: 'network',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'Network',
+          modelId: 'infrastructure.Network',
+          displayName: 'Network',
+          layerId: 'layer-network',
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-provider-network',
+          from: 'Cloud provider',
+          to: 'Network',
+          fromModelId: 'provider',
+          toModelId: 'network',
+          via: 'networks',
+          auto: true,
+          cost: 1,
+        },
+      ],
+      filters: [
+        {
+          id: 'filter-network-active',
+          layer: 'Network',
+          expr: 'is_active is true',
+          suggested: false,
+          modelId: 'network',
+          filterFields: {
+            andOperation: [
+              {
+                field: 'is_active',
+                op: 'is',
+                value: true,
+              },
+            ],
+          },
+        },
+      ],
+    })
+
+    expect(previewSource?.inlineDefinition.stepsById.network?.filter).toEqual({
+      andOperation: [
+        {
+          field: 'is_active',
+          op: 'is',
+          value: true,
+        },
+      ],
     })
   })
 })

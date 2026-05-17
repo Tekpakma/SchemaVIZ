@@ -17,7 +17,14 @@ export function BuilderPage({ tabId }: { tabId: WorkbenchTabId }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
-      <BuilderHeader title={recipe.title} onTitleChange={actions.setTitle} />
+      <BuilderHeader
+        actions={actions}
+        activeExampleId={activeExampleId}
+        examples={recipe.examples}
+        models={recipe.models}
+        title={recipe.title}
+        onTitleChange={actions.setTitle}
+      />
 
       <div className="flex min-h-0 flex-1">
         <BuilderStepsSidebar
@@ -32,7 +39,6 @@ export function BuilderPage({ tabId }: { tabId: WorkbenchTabId }) {
         />
         <BuilderInspector
           actions={actions}
-          activeExampleId={activeExampleId}
           activeStep={activeStep}
           activeStepIndex={activeStepIndex}
           recipe={recipe}

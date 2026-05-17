@@ -19,6 +19,13 @@ type BuilderPreviewPaneProps = {
 }
 
 /**
+ * Whether the current step should show traversal edges in the static preview.
+ */
+function shouldShowEdges(stepKind: RecipeStepKind): boolean {
+  return stepKind !== 'layers'
+}
+
+/**
  * Extracts the backend record PK from an example's `idValue` ("appLabel:pk").
  */
 function getRecordPkFromExample(
@@ -42,7 +49,7 @@ export function BuilderPreviewPane({
   recipe,
 }: BuilderPreviewPaneProps) {
   const { t } = useTranslation()
-  const showEdges = activeStepKind !== 'layers'
+  const showEdges = shouldShowEdges(activeStepKind)
   const layerCount = t('builder.preview.layerCount', {
     count: recipe.layers.length,
   })
@@ -50,22 +57,22 @@ export function BuilderPreviewPane({
     count: recipe.edges.length,
   })
 
-  // Resolve the example record against the generation engine
-  const isExamplesStep = activeStepKind === 'examples'
+  // Live preview: resolve the active example against the generation engine
+  const hasActiveExample = activeExampleId != null
   const inlineSource = useMemo(
-    () => (isExamplesStep ? recipeToInlineDefinition(recipe) : null),
-    [isExamplesStep, recipe],
+    () => (hasActiveExample ? recipeToInlineDefinition(recipe) : null),
+    [hasActiveExample, recipe],
   )
   const recordPk = getRecordPkFromExample(recipe, activeExampleId)
 
   const queryClient = useQueryClient()
   const queryOptions = GENERATION_PREVIEW_QUERIES.run(
-    isExamplesStep ? inlineSource : null,
+    hasActiveExample ? inlineSource : null,
     recordPk,
   )
   const generationQuery = useQuery(queryOptions)
 
-  const isResolving = isExamplesStep && activeExampleId != null
+  const isResolving = hasActiveExample
   const activeExample = activeExampleId
     ? recipe.examples.find((ex) => ex.id === activeExampleId)
     : null

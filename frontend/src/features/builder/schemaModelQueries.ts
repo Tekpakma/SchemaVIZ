@@ -3,6 +3,7 @@ import * as R from 'remeda'
 
 import {
   schemaVizModelsList,
+  schemaVizQueryMetadataCreate,
   schemaVizRouteList,
 } from '@/api/generated/schema-viz'
 
@@ -54,6 +55,32 @@ export const BUILDER_SCHEMA_QUERIES = {
         return response.data
       },
       enabled: Boolean(startModel && endModel && startModel !== endModel),
+      staleTime: 1000 * 60 * 10,
+    }),
+
+  queryMetadata: (appLabel: string, modelName: string) =>
+    queryOptions({
+      queryKey: [
+        ...BUILDER_SCHEMA_QUERIES._base.queryKey,
+        'query-metadata',
+        appLabel,
+        modelName,
+      ] as const,
+      queryFn: async () => {
+        const response = await schemaVizQueryMetadataCreate({
+          appLabel,
+          modelName,
+        })
+
+        if (response.status !== 200) {
+          throw new Error(
+            `Failed to fetch QLab metadata: ${response.status}`,
+          )
+        }
+
+        return response.data
+      },
+      enabled: Boolean(appLabel && modelName),
       staleTime: 1000 * 60 * 10,
     }),
 }

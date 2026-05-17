@@ -1,9 +1,11 @@
+import * as R from 'remeda'
+
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/model/types'
 import {
   builderPreviewGroupLabelHtml,
   builderPreviewNodeHtml,
 } from './builderPreviewHtml'
-import type { RecipeData, RecipeLayer, RecipeModel } from './types'
+import type { RecipeData, RecipeGroupRule, RecipeLayer } from './types'
 
 export const BUILDER_PREVIEW_STAGE_WIDTH = 960
 export const BUILDER_PREVIEW_STAGE_HEIGHT = 520
@@ -73,33 +75,20 @@ function getPreviewLayers(recipe: RecipeData): RecipeLayer[] {
   ]
 }
 
-function getModelsByLayerId(models: RecipeModel[]) {
-  const modelsByLayerId = new Map<string, RecipeModel[]>()
-
-  for (const model of models) {
-    modelsByLayerId.set(model.layerId, [
-      ...(modelsByLayerId.get(model.layerId) ?? []),
-      model,
-    ])
-  }
-
-  return modelsByLayerId
-}
-
 export function getBuilderPreviewColumns(
   recipe: RecipeData,
 ): BuilderPreviewColumn[] {
-  const swatches: string[] =
+  const swatches =
     recipe.swatches.length > 0 ? recipe.swatches : FALLBACK_SWATCHES
   const layers = getPreviewLayers(recipe)
-  const modelsByLayerId = getModelsByLayerId(recipe.models)
+  const modelsByLayerId = R.groupBy(recipe.models, R.prop('layerId'))
 
   return layers.map((layer, index) => ({
     accent: swatches[index % swatches.length] ?? FALLBACK_SWATCHES[0]!,
     index,
     layerId: layer.id,
     label: layer.label,
-    nodeCount: modelsByLayerId.get(layer.id)?.length ?? 0,
+    nodeCount: modelsByLayerId[layer.id]?.length ?? 0,
   }))
 }
 
@@ -107,73 +96,60 @@ export function getBuilderPreviewNodes(
   recipe: RecipeData,
 ): BuilderPreviewNode[] {
   const columns = getBuilderPreviewColumns(recipe)
-  const modelsByLayerId = getModelsByLayerId(recipe.models)
+  const modelsByLayerId = R.groupBy(recipe.models, R.prop('layerId'))
 
-  const nodes: BuilderPreviewNode[] = []
   let globalIndex = 0
 
-  for (const col of columns) {
-    const models = modelsByLayerId.get(col.layerId) ?? []
-    if (models.length === 0) continue
-
-    for (const model of models) {
-      nodes.push({
-        accent: col.accent,
-        id: model.id,
-        layerIndex: globalIndex,
-        layerId: col.layerId,
-        layerLabel: col.label,
-        index: globalIndex,
-        label: model.alias || model.displayName,
-        modelId: model.modelId,
-      })
-      globalIndex++
-    }
-  }
-
-  return nodes
+  return R.pipe(
+    columns,
+    R.flatMap((col) =>
+      (modelsByLayerId[col.layerId] ?? []).map((model) => {
+        const node: BuilderPreviewNode = {
+          accent: col.accent,
+          id: model.id,
+          layerIndex: globalIndex,
+          layerId: col.layerId,
+          layerLabel: col.label,
+          index: globalIndex,
+          label: model.alias || model.displayName,
+          modelId: model.modelId,
+        }
+        globalIndex++
+        return node
+      }),
+    ),
+  )
 }
 
 export function getBuilderPreviewEdges(
   recipe: RecipeData,
   nodes: BuilderPreviewNode[],
 ): BuilderPreviewEdge[] {
-  const nodesById = new Map(nodes.map((node) => [node.id, node]))
-  const nodesByLabel = new Map(
-    nodes.map((node) => [normalizePreviewLabel(node.label), node]),
+  const nodesById = R.indexBy(nodes, R.prop('id'))
+  const nodesByLabel = R.indexBy(nodes, (n) => normalizePreviewLabel(n.label))
+
+  return R.pipe(
+    recipe.edges,
+    R.flatMap((edge) => {
+      const from =
+        (edge.fromModelId ? nodesById[edge.fromModelId] : undefined) ??
+        nodesByLabel[normalizePreviewLabel(edge.from)]
+      const to =
+        (edge.toModelId ? nodesById[edge.toModelId] : undefined) ??
+        nodesByLabel[normalizePreviewLabel(edge.to)]
+      if (!from || !to || from.id === to.id) return []
+
+      return [{ accent: from.accent, from, id: edge.id, label: edge.via, to }]
+    }),
   )
-  const recipeEdges = recipe.edges.flatMap((edge) => {
-    const from =
-      (edge.fromModelId ? nodesById.get(edge.fromModelId) : undefined) ??
-      nodesByLabel.get(normalizePreviewLabel(edge.from))
-    const to =
-      (edge.toModelId ? nodesById.get(edge.toModelId) : undefined) ??
-      nodesByLabel.get(normalizePreviewLabel(edge.to))
-    if (!from || !to || from.id === to.id) return []
-
-    return [
-      {
-        accent: from.accent,
-        from,
-        id: edge.id,
-        label: edge.via,
-        to,
-      },
-    ]
-  })
-
-  return recipeEdges
 }
 
 function getFilterCountByLayer(recipe: RecipeData) {
-  const filterCountByLayer = new Map<string, number>()
-
-  for (const filter of recipe.filters) {
-    const key = normalizePreviewLabel(filter.layer)
-    filterCountByLayer.set(key, (filterCountByLayer.get(key) ?? 0) + 1)
-  }
-
-  return filterCountByLayer
+  return R.pipe(
+    recipe.filters,
+    R.groupBy((f) => normalizePreviewLabel(f.layer)),
+    R.mapValues(R.length()),
+  )
 }
 
 function getNodeSubtitle(node: BuilderPreviewNode, filterCount: number) {
@@ -190,31 +166,47 @@ function encodePreviewKeyPart(value: number | string) {
 function getBuilderPreviewGraphKey({
   columns,
   filterCountByLayer,
+  groupRules,
   previewEdges,
   previewNodes,
   showEdges,
 }: {
   columns: BuilderPreviewColumn[]
-  filterCountByLayer: Map<string, number>
+  filterCountByLayer: Record<string, number>
+  groupRules: RecipeGroupRule[]
   previewEdges: BuilderPreviewEdge[]
   previewNodes: BuilderPreviewNode[]
   showEdges: boolean
 }) {
-  const filterParts = [...filterCountByLayer.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([layer, count]) => ['filter', layer, count])
+  const filterParts = R.pipe(
+    R.entries(filterCountByLayer),
+    R.sortBy(([layer]) => layer),
+    R.flatMap(([layer, count]) => ['filter', layer, count]),
+  )
 
-  const parts = [
-    'builder-preview-v3',
-    `edges:${showEdges}`,
-    ...columns.flatMap((column) => [
-      'column',
-      column.index,
-      column.label,
-      column.accent,
-      column.nodeCount,
+  const groupParts = R.pipe(
+    groupRules,
+    R.sortBy(R.prop('id')),
+    R.flatMap((rule) => [
+      'groupRule',
+      rule.parentModelId,
+      rule.childModelId,
+      rule.via,
+      rule.mode,
     ]),
-    ...previewNodes.flatMap((node) => [
+  )
+
+  const parts: (number | string)[] = [
+    'builder-preview-v4',
+    `edges:${showEdges}`,
+    ...R.flatMap(columns, (col) => [
+      'column',
+      col.index,
+      col.label,
+      col.accent,
+      col.nodeCount,
+    ]),
+    ...R.flatMap(previewNodes, (node) => [
       'node',
       node.id,
       node.label,
@@ -224,7 +216,7 @@ function getBuilderPreviewGraphKey({
       node.layerIndex,
       node.index,
     ]),
-    ...previewEdges.flatMap((edge) => [
+    ...R.flatMap(previewEdges, (edge) => [
       'edge',
       edge.id,
       edge.from.id,
@@ -232,6 +224,7 @@ function getBuilderPreviewGraphKey({
       edge.label,
     ]),
     ...filterParts,
+    ...groupParts,
   ]
 
   return parts.map(encodePreviewKeyPart).join('|')
@@ -261,9 +254,10 @@ const LAYER_GROUP_X_HINT_SPACING = 300
 function createLayerGroupNodes(
   columns: BuilderPreviewColumn[],
 ): CanvasNode[] {
-  return columns
-    .filter((col) => col.nodeCount > 0)
-    .map((col) => ({
+  return R.pipe(
+    columns,
+    R.filter((col) => col.nodeCount > 0),
+    R.map((col) => ({
       id: `${LAYER_GROUP_PREFIX}${col.layerId}`,
       kind: 'group' as const,
       shape: 'group' as const,
@@ -276,7 +270,58 @@ function createLayerGroupNodes(
       html: builderPreviewGroupLabelHtml(col.label, col.accent),
       contentHeight: LAYER_GROUP_LABEL_HEIGHT,
       version: 1,
-    }))
+    })),
+  )
+}
+
+/**
+ * Resolves which model IDs act as group containers based on recipe group rules.
+ * Returns a map from child model ID → parent model ID for "group" mode rules.
+ * "breakout" mode rules are tracked separately — children that break out
+ * stay in their layer group rather than being nested in a parent model.
+ */
+function resolveGroupParents(
+  groupRules: RecipeGroupRule[],
+  previewNodes: BuilderPreviewNode[],
+) {
+  // Group rules reference recipe model IDs (node.id), not backend model
+  // identifiers (node.modelId). Build a lookup by both so rules created
+  // from traversal edges (which use node.id) and rules imported from
+  // templates (which may use modelId) both resolve correctly.
+  const nodesById = R.indexBy(previewNodes, R.prop('id'))
+  const nodesByModelId = R.indexBy(previewNodes, R.prop('modelId'))
+  // child model node ID → parent model node ID
+  const childToGroupParent = new Map<string, string>()
+  // model node IDs that are group containers
+  const groupParentIds = new Set<string>()
+
+  for (const rule of groupRules) {
+    if (rule.mode !== 'group') continue
+    const parent = nodesById[rule.parentModelId] ?? nodesByModelId[rule.parentModelId]
+    const child = nodesById[rule.childModelId] ?? nodesByModelId[rule.childModelId]
+    if (!parent || !child || parent.id === child.id) continue
+
+    childToGroupParent.set(child.id, parent.id)
+    groupParentIds.add(parent.id)
+  }
+
+  return { childToGroupParent, groupParentIds }
+}
+
+const MODEL_GROUP_PREFIX = 'builder-model-group:'
+
+/**
+ * Resolves the `parentGroupId` for a model node after group rules are applied.
+ */
+function resolveParentGroupId(
+  node: BuilderPreviewNode,
+  childToGroupParent: Map<string, string>,
+  groupParentIds: Set<string>,
+) {
+  const groupParentNodeId = childToGroupParent.get(node.id)
+  if (groupParentNodeId) return `${MODEL_GROUP_PREFIX}${groupParentNodeId}`
+  if (groupParentIds.has(node.id)) return `${MODEL_GROUP_PREFIX}${node.id}`
+  return `${LAYER_GROUP_PREFIX}${node.layerId}`
 }
 
 /**
@@ -285,6 +330,7 @@ function createLayerGroupNodes(
  * ALL layout is delegated to ELK via `INCLUDE_CHILDREN`:
  * - Each non-empty layer becomes a compound group node
  * - Model nodes are children of their layer group (`parentGroupId`)
+ * - Group rules promote parent models to group nodes with children inside
  * - All nodes use `layoutMode: 'auto'` — ELK positions everything
  * - Column backgrounds are replaced by ELK group rendering
  */
@@ -300,9 +346,15 @@ export function getBuilderPreviewCanvasGraph(
     : []
   const filterCountByLayer = getFilterCountByLayer(recipe)
 
+  const { childToGroupParent, groupParentIds } = resolveGroupParents(
+    recipe.groupRules,
+    previewNodes,
+  )
+
   const key = getBuilderPreviewGraphKey({
     columns,
     filterCountByLayer,
+    groupRules: recipe.groupRules,
     previewEdges,
     previewNodes,
     showEdges,
@@ -310,18 +362,41 @@ export function getBuilderPreviewCanvasGraph(
 
   const layerGroupNodes = createLayerGroupNodes(columns)
 
-  const modelNodes: CanvasNode[] = previewNodes.map((node): CanvasNode => {
+  // Create group container nodes for models that act as group parents.
+  // These are separate from the model's own box node — the model box and
+  // its grouped children both live inside this container.
+  const modelGroupNodes: CanvasNode[] = R.pipe(
+    previewNodes,
+    R.filter((node) => groupParentIds.has(node.id)),
+    R.map((node) => ({
+      id: `${MODEL_GROUP_PREFIX}${node.id}`,
+      kind: 'group' as const,
+      shape: 'group' as const,
+      layoutMode: 'auto' as const,
+      parentGroupId: `${LAYER_GROUP_PREFIX}${node.layerId}`,
+      x: 0,
+      y: 0,
+      width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
+      height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
+      lexicalJson: '',
+      html: builderPreviewGroupLabelHtml(node.label, node.accent),
+      contentHeight: LAYER_GROUP_LABEL_HEIGHT,
+      version: 1,
+    })),
+  )
+
+  const modelNodes: CanvasNode[] = previewNodes.map((node) => {
     const filterCount =
-      filterCountByLayer.get(normalizePreviewLabel(node.label)) ??
-      filterCountByLayer.get(normalizePreviewLabel(node.layerLabel)) ??
+      filterCountByLayer[normalizePreviewLabel(node.label)] ??
+      filterCountByLayer[normalizePreviewLabel(node.layerLabel)] ??
       0
 
     return {
       id: node.id,
-      kind: 'generation',
-      shape: 'box',
-      layoutMode: 'auto',
-      parentGroupId: `${LAYER_GROUP_PREFIX}${node.layerId}`,
+      kind: 'generation' as const,
+      shape: 'box' as const,
+      layoutMode: 'auto' as const,
+      parentGroupId: resolveParentGroupId(node, childToGroupParent, groupParentIds),
       x: 0,
       y: 0,
       width: BUILDER_PREVIEW_NODE_WIDTH,
@@ -333,15 +408,39 @@ export function getBuilderPreviewCanvasGraph(
     }
   })
 
-  const nodes = [...layerGroupNodes, ...modelNodes]
+  // After group resolution some layer groups may be empty (all their
+  // children were pulled into a model group in another layer). Collect
+  // which layer group IDs still have at least one direct child.
+  const occupiedLayerGroupIds = R.pipe(
+    [...modelGroupNodes, ...modelNodes],
+    R.map(R.prop('parentGroupId')),
+    R.filter((id): id is string => id != null && id.startsWith(LAYER_GROUP_PREFIX)),
+    (ids) => new Set(ids),
+  )
 
-  const edges: CanvasEdge[] = previewEdges.map((edge) => ({
-    id: edge.id,
-    sourceNodeId: edge.from.id,
-    targetNodeId: edge.to.id,
-    kind: 'default',
-    label: edge.label || undefined,
-  }))
+  const activeLayerGroupNodes = layerGroupNodes.filter((node) =>
+    occupiedLayerGroupIds.has(node.id),
+  )
+
+  const nodes = [...activeLayerGroupNodes, ...modelGroupNodes, ...modelNodes]
+
+  // Suppress edges where containment already expresses the relationship:
+  // if the child is grouped inside the parent, no arrow is needed.
+  const edges: CanvasEdge[] = R.pipe(
+    previewEdges,
+    R.filter((edge) => {
+      if (childToGroupParent.get(edge.to.id) === edge.from.id) return false
+      if (childToGroupParent.get(edge.from.id) === edge.to.id) return false
+      return true
+    }),
+    R.map((edge) => ({
+      id: edge.id,
+      sourceNodeId: edge.from.id,
+      targetNodeId: edge.to.id,
+      kind: 'default' as const,
+      label: edge.label || undefined,
+    })),
+  )
 
   return { columns, edges, key, nodes }
 }

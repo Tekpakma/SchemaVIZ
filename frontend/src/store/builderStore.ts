@@ -35,36 +35,30 @@ const RECIPE_STEPS: RecipeStep[] = [
   },
   {
     id: 's3',
-    kind: 'examples',
-    title: 'builder.steps.examples.title',
-    detail: 'builder.steps.examples.detail',
-  },
-  {
-    id: 's4',
     kind: 'filters',
     title: 'builder.steps.filters.title',
     detail: 'builder.steps.filters.detail',
   },
   {
-    id: 's5',
+    id: 's4',
     kind: 'grouping',
     title: 'builder.steps.grouping.title',
     detail: 'builder.steps.grouping.detail',
   },
   {
-    id: 's6',
+    id: 's5',
     kind: 'style',
     title: 'builder.steps.style.title',
     detail: 'builder.steps.style.detail',
   },
   {
-    id: 's7',
+    id: 's6',
     kind: 'layout',
     title: 'builder.steps.layout.title',
     detail: 'builder.steps.layout.detail',
   },
   {
-    id: 's8',
+    id: 's7',
     kind: 'promote',
     title: 'builder.steps.promote.title',
     detail: 'builder.steps.promote.detail',
@@ -429,6 +423,9 @@ const useBuilderStore = create<BuilderState>()(
               )
               document.recipe.edges = document.recipe.edges.filter(
                 (edge) => edge.fromModelId !== id && edge.toModelId !== id,
+              )
+              document.recipe.filters = document.recipe.filters.filter(
+                (filter) => filter.modelId !== id,
               )
             },
             false,

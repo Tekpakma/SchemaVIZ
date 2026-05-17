@@ -1,7 +1,6 @@
 import type { BuilderDocumentActions } from './builderWorkbench'
 import type { RecipeData, RecipeStepKind } from './types'
 import { ModelsStep } from './steps/ModelsStep'
-import { ExamplesStep } from './steps/ExamplesStep'
 import { TraversalStep } from './steps/TraversalStep'
 import { FiltersStep } from './steps/FiltersStep'
 import { GroupingStep } from './steps/GroupingStep'
@@ -13,29 +12,25 @@ interface StepDetailProps {
   actions: Pick<
     BuilderDocumentActions,
     | 'addEdge'
-    | 'addExample'
     | 'addGroupRule'
+    | 'addFilter'
     | 'addLayer'
     | 'addModel'
     | 'removeEdge'
-    | 'removeExample'
+    | 'removeFilter'
     | 'removeGroupRule'
     | 'removeLayer'
     | 'removeModel'
     | 'reorderModels'
-    | 'setActiveExample'
-    | 'setDefaultExample'
     | 'setLayoutAlgorithm'
     | 'setModelLayer'
   >
-  activeExampleId: string | null
   kind: RecipeStepKind
   recipe: RecipeData
 }
 
 export function StepDetail({
   actions,
-  activeExampleId,
   kind,
   recipe,
 }: StepDetailProps) {
@@ -45,15 +40,6 @@ export function StepDetail({
         <ModelsStep
           actions={actions}
           layers={recipe.layers}
-          models={recipe.models}
-        />
-      )
-    case 'examples':
-      return (
-        <ExamplesStep
-          actions={actions}
-          activeExampleId={activeExampleId}
-          examples={recipe.examples}
           models={recipe.models}
         />
       )
@@ -67,11 +53,18 @@ export function StepDetail({
         />
       )
     case 'filters':
-      return <FiltersStep filters={recipe.filters} />
+      return (
+        <FiltersStep
+          actions={actions}
+          filters={recipe.filters}
+          models={recipe.models}
+        />
+      )
     case 'grouping':
       return (
         <GroupingStep
           actions={actions}
+          edges={recipe.edges}
           groupRules={recipe.groupRules}
           models={recipe.models}
         />

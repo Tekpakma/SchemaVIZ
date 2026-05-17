@@ -8,7 +8,6 @@ import type { RecipeData, RecipeStep } from '../types'
 
 type BuilderInspectorProps = {
   actions: BuilderDocumentActions
-  activeExampleId: string | null
   activeStep: RecipeStep
   activeStepIndex: number
   recipe: RecipeData
@@ -17,7 +16,6 @@ type BuilderInspectorProps = {
 
 export function BuilderInspector({
   actions,
-  activeExampleId,
   activeStep,
   activeStepIndex,
   recipe,
@@ -45,7 +43,6 @@ export function BuilderInspector({
       <div className="flex-1 overflow-y-auto px-5 py-4">
         <StepDetail
           actions={actions}
-          activeExampleId={activeExampleId}
           kind={activeStep.kind}
           recipe={recipe}
         />
