@@ -39,12 +39,8 @@ import {
   ELK_PORT_SIDE_OPTION,
 } from '@/features/elk/constants'
 
-/**
- * Edge label dimensions for ELK layout.
- * Uses pretext for accurate canvas-based text measurement
- * matching the render font (`10px sans-serif` in CanvasEdges).
- */
 import { prepareWithSegments, measureNaturalWidth } from '@chenglou/pretext'
+import { createIsomorphicFn } from '@tanstack/react-start'
 
 export type SchemaGraphNode = SchemaNodeOutput
 export type SchemaGraphEdge = SchemaEdgeOutput
@@ -404,13 +400,23 @@ const EDGE_LABEL_PADDING_X = 4
 const EDGE_LABEL_PADDING_Y = 2
 const EDGE_LABEL_FONT_SIZE = 10
 
-function measureEdgeLabel(text: string) {
-  const prepared = prepareWithSegments(text, EDGE_LABEL_FONT)
-  return {
-    width: measureNaturalWidth(prepared) + EDGE_LABEL_PADDING_X * 2,
-    height: EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PADDING_Y * 2,
-  }
-}
+const measureEdgeLabel = createIsomorphicFn()
+  .server((text: string) => {
+    // Todo: Check if we can get pretext working in the server environment and switch to it .
+    const width = text.length * EDGE_LABEL_FONT_SIZE * 0.6
+    return {
+      width: width + EDGE_LABEL_PADDING_X * 2,
+      height: EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PADDING_Y * 2,
+    }
+  })
+  .client((text: string) => {
+    const prepared = prepareWithSegments(text, EDGE_LABEL_FONT)
+    const width = measureNaturalWidth(prepared)
+    return {
+      width: width + EDGE_LABEL_PADDING_X * 2,
+      height: EDGE_LABEL_FONT_SIZE + EDGE_LABEL_PADDING_Y * 2,
+    }
+  })
 
 /** Maps a canvas edge onto ELK port endpoints so ELK can honor side constraints during layout and routing. */
 function createElkEdge(

@@ -1,31 +1,6 @@
 import { parse as parseCookie } from 'cookie-es'
-import { getAppEnv } from '../utils/env'
 
-export class SchemaVizApiError extends Error {
-  status: number
-  statusText: string
-  body: unknown
-  url: string
-
-  constructor({
-    body,
-    status,
-    statusText,
-    url,
-  }: {
-    body: unknown
-    status: number
-    statusText: string
-    url: string
-  }) {
-    super(`SchemaViz API request failed: ${status} ${statusText}`.trim())
-    this.name = 'SchemaVizApiError'
-    this.status = status
-    this.statusText = statusText
-    this.body = body
-    this.url = url
-  }
-}
+import { redirectToLogin } from './sourceAuth'
 
 async function parseResponseBody(response: Response) {
   if (response.status === 204) return undefined
@@ -39,14 +14,9 @@ async function parseResponseBody(response: Response) {
   return text.length === 0 ? undefined : text
 }
 
-function getResolvedBaseUrl() {
-  return getAppEnv().VITE_SCHEMA_VIZ_BACKEND_BASE_URL.replace(/\/+$/, '')
-}
-
 function resolveRequestUrl(url: string) {
-  const normalizedPath = url.replace(/^\/+/, '')
-
-  return new URL(`${getResolvedBaseUrl()}/${normalizedPath}`).toString()
+  const normalizedPath = url.startsWith('/') ? url : `/${url}`
+  return normalizedPath
 }
 
 function isUnsafeMethod(method: string | undefined) {
@@ -82,6 +52,11 @@ export async function schemaVizFetch<T>(
     credentials: options.credentials ?? 'include',
     headers: createRequestHeaders(options),
   })
+
+  if (response.status === 401 && typeof window !== 'undefined') {
+    redirectToLogin()
+  }
+
   const body = await parseResponseBody(response)
 
   return {

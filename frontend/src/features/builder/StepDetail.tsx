@@ -4,6 +4,7 @@ import { ModelsStep } from './steps/ModelsStep'
 import { ExamplesStep } from './steps/ExamplesStep'
 import { TraversalStep } from './steps/TraversalStep'
 import { FiltersStep } from './steps/FiltersStep'
+import { GroupingStep } from './steps/GroupingStep'
 import { StyleStep } from './steps/StyleStep'
 import { LayoutStep } from './steps/LayoutStep'
 import { PromoteStep } from './steps/PromoteStep'
@@ -13,10 +14,12 @@ interface StepDetailProps {
     BuilderDocumentActions,
     | 'addEdge'
     | 'addExample'
+    | 'addGroupRule'
     | 'addLayer'
     | 'addModel'
     | 'removeEdge'
     | 'removeExample'
+    | 'removeGroupRule'
     | 'removeLayer'
     | 'removeModel'
     | 'reorderModels'
@@ -65,6 +68,14 @@ export function StepDetail({
       )
     case 'filters':
       return <FiltersStep filters={recipe.filters} />
+    case 'grouping':
+      return (
+        <GroupingStep
+          actions={actions}
+          groupRules={recipe.groupRules}
+          models={recipe.models}
+        />
+      )
     case 'style':
       return <StyleStep swatches={recipe.swatches} />
     case 'layout':

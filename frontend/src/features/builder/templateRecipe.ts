@@ -37,6 +37,7 @@ export function createBlankRecipe(): RecipeData {
     examples: [],
     edges: [],
     filters: [],
+    groupRules: [],
     swatches: [...DEFAULT_SWATCHES],
     layoutAlgorithm: 'Layered',
     promoteOrg: '',
@@ -177,6 +178,18 @@ export function createRecipeFromTemplate(
     ]
   })
 
+  const groupRules = visibleSteps.flatMap((step) => {
+    if (step.groupMode !== 'group' || !step.parentId) return []
+    return [
+      {
+        id: `group-${step.id}`,
+        parentModelId: step.parentId,
+        childModelId: step.id,
+        via: step.relationship ?? '',
+      },
+    ]
+  })
+
   const filters: RecipeFilter[] = visibleSteps.flatMap((step) => {
     const expr = stringifyFilter(step.filter)
     if (!expr) return []
@@ -198,6 +211,7 @@ export function createRecipeFromTemplate(
     models,
     edges,
     filters,
+    groupRules,
     swatches: readSwatches(version?.layoutSettings),
     layoutAlgorithm: readLayoutAlgorithm(version?.layoutSettings),
     promoteVisibility: template.scope === 'global' ? 'org-wide' : 'private',
@@ -331,6 +345,14 @@ export function recipeToInlineDefinition(
       }
 
       parentStepId = stepId
+    }
+  }
+
+  // Apply grouping rules — mark child steps as grouped
+  for (const rule of recipe.groupRules) {
+    const childStep = stepsById[rule.childModelId]
+    if (childStep) {
+      childStep.groupMode = 'group'
     }
   }
 

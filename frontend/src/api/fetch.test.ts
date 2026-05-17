@@ -2,10 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { schemaVizFetch } from './fetch'
 
-vi.mock('../utils/env', () => ({
-  getAppEnv: () => ({
-    VITE_SCHEMA_VIZ_BACKEND_BASE_URL: 'https://example.com/base/api',
-  }),
+vi.mock('./sourceAuth', () => ({
+  redirectToLogin: vi.fn(),
 }))
 
 afterEach(() => {
@@ -35,7 +33,7 @@ describe('schemaVizFetch', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://example.com/base/api/schema-viz/drawings/',
+      '/schema-viz/drawings/',
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',

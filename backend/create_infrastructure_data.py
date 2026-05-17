@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from infrastructure.models import *
 from django_schema_viz.models import GenerationTemplate, GenerationTemplateVersion
 from django_schema_viz.utils.generation_definition import (
@@ -80,6 +81,10 @@ prod_env, _ = Environment.objects.get_or_create(
 dev_env, _ = Environment.objects.get_or_create(
     name="Development", business_group=engineering, defaults={"env_type": "dev"}
 )
+
+shared_env, _ = Environment.objects.get_or_create(
+    name="Shared Services", business_group=it_dept, defaults={"env_type": "prod"}
+)
 print("✓ Created environments")
 
 # Create Networks
@@ -102,6 +107,43 @@ dev_network, _ = Network.objects.get_or_create(
         "business_group": engineering,
     },
 )
+
+shared_network, _ = Network.objects.get_or_create(
+    name="Shared Services VNet",
+    defaults={
+        "cidr_block": "10.2.0.0/16",
+        "region": west_europe,
+        "environment": shared_env,
+        "business_group": it_dept,
+    },
+)
+
+for provider in CloudProvider.objects.all():
+    if provider.regions.filter(networks__isnull=False).exists():
+        continue
+
+    provider_region = provider.regions.first()
+    if provider_region is None:
+        continue
+
+    provider_network, _ = Network.objects.get_or_create(
+        name=f"{provider.name} Shared Network",
+        defaults={
+            "cidr_block": f"10.{100 + provider.id % 100}.0.0/16",
+            "region": provider_region,
+            "environment": shared_env,
+            "business_group": it_dept,
+        },
+    )
+    Subnet.objects.get_or_create(
+        name=f"{provider.name} Shared Private Subnet",
+        network=provider_network,
+        defaults={
+            "cidr_block": f"10.{100 + provider.id % 100}.1.0/24",
+            "subnet_type": "private",
+            "availability_zone": f"{provider_region.code}-shared",
+        },
+    )
 print("✓ Created networks")
 
 # Create Subnets
@@ -132,6 +174,16 @@ dev_public, _ = Subnet.objects.get_or_create(
         "cidr_block": "10.1.1.0/24",
         "subnet_type": "public",
         "availability_zone": "eu-central-1a",
+    },
+)
+
+shared_private, _ = Subnet.objects.get_or_create(
+    name="Shared Services Private Subnet",
+    network=shared_network,
+    defaults={
+        "cidr_block": "10.2.1.0/24",
+        "subnet_type": "private",
+        "availability_zone": "westeurope-1",
     },
 )
 print("✓ Created subnets")
@@ -241,6 +293,29 @@ MonitoringAlert.objects.get_or_create(
     defaults={"is_resolved": False},
 )
 print("✓ Created monitoring alert")
+
+print("\nCreating larger draw-test infrastructure dataset...")
+call_command(
+    "generate_fake_infra",
+    label="draw-demo",
+    profile="smoke",
+    replace=True,
+    seed=20260517,
+    batch_size=500,
+    providers=4,
+    regions_per_provider=4,
+    users=16,
+    business_groups=8,
+    environments_per_group=4,
+    networks_per_environment=2,
+    subnets_per_network=3,
+    servers_per_subnet=8,
+    alerts_per_server=2,
+    security_groups_per_network=2,
+    rules_per_security_group=4,
+    load_balancers_per_environment=2,
+)
+print("✓ Created draw-demo infrastructure dataset")
 
 print("\n✅ Infrastructure test data created successfully!")
 # ============================================================================

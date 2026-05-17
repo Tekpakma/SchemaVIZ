@@ -6,7 +6,7 @@ const BADGE_CONFIG = {
     label: 'Featured · org',
     icon: '★',
     className: 'bg-brand-muted text-brand',
-  }
+  },
 } as const
 
 interface PromotionBadgeProps {

@@ -5,6 +5,7 @@ import * as R from 'remeda'
 
 import { createElkGraph, createGraphLayoutResult } from './layoutAdapters'
 import type { CanvasLayoutInput } from './layout.schemas'
+import type { StartAuthContext } from '@/serverAuth/startAuth'
 
 let elkPromise: Promise<ELK> | null = null
 
@@ -26,7 +27,7 @@ export async function runElkLayout(input: CanvasLayoutInput) {
   return createGraphLayoutResult(laidOutGraph)
 }
 
-export function getForwardedBackendHeaders() {
+export function getForwardedBackendHeaders(auth: StartAuthContext) {
   const headers = new Headers({ accept: 'application/json' })
   const cookie = getRequestHeader('cookie')
   const csrfToken =
@@ -34,7 +35,9 @@ export function getForwardedBackendHeaders() {
     (cookie ? parseCookie(cookie).csrftoken : undefined)
 
   const authHeaders = {
-    authorization: getRequestHeader('authorization'),
+    authorization: auth.accessToken
+      ? `Bearer ${auth.accessToken}`
+      : getRequestHeader('authorization'),
     cookie,
     'x-csrftoken': csrfToken,
   }

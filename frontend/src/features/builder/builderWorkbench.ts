@@ -17,6 +17,7 @@ import type {
   LayoutAlgorithm,
   RecipeData,
   RecipeFilter,
+  RecipeGroupRule,
   RecipeLayer,
   RecipeModel,
   TraversalEdge,
@@ -47,6 +48,8 @@ export type BuilderDocumentActions = {
   toggleEdgeAuto: (id: string) => void
   addFilter: (filter: RecipeFilter) => void
   removeFilter: (id: string) => void
+  addGroupRule: (rule: RecipeGroupRule) => void
+  removeGroupRule: (id: string) => void
   setSwatch: (index: number, color: string) => void
   setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void
 }
@@ -231,6 +234,14 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
         },
         removeFilter: (id: string) => {
           builderActions.removeFilter(tabId, id)
+          markDirty()
+        },
+        addGroupRule: (rule: RecipeGroupRule) => {
+          builderActions.addGroupRule(tabId, rule)
+          markDirty()
+        },
+        removeGroupRule: (id: string) => {
+          builderActions.removeGroupRule(tabId, id)
           markDirty()
         },
         setSwatch: (index: number, color: string) => {

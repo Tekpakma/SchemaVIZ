@@ -36,6 +36,15 @@ export const resources = {
           setDefault: 'Als Standard setzen',
           startingRecord: 'Startdatensatz',
         },
+        grouping: {
+          addRule: 'Gruppierungsregel hinzufuegen',
+          description:
+            'Eltern-Kind-Verschachtelung. Ein Modell wird visuell als Container um seine Kinder gezeichnet.',
+          empty:
+            'Keine Gruppierungsregeln. Hinzufuegen, um Eltern-Kind-Beziehungen zu visualisieren.',
+          hint: 'Verschachtelung ist transitiv — rack ⊇ instance ⊇ disk rendert drei verschachtelte Boxen.',
+          removeRule: 'Regel entfernen',
+        },
         filters: {
           addFilter: 'Hinzufuegen',
           descriptionPrefix: 'Django-artige Query-Ausdruecke.',
@@ -117,9 +126,11 @@ export const resources = {
           layerCount: '{{count}} Ebenen',
           layerCount_one: '{{count}} Ebene',
           layerCount_other: '{{count}} Ebenen',
+          recheck: 'Pruefen',
           resolveError: 'Vorschau konnte nicht aufgeloest werden.',
           resolvedFor: 'Aufgeloest fuer {{record}}',
           resolving: 'Wird aufgeloest...',
+          retry: 'Erneut versuchen',
           title: 'Vorschau',
         },
         promote: {
@@ -154,6 +165,11 @@ export const resources = {
             title: 'Filter',
             detail:
               'Einschränken, was in jede Ebene gelangt. Django-artige Abfragen, pro Startdatensatz.',
+          },
+          grouping: {
+            title: 'Gruppierung',
+            detail:
+              'Eltern-Kind-Verschachtelung. Ein Modell wird visuell als Container um seine Kinder gezeichnet.',
           },
           style: {
             title: 'Ebenen gestalten',
@@ -240,6 +256,15 @@ export const resources = {
           setDefault: 'Set as default',
           startingRecord: 'starting record',
         },
+        grouping: {
+          addRule: 'Add grouping rule',
+          description:
+            'Parent-child containment. A model is drawn as a container around its children.',
+          empty:
+            'No grouping rules. Add one to visualize parent-child relationships.',
+          hint: 'Nesting is transitive — rack ⊇ instance ⊇ disk renders three nested boxes.',
+          removeRule: 'Remove rule',
+        },
         filters: {
           addFilter: 'Add',
           descriptionPrefix: 'Django-style query expressions.',
@@ -320,9 +345,11 @@ export const resources = {
           layerCount: '{{count}} layers',
           layerCount_one: '{{count}} layer',
           layerCount_other: '{{count}} layers',
+          recheck: 'Recheck',
           resolveError: 'Could not resolve preview.',
           resolvedFor: 'Resolved for {{record}}',
           resolving: 'Resolving...',
+          retry: 'Retry',
           title: 'Preview',
         },
         promote: {
@@ -357,6 +384,11 @@ export const resources = {
             title: 'Filters',
             detail:
               'Narrow what enters each layer. Django-style queries, per starting record.',
+          },
+          grouping: {
+            title: 'Grouping',
+            detail:
+              'Parent-child containment. A model is drawn as a container around its children.',
           },
           style: {
             title: 'Style each layer',

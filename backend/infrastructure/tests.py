@@ -67,6 +67,36 @@ class GenerateFakeInfraCommandTests(TestCase):
             24,
         )
 
+    def test_generate_fake_infra_links_each_business_group_to_each_provider(self):
+        self.run_generate(
+            providers=4,
+            regions_per_provider=2,
+            users=4,
+            business_groups=3,
+            environments_per_group=4,
+            networks_per_environment=1,
+            subnets_per_network=1,
+            servers_per_subnet=1,
+            alerts_per_server=0,
+            security_groups_per_network=0,
+            rules_per_security_group=0,
+            load_balancers_per_environment=0,
+        )
+
+        provider_slugs = set(
+            CloudProvider.objects.filter(slug__startswith="test-bench-").values_list(
+                "slug",
+                flat=True,
+            )
+        )
+        self.assertEqual(len(provider_slugs), 4)
+
+        for group in BusinessGroup.objects.filter(name__startswith="test-bench-"):
+            related_provider_slugs = set(
+                group.networks.values_list("region__provider__slug", flat=True)
+            )
+            self.assertEqual(related_provider_slugs, provider_slugs)
+
     def test_generate_fake_infra_requires_replace_for_existing_label(self):
         self.run_generate()
 

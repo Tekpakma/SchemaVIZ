@@ -498,11 +498,38 @@ class Command(BaseCommand):
         plan: DatasetPlan,
         batch_size: int,
     ) -> list:
+        regions_by_provider_id = defaultdict(list)
+        for region in regions:
+            regions_by_provider_id[region.provider_id].append(region)
+
+        provider_ids = sorted(
+            regions_by_provider_id,
+            key=lambda provider_id: regions_by_provider_id[provider_id][0].provider.slug,
+        )
+        business_group_ids = sorted({environment.business_group_id for environment in environments})
+        business_group_index_by_id = {
+            business_group_id: index
+            for index, business_group_id in enumerate(business_group_ids)
+        }
+        environment_slot_by_group_id = defaultdict(int)
+
         networks = []
+        network_sequence = 0
         for env_index, environment in enumerate(environments):
+            business_group_index = business_group_index_by_id[environment.business_group_id]
+            environment_slot = environment_slot_by_group_id[environment.business_group_id]
+            environment_slot_by_group_id[environment.business_group_id] += 1
+
             for network_index in range(plan.networks_per_environment):
-                region = regions[(env_index + network_index) % len(regions)]
-                cidr_octet = (env_index * plan.networks_per_environment + network_index) % 256
+                network_slot = environment_slot * plan.networks_per_environment + network_index
+                provider_id = provider_ids[
+                    (business_group_index + network_slot) % len(provider_ids)
+                ]
+                provider_regions = regions_by_provider_id[provider_id]
+                region = provider_regions[
+                    (business_group_index + network_slot) % len(provider_regions)
+                ]
+                cidr_octet = network_sequence % 256
                 networks.append(
                     Network(
                         name=f"{prefix}network-{env_index:04d}-{network_index:02d}",
@@ -513,6 +540,7 @@ class Command(BaseCommand):
                         is_active=True,
                     )
                 )
+                network_sequence += 1
 
         Network.objects.bulk_create(networks, batch_size=batch_size)
         return list(

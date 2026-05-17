@@ -16,6 +16,7 @@ function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
     examples: [],
     edges: [],
     filters: [],
+    groupRules: [],
     swatches: ['#111111', '#222222'],
     layoutAlgorithm: 'Layered',
     promoteOrg: '',

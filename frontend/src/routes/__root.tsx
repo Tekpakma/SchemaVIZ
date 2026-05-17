@@ -8,6 +8,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
 
+import { GlobalLoader } from '@/components/GlobalLoader'
 import { CanvasDevtoolsPanel } from '@/features/canvas/components/CanvasDevtoolsPanel'
 import { I18nProvider } from '@/features/i18n/useI18n'
 import { getLocalePreference } from '@/features/i18n/localeServerFns'
@@ -20,6 +21,8 @@ import type { QueryClient } from '@tanstack/react-query'
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
+  pendingComponent: GlobalLoader,
+  pendingMs: 200,
   loader: async () => {
     const [theme, locale] = await Promise.all([
       getThemePreference(),

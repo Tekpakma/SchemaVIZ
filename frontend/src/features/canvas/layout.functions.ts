@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import * as R from 'remeda'
 import { SchemaGraph } from '@/api/contracts'
 import { schemaVizGraphRetrieve } from '@/api/generated/schema-viz'
+import { authFunctionMiddleware } from '@/serverAuth/authMiddleware'
 
 import {
   canvasLayoutInputSchema,
@@ -18,10 +19,11 @@ export const layoutCanvasGraph = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => runElkLayout(data))
 
 export const layoutSchemaGraph = createServerFn({ method: 'POST' })
+  .middleware([authFunctionMiddleware])
   .inputValidator(schemaLayoutInputSchema)
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     const response = await schemaVizGraphRetrieve({
-      headers: getForwardedBackendHeaders(),
+      headers: getForwardedBackendHeaders(context.auth),
     })
 
     if (response.status !== 200) {

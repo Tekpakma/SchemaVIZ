@@ -18,9 +18,7 @@ const AVATAR_COLORS = [
 ]
 
 export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
-  const promoted = templates.filter(
-    (t) => t.promotion === 'featured' || t.promotion === 'org',
-  )
+  const promoted = templates.filter((t) => t.promotion === 'featured')
   if (promoted.length === 0) return null
 
   const featured = promoted[0]!

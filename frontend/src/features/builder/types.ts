@@ -8,6 +8,7 @@ export type RecipeStepKind =
   | 'examples'
   | 'traversal'
   | 'filters'
+  | 'grouping'
   | 'style'
   | 'layout'
   | 'promote'
@@ -53,6 +54,13 @@ export interface TraversalEdge {
 
 export type TraversalRouteStep = SchemaRoute['route'][number]
 
+export interface RecipeGroupRule {
+  id: string
+  parentModelId: string
+  childModelId: string
+  via: string
+}
+
 export interface RecipeFilter {
   id: string
   layer: string
@@ -77,6 +85,7 @@ export interface RecipeData {
   examples: ExampleRecord[]
   edges: TraversalEdge[]
   filters: RecipeFilter[]
+  groupRules: RecipeGroupRule[]
   swatches: string[]
   layoutAlgorithm: LayoutAlgorithm
   promoteOrg: string

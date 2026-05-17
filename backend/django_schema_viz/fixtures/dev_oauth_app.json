@@ -1,0 +1,16 @@
+[
+  {
+    "model": "oauth2_provider.application",
+    "pk": 1,
+    "fields": {
+      "client_id": "schema-viz-local",
+      "client_secret": "",
+      "client_type": "public",
+      "authorization_grant_type": "authorization-code",
+      "name": "SchemaVIZ Dev Frontend",
+      "redirect_uris": "http://127.0.0.1:3000/_schema-viz/auth/callback http://localhost:3000/_schema-viz/auth/callback",
+      "skip_authorization": true,
+      "algorithm": "RS256"
+    }
+  }
+]

@@ -14,3 +14,28 @@ export function isGenerationTemplateNotFoundError(
 export function getPreviewErrorMessage(error: unknown) {
   return error instanceof Error && error.message.trim() ? error.message : null
 }
+export class SchemaVizApiError extends Error {
+  status: number
+  statusText: string
+  body: unknown
+  url: string
+
+  constructor({
+    body,
+    status,
+    statusText,
+    url,
+  }: {
+    body: unknown
+    status: number
+    statusText: string
+    url: string
+  }) {
+    super(`SchemaViz API request failed: ${status} ${statusText}`.trim())
+    this.name = 'SchemaVizApiError'
+    this.status = status
+    this.statusText = statusText
+    this.body = body
+    this.url = url
+  }
+}

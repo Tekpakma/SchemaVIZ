@@ -6,6 +6,7 @@ import type {
   LayoutAlgorithm,
   RecipeData,
   RecipeFilter,
+  RecipeGroupRule,
   RecipeLayer,
   RecipeModel,
   RecipeStep,
@@ -46,18 +47,24 @@ const RECIPE_STEPS: RecipeStep[] = [
   },
   {
     id: 's5',
+    kind: 'grouping',
+    title: 'builder.steps.grouping.title',
+    detail: 'builder.steps.grouping.detail',
+  },
+  {
+    id: 's6',
     kind: 'style',
     title: 'builder.steps.style.title',
     detail: 'builder.steps.style.detail',
   },
   {
-    id: 's6',
+    id: 's7',
     kind: 'layout',
     title: 'builder.steps.layout.title',
     detail: 'builder.steps.layout.detail',
   },
   {
-    id: 's7',
+    id: 's8',
     kind: 'promote',
     title: 'builder.steps.promote.title',
     detail: 'builder.steps.promote.detail',
@@ -109,6 +116,9 @@ type BuilderActions = {
   addFilter: (tabId: WorkbenchTabId, filter: RecipeFilter) => void
   removeFilter: (tabId: WorkbenchTabId, id: string) => void
 
+  addGroupRule: (tabId: WorkbenchTabId, rule: RecipeGroupRule) => void
+  removeGroupRule: (tabId: WorkbenchTabId, id: string) => void
+
   setSwatch: (tabId: WorkbenchTabId, index: number, color: string) => void
   setLayoutAlgorithm: (
     tabId: WorkbenchTabId,
@@ -124,6 +134,7 @@ function createInitialRecipe(): RecipeData {
     examples: [],
     edges: [],
     filters: [],
+    groupRules: [],
     swatches: [...DEFAULT_SWATCHES],
     layoutAlgorithm: 'Layered',
     promoteOrg: '',
@@ -140,6 +151,7 @@ function cloneRecipe(recipe: RecipeData): RecipeData {
     examples: recipe.examples.map((example) => ({ ...example })),
     edges: recipe.edges.map((edge) => ({ ...edge })),
     filters: recipe.filters.map((filter) => ({ ...filter })),
+    groupRules: recipe.groupRules.map((rule) => ({ ...rule })),
     swatches: [...recipe.swatches],
   }
   clonedRecipe.models = normalizeModelsForLayerRules(
@@ -551,6 +563,29 @@ const useBuilderStore = create<BuilderState>()(
             },
             false,
             'builder/removeFilter',
+          ),
+
+        addGroupRule: (tabId, rule) =>
+          set(
+            (state) => {
+              ensureBuilderDocument(state, tabId).recipe.groupRules.push({
+                ...rule,
+              })
+            },
+            false,
+            'builder/addGroupRule',
+          ),
+
+        removeGroupRule: (tabId, id) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.groupRules = document.recipe.groupRules.filter(
+                (rule) => rule.id !== id,
+              )
+            },
+            false,
+            'builder/removeGroupRule',
           ),
 
         setSwatch: (tabId, index, color) =>

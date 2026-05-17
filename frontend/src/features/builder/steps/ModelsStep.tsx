@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useHotkey } from '@tanstack/react-hotkeys'
 import { DragDropProvider } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
+import { SortableKeyboardPlugin } from '@dnd-kit/dom/sortable'
 import {
   DatabaseIcon,
   GripVertical,
@@ -88,6 +89,11 @@ type DragEndEvent = Parameters<
 /**
  * Reorders models inside visual layer groups and moves a model to another group.
  * The first layer is the start lane, so it rejects drops when another start model exists.
+ *
+ * Uses `source.initialIndex` to find the source in the data array, and derives the
+ * target insertion index from the target model's data position — because dnd-kit's
+ * OptimisticSortingPlugin mutates `index` during drag and `target.index` reflects
+ * the visual (optimistic) position rather than the original data position.
  */
 function moveModelBetweenLayerGroups(
   models: RecipeModel[],
@@ -110,28 +116,40 @@ function moveModelBetweenLayerGroups(
   if (!targetLayer) return models
 
   const startLayerId = layers[0]?.id
-  const groupedModels = getModelsByLayerId(layers, models)
-  const sourceLayerModels = groupedModels.get(sourceModel.layerId)
-  const targetLayerModels = groupedModels.get(targetLayerId)
-  if (!sourceLayerModels || !targetLayerModels) return models
+  const isCrossGroup = sourceModel.layerId !== targetLayerId
 
+  // Block drops into the start layer if it already has a model (unless it's the same model reordering)
+  if (isCrossGroup && targetLayerId === startLayerId) {
+    const startModels = models.filter((m) => m.layerId === startLayerId)
+    if (startModels.length > 0) return models
+  }
+
+  const groupedModels = getModelsByLayerId(layers, models)
+  const sourceLayerModels = groupedModels.get(sourceModel.layerId)!
+  const targetLayerModels = groupedModels.get(targetLayerId)!
+
+  // Find the source by id (stable, not affected by optimistic index changes)
   const sourceIndex = sourceLayerModels.findIndex(
     (model) => model.id === sourceId,
   )
   if (sourceIndex < 0) return models
 
+  // Remove from source
   sourceLayerModels.splice(sourceIndex, 1)
-  if (targetLayerId === startLayerId && targetLayerModels.length > 0) {
-    return models
-  }
 
-  const requestedTargetIndex = isLayerDropTargetId(targetId)
-    ? targetLayerModels.length
-    : target.index
-  const insertIndex = Math.max(
-    0,
-    Math.min(requestedTargetIndex, targetLayerModels.length),
-  )
+  // Determine insertion index:
+  // - For layer drop targets (empty area): append to end
+  // - For model targets: find target model's position in the (post-removal) array
+  let insertIndex: number
+  if (isLayerDropTargetId(targetId)) {
+    insertIndex = targetLayerModels.length
+  } else {
+    const targetModelIndex = targetLayerModels.findIndex(
+      (model) => model.id === targetId,
+    )
+    insertIndex =
+      targetModelIndex >= 0 ? targetModelIndex : targetLayerModels.length
+  }
 
   targetLayerModels.splice(insertIndex, 0, {
     ...sourceModel,
@@ -157,6 +175,7 @@ function LayerDropTarget({
     index,
     group: layerId,
     type: MODEL_SORTABLE_GROUP,
+    plugins: [SortableKeyboardPlugin],
   })
 
   return (
@@ -181,6 +200,7 @@ function SortableModelRow({
     index,
     group: model.layerId,
     type: MODEL_SORTABLE_GROUP,
+    plugins: [SortableKeyboardPlugin],
   })
 
   return (

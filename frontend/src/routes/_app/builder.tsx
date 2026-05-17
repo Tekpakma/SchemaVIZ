@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import * as zod from 'zod'
 
+import { InlineLoader } from '@/components/GlobalLoader'
 import { BuilderPage } from '@/features/builder/BuilderPage'
 import {
   openBuilderTabFromIntent
@@ -19,6 +20,8 @@ const builderSearchSchema = zod.object({
 export const Route = createFileRoute('/_app/builder')({
   validateSearch: builderSearchSchema,
   loaderDeps: ({ search }) => ({ id: search.templateId }),
+  pendingComponent: () => <InlineLoader label="Loading template…" />,
+  pendingMs: 200,
   ssr: false,
   loader: async ({ context, deps }) => {
     if (!deps.id) {
