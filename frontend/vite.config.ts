@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import { devtools } from '@tanstack/devtools-vite'
 
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+import { nitro } from 'nitro/vite'
 
 import viteReact, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
@@ -14,6 +15,7 @@ const config = defineConfig({
     devtools(),
     tailwindcss(),
     tanstackStart(),
+    nitro({ preset: 'bun' }),
     viteReact(),
     svgr(),
     babel({ presets: [reactCompilerPreset()] }),
