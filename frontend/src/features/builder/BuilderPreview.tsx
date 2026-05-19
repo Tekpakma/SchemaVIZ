@@ -18,6 +18,7 @@ import {
   useCanvasActions,
   useCanvasNodes,
   useCanvasSnapshotGetters,
+  useCanvasStageSizeValue,
   useCanvasStoreInstance,
   useSelectedNodeId,
 } from '@/store/canvasStore'
@@ -140,6 +141,7 @@ function BuilderPreviewAutoLayout({
   const { applyGraphLayout, setViewport } = useCanvasActions()
   const { getActiveCanvasTabIdSnapshot, getCanvasLayoutSnapshot } =
     useCanvasSnapshotGetters()
+  const stageSize = useCanvasStageSizeValue()
   const runLayout = useServerFn(layoutCanvasGraph)
   const inflightRef = useRef(false)
   const layoutOptions = useMemo(
@@ -150,6 +152,7 @@ function BuilderPreviewAutoLayout({
 
   useEffect(() => {
     if (nodeCount === 0 || inflightRef.current) return
+    if (stageSize.width === 0 || stageSize.height === 0) return
 
     inflightRef.current = true
 
@@ -166,9 +169,15 @@ function BuilderPreviewAutoLayout({
       .then((result) => {
         applyGraphLayout(result, { tabId })
 
+        // Use the real DOM stage size so the fit works correctly in
+        // both the full builder preview and small card thumbnails.
+        const fitWorld =
+          stageSize.width > 0 && stageSize.height > 0
+            ? stageSize
+            : BUILDER_PREVIEW_FIT_WORLD
         const nextViewport = getCanvasFitViewportForFrames(
           result.nodeFrames,
-          BUILDER_PREVIEW_FIT_WORLD,
+          fitWorld,
         )
         if (nextViewport) {
           setViewport(nextViewport, { tabId })
@@ -184,6 +193,7 @@ function BuilderPreviewAutoLayout({
     layoutOptions,
     applyGraphLayout,
     setViewport,
+    stageSize,
     getActiveCanvasTabIdSnapshot,
     getCanvasLayoutSnapshot,
     runLayout,

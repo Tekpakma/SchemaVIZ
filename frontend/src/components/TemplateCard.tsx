@@ -22,7 +22,7 @@ export function TemplateCard({
     <button
       type="button"
       className={cn(
-        'group flex cursor-pointer flex-col overflow-hidden rounded-[14px] border border-border bg-card text-left text-card-foreground transition-all duration-150',
+        'group flex cursor-pointer flex-col overflow-hidden rounded-[10px] border border-border bg-card text-left text-card-foreground transition-all duration-150',
         'hover:-translate-y-0.5 hover:border-muted-foreground/45 hover:shadow-[0_18px_40px_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.04)]',
         large &&
           'grid grid-rows-[220px_auto] border-border shadow-[0_22px_60px_rgba(0,0,0,0.10)]',
@@ -34,13 +34,13 @@ export function TemplateCard({
         <TemplatePreviewCanvas
           template={template}
           variant={large ? 'spotlight' : 'card'}
-          className={cn(large ? 'h-[220px]' : 'h-[116px]')}
+          className={cn(large ? 'h-[220px]' : 'h-[100px]')}
         />
       </div>
       <div
         className={cn(
           'flex flex-col gap-1.5',
-          large ? 'gap-2 px-[22px] py-5' : 'px-4 py-3.5',
+          large ? 'gap-2 px-[22px] py-5' : 'gap-0.5 px-3 py-2',
         )}
       >
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -84,7 +84,7 @@ export function TemplateCard({
             </div>
           </div>
         )}
-        <div className="mt-2.5 inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-brand">
+        <div className="mt-1 inline-flex items-center gap-1.5 self-start text-[12px] font-medium text-brand">
           {large ? 'View landscape' : 'Open'}
           <span className="ml-1 text-xs text-muted-foreground">
             · {template.statusLabel}

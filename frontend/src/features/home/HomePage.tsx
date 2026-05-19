@@ -149,7 +149,7 @@ export function HomePage() {
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-background text-foreground">
-      <main className="mx-auto max-w-[1480px] px-9 pb-20 pt-7">
+      <main className="mx-auto max-w-[1480px] px-6 pb-20 pt-7">
         <section className="mb-2 border-b border-border pb-6 pt-2">
           <div className="flex items-end justify-between gap-6">
             <div className="flex flex-col gap-1.5">
@@ -189,25 +189,7 @@ export function HomePage() {
             <StatBlock value={ownRecentTemplates.length} label="recent owned" />
             <StatBlock value={readyCount} label="ready previews" />
             <StatBlock value={attentionCount} label="need attention" />
-            <div className="flex-1" />
-            <div
-              className={cn(
-                'inline-flex items-center gap-[7px] rounded-full border border-border px-2.5 py-1.5 font-mono text-[11.5px] text-muted-foreground',
-                errorMessage && 'text-destructive',
-              )}
-            >
-              <span
-                className={cn(
-                  'size-[7px] rounded-full bg-chart-2 shadow-[0_0_0_3px_color-mix(in_oklab,var(--chart-2)_18%,transparent)]',
-                  errorMessage && 'bg-destructive shadow-none',
-                )}
-              />
-              {isLoading
-                ? 'loading'
-                : errorMessage
-                  ? 'needs attention'
-                  : 'connected'}
-            </div>
+            {/* TODO: uncomment when connection status indicator is needed */}
           </div>
         </section>
 
@@ -242,7 +224,7 @@ export function HomePage() {
                 </span>
               </div>
               {ownRecentTemplates.length > 0 ? (
-                <div className="grid grid-cols-3 gap-[18px]">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] gap-3">
                   {ownRecentTemplates.map((template) => (
                     <TemplateCard
                       key={template.id}
@@ -280,7 +262,7 @@ export function HomePage() {
                 </div>
               </div>
               {filteredTemplates.length > 0 ? (
-                <div className="grid grid-cols-2 gap-[18px] lg:grid-cols-4">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] gap-3">
                   {filteredTemplates.map((template) => (
                     <TemplateCard
                       key={template.id}
