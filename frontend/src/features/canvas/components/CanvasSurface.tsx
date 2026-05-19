@@ -4,7 +4,12 @@ import type { KonvaEventObject } from 'konva/lib/Node'
 
 import { TEST_IDS } from '@/constants'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
-import { useCanvasActions, useCanvasNodeIds } from '@/store/canvasStore'
+import {
+  useCanvasActions,
+  useCanvasNodeIds,
+  useCanvasNodes,
+  useSelectedNodeId,
+} from '@/store/canvasStore'
 import { CanvasEdges } from './CanvasEdges'
 import { CanvasHelperLines } from './CanvasHelperLines'
 import { CanvasTabBar } from './CanvasTabBar'
@@ -22,7 +27,8 @@ import { useCanvasMarqueeSelection } from '../hooks/useCanvasMarqueeSelection'
 import { useCanvasStageSize } from '../hooks/useCanvasStageSize'
 import { useCanvasViewportControls } from '../hooks/useCanvasViewportControls'
 import { useEnsureDefaultCanvasNode } from '../hooks/useEnsureDefaultCanvasNode'
-import type { NodeId } from '../model/types'
+import type { CanvasNode, NodeId } from '../model/types'
+import { isEditableNodeKind } from '../model/types'
 import { CANVAS_MARQUEE_FILL, CANVAS_SELECT_COLOR } from '../themeColors'
 
 type CanvasSurfaceFitWorld = {
@@ -33,10 +39,18 @@ type CanvasSurfaceFitWorld = {
 type CanvasSurfaceProps = {
   backgroundLayer?: React.ReactNode
   fitWorld?: CanvasSurfaceFitWorld
+  /**
+   * Optional override for the inline rich-text editor. When undefined,
+   * the default {@link LexicalOverlayWrapper} is used (mount-per-edit-session).
+   * Pass a custom node (e.g. a persistent editor) to opt into a different
+   * editor lifecycle. Pass `null` to render nothing.
+   */
+  inlineEditor?: React.ReactNode
   interactionMode?: 'edit' | 'viewport' | 'static'
   readOnly?: boolean
   seedDefaultNode?: boolean
   showChrome?: boolean
+  showNodeToolbar?: boolean
   showTabBar?: boolean
 }
 
@@ -86,10 +100,12 @@ function useFitWorldViewport(
 export function CanvasSurface({
   backgroundLayer,
   fitWorld,
+  inlineEditor,
   interactionMode,
   readOnly = false,
   seedDefaultNode = true,
   showChrome = true,
+  showNodeToolbar = true,
   showTabBar = true,
 }: CanvasSurfaceProps) {
   const resolvedInteractionMode =
@@ -98,7 +114,9 @@ export function CanvasSurface({
   const canUseViewport = resolvedInteractionMode !== 'static'
   const { ref: stageContainerRef, size } = useCanvasStageSize()
   const nodeIds = useCanvasNodeIds()
-  const { selectNode } = useCanvasActions()
+  const nodesById = useCanvasNodes()
+  const selectedNodeId = useSelectedNodeId()
+  const { selectNode, startEditing } = useCanvasActions()
   const { clearHelperLines } = useCanvasHelperLines()
   const { handleLayoutGraph, isLayoutPending } = useCanvasLayout(size)
   const {
@@ -125,15 +143,77 @@ export function CanvasSurface({
 
   useEnsureDefaultCanvasNode(seedDefaultNode)
 
+  const getEditableNodeAtPointer = useCallback(
+    (pointer: { x: number; y: number }): CanvasNode | null => {
+      const worldPoint = {
+        x: (pointer.x - viewport.x) / viewport.scale,
+        y: (pointer.y - viewport.y) / viewport.scale,
+      }
+      const orderedNodes = [...nodeIds].reverse().flatMap((id) => {
+        const node = nodesById[id]
+        return node ? [node] : []
+      })
+      const selectedNode = selectedNodeId ? nodesById[selectedNodeId] : null
+      const candidates = selectedNode
+        ? [
+            selectedNode,
+            ...orderedNodes.filter((node) => node.id !== selectedNode.id),
+          ]
+        : orderedNodes
+
+      return (
+        candidates.find((node) => {
+          if (!isEditableNodeKind(node.kind)) return false
+          return (
+            worldPoint.x >= node.x &&
+            worldPoint.x <= node.x + node.width &&
+            worldPoint.y >= node.y &&
+            worldPoint.y <= node.y + node.height
+          )
+        }) ?? null
+      )
+    },
+    [
+      nodeIds,
+      nodesById,
+      selectedNodeId,
+      viewport.scale,
+      viewport.x,
+      viewport.y,
+    ],
+  )
+
+  const startEditingNodeAtPointer = useCallback(
+    (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      if (!canEditCanvas) return
+
+      const pointer = event.target.getStage()?.getPointerPosition()
+      if (!pointer) return
+
+      const node = getEditableNodeAtPointer(pointer)
+      if (!node) return
+
+      event.cancelBubble = true
+      window.setTimeout(() => startEditing(node.id), 0)
+    },
+    [canEditCanvas, getEditableNodeAtPointer, startEditing],
+  )
+
   const handleStagePointerDown = useCallback(
     (event: KonvaEventObject<MouseEvent>) => {
       if (!canEditCanvas) return
+
       if (handleMarqueeMouseDown(event)) return
       if (event.target !== event.currentTarget) return
 
       selectNode(null)
     },
-    [canEditCanvas, handleMarqueeMouseDown, selectNode],
+    [
+      canEditCanvas,
+      handleMarqueeMouseDown,
+      selectNode,
+      startEditingNodeAtPointer,
+    ],
   )
 
   const handleStageTouchStart = useCallback(
@@ -144,6 +224,13 @@ export function CanvasSurface({
       selectNode(null)
     },
     [canEditCanvas, selectNode],
+  )
+
+  const handleStageDoubleClick = useCallback(
+    (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      startEditingNodeAtPointer(event)
+    },
+    [startEditingNodeAtPointer],
   )
 
   const handleStageMouseMove = useCallback(
@@ -210,6 +297,8 @@ export function CanvasSurface({
             onDragEnd={handleStageDrag}
             onWheel={handleStageWheel}
             onMouseDown={handleStagePointerDown}
+            onDblClick={handleStageDoubleClick}
+            onDblTap={handleStageDoubleClick}
             onMouseMove={handleStageMouseMove}
             onMouseUp={handleStageMouseUp}
             onTouchStart={handleStageTouchStart}
@@ -236,15 +325,16 @@ export function CanvasSurface({
               ))}
             </Layer>
             {canEditCanvas ? (
+              // Single overlay layer for all edit-mode visuals: transformer
+              // controls, selected-node frame, marquee, and helper lines.
+              // Each Konva layer is a separate <canvas> element with its own
+              // memory + composite cost; keeping the total ≤5 matches
+              // Konva's recommendation.
               <Layer>
                 <SelectedNodesFrame />
                 {nodeIds.map((id: NodeId) => (
                   <RichTextNodeControls key={id} nodeId={id} />
                 ))}
-              </Layer>
-            ) : null}
-            {canEditCanvas ? (
-              <Layer>
                 {selectionRect && (
                   <Rect
                     x={selectionRect.x}
@@ -255,6 +345,7 @@ export function CanvasSurface({
                     stroke={CANVAS_SELECT_COLOR}
                     strokeWidth={1}
                     strokeScaleEnabled={false}
+                    perfectDrawEnabled={false}
                     listening={false}
                   />
                 )}
@@ -278,8 +369,12 @@ export function CanvasSurface({
             />
             {canEditCanvas ? (
               <>
-                <SelectedNodeToolbar />
-                <LexicalOverlayWrapper />
+                {showNodeToolbar ? <SelectedNodeToolbar /> : null}
+                {inlineEditor === undefined ? (
+                  <LexicalOverlayWrapper />
+                ) : (
+                  inlineEditor
+                )}
               </>
             ) : null}
           </>

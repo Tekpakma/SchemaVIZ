@@ -145,6 +145,101 @@ describe('layoutAdapters', () => {
     ])
   })
 
+  it('omits ancestor-descendant containment edges from ELK layout input', () => {
+    const nodes: Array<CanvasNode> = [
+      {
+        id: 'group',
+        kind: 'group',
+        shape: 'group',
+        layoutMode: 'auto',
+        x: 0,
+        y: 0,
+        width: 220,
+        height: 160,
+        lexicalJson: '',
+        html: '',
+        contentHeight: 0,
+        version: 1,
+      },
+      {
+        ...baseNode,
+        id: 'child',
+        parentGroupId: 'group',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 80,
+      },
+    ]
+    const edges: Array<CanvasEdge> = [
+      {
+        id: 'group-child',
+        sourceNodeId: 'group',
+        targetNodeId: 'child',
+        kind: 'default',
+      },
+    ]
+
+    const graph = createElkGraph(
+      createCanvasLayoutInputFromGraph({ nodes, edges }, 'LR'),
+    )
+
+    expect(graph.edges).toEqual([])
+  })
+
+  it('delegates group child packing to a fixed group sublayout before ELK lays out the outer graph', () => {
+    const childNodes: Array<CanvasNode> = Array.from(
+      { length: 5 },
+      (_, index) => ({
+        ...baseNode,
+        id: `child-${index + 1}`,
+        parentGroupId: 'group',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 80,
+      }),
+    )
+    const nodes: Array<CanvasNode> = [
+      {
+        id: 'group',
+        kind: 'group',
+        shape: 'group',
+        layoutMode: 'auto',
+        x: 0,
+        y: 0,
+        width: 220,
+        height: 160,
+        lexicalJson: '',
+        html: '',
+        contentHeight: 0,
+        version: 1,
+      },
+      ...childNodes,
+    ]
+
+    const graph = createElkGraph(
+      createCanvasLayoutInputFromGraph({ nodes, edges: [] }, 'LR'),
+    )
+    const group = graph.children?.[0]
+
+    expect(group).toMatchObject({
+      id: 'group',
+      width: 428,
+      height: 260,
+      layoutOptions: {
+        'elk.algorithm': 'fixed',
+      },
+    })
+    expect(group?.children).toMatchObject([
+      { id: 'child-1', x: 36, y: 36 },
+      { id: 'child-2', x: 164, y: 36 },
+      { id: 'child-3', x: 292, y: 36 },
+      { id: 'child-4', x: 36, y: 144 },
+      { id: 'child-5', x: 164, y: 144 },
+    ])
+  })
+
   it('creates fallback routes from flow-direction-based default sides', () => {
     const nodes: Record<string, CanvasNode> = {
       source: {
@@ -330,6 +425,47 @@ describe('layoutAdapters', () => {
         },
       ],
     })
+  })
+
+  it('preserves ELK edge label positions as canvas label points', () => {
+    const laidOutGraph: ElkNode = {
+      id: 'root',
+      edges: [
+        {
+          id: 'edge',
+          sources: ['source'],
+          targets: ['target'],
+          labels: [
+            {
+              id: 'edge:label',
+              text: 'relates',
+              x: 150,
+              y: 88,
+              width: 30,
+              height: 14,
+            },
+          ],
+          sections: [
+            {
+              id: 'section',
+              startPoint: { x: 100, y: 100 },
+              endPoint: { x: 240, y: 100 },
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(createGraphLayoutResult(laidOutGraph).edgeRoutes).toEqual([
+      {
+        id: 'edge',
+        labelPoint: { x: 165, y: 95 },
+        points: [
+          { x: 100, y: 100 },
+          { x: 240, y: 100 },
+        ],
+      },
+    ])
   })
 
   it('clips edge route endpoints to node boundaries', () => {

@@ -93,6 +93,7 @@ function clearConnectedEdgeRoutes(
     }
 
     delete edge.routePoints
+    delete edge.labelPoint
   }
 }
 
@@ -420,6 +421,10 @@ type TargetTabOptions = {
   markDirty?: boolean
 }
 
+type ReconcileGraphOptions = TargetTabOptions & {
+  preserveGeometry?: boolean
+}
+
 type CreateCanvasTabPayload = {
   label?: string
   nodes?: Array<CanvasNode>
@@ -467,6 +472,10 @@ function getCanvasBounds(items: Array<CanvasBounds>): CanvasBounds | null {
 type CanvasActions = {
   addNode: (node: CanvasNode) => void
   setGraph: (payload: SetGraphPayload, options?: TargetTabOptions) => void
+  reconcileGraph: (
+    payload: SetGraphPayload,
+    options?: ReconcileGraphOptions,
+  ) => void
   seedActiveDocument: (payload: SetGraphPayload) => void
   applyGraphLayout: (
     payload: CanvasGraphLayoutResult,
@@ -516,8 +525,35 @@ function cloneCanvasEdge(edge: CanvasEdge): CanvasEdge {
   if (edge.routePoints) {
     clone.routePoints = edge.routePoints.map((point) => ({ ...point }))
   }
+  if (edge.labelPoint) clone.labelPoint = { ...edge.labelPoint }
 
   return clone
+}
+
+function preserveEdgeRouteGeometry(
+  incoming: CanvasEdge,
+  existing: CanvasEdge | undefined,
+) {
+  if (
+    !existing ||
+    existing.sourceNodeId !== incoming.sourceNodeId ||
+    existing.targetNodeId !== incoming.targetNodeId ||
+    existing.kind !== incoming.kind ||
+    existing.label !== incoming.label
+  ) {
+    return incoming
+  }
+
+  const merged = cloneCanvasEdge(incoming)
+  if (existing.routePoints) {
+    merged.routePoints = existing.routePoints.map((point) => ({ ...point }))
+  }
+  if (existing.labelPoint) {
+    merged.labelPoint = { ...existing.labelPoint }
+  } else {
+    delete merged.labelPoint
+  }
+  return merged
 }
 
 function createCanvasDocumentState({
@@ -667,6 +703,11 @@ export const createCanvasStore = () =>
           setGraph: (payload, options = {}) =>
             set(
               (state) => {
+                console.log('[canvasStore.setGraph] called', {
+                  prevEditingNodeId: state.editingNodeId,
+                  willClearEditing: true,
+                })
+                console.trace('[canvasStore.setGraph] trace')
                 const tabId = options.tabId ?? state.activeTabId
                 const document = getTargetDocument(state, tabId)
                 if (!document) return
@@ -677,6 +718,145 @@ export const createCanvasStore = () =>
               },
               false,
               'canvas/setGraph',
+            ),
+
+          // Reconcile graph data (nodes/edges) into an existing document
+          // WITHOUT clobbering transient UI state. Used by long-lived
+          // canvases (e.g. builder preview) where the recipe changes but
+          // the canvas store must remain mounted so editing/selection/
+          // viewport survive.
+          //
+          // - Nodes that already exist keep their live x/y/width/height
+          //   (these reflect user drags and auto-layout output). Other
+          //   properties (label, html, lexicalJson, …) are refreshed from
+          //   the incoming payload so recipe-driven content updates flow
+          //   through.
+          // - Nodes that disappear are removed; if the editing or
+          //   selected node disappears, those slots are cleared.
+          // - Edges are refreshed, but their live route geometry is
+          //   preserved when node geometry is preserved. Otherwise a
+          //   content-only recipe update can pair old ELK node frames
+          //   with static pre-layout edge routes for one render.
+          reconcileGraph: (payload, options = {}) =>
+            set(
+              (state) => {
+                const tabId = options.tabId ?? state.activeTabId
+                const preserveGeometry = options.preserveGeometry ?? true
+                const document = getTargetDocument(state, tabId)
+                if (!document) return
+
+                const nextNodes = payload.nodes.map(cloneCanvasNode)
+                const nextNodesById = R.indexBy(nextNodes, R.prop('id'))
+
+                // Merge: keep live geometry for nodes that survive.
+                // CRITICAL for scale: when an incoming node has the same
+                // content as the existing node, we keep the existing
+                // object reference verbatim. Replacing every node with a
+                // fresh object on every recipe edit forces every
+                // RichTextNode subscriber (via `useCanvasNode(id)`) to
+                // re-render, which dominates render cost at 1000+ nodes.
+                // Preserving references lets Zustand's default selector
+                // equality skip those re-renders.
+                const mergedNodesById: Record<string, CanvasNode> = {}
+                for (const incoming of nextNodes) {
+                  const existing = document.nodesById[incoming.id]
+                  if (!existing) {
+                    mergedNodesById[incoming.id] = incoming
+                    continue
+                  }
+
+                  const contentChanged =
+                    incoming.html !== existing.html ||
+                    incoming.lexicalJson !== existing.lexicalJson ||
+                    incoming.contentHeight !== existing.contentHeight ||
+                    // Cheap structural fields the canvas reads
+                    incoming.kind !== existing.kind ||
+                    incoming.shape !== existing.shape ||
+                    // Per-node style overrides (shape key, border/bg color)
+                    incoming.styleOverrides?.shapeKey !==
+                      existing.styleOverrides?.shapeKey ||
+                    incoming.styleOverrides?.borderColor !==
+                      existing.styleOverrides?.borderColor ||
+                    incoming.styleOverrides?.backgroundColor !==
+                      existing.styleOverrides?.backgroundColor
+                  const geometryChanged =
+                    incoming.x !== existing.x ||
+                    incoming.y !== existing.y ||
+                    incoming.width !== existing.width ||
+                    incoming.height !== existing.height
+
+                  if (
+                    !contentChanged &&
+                    (!geometryChanged || preserveGeometry)
+                  ) {
+                    // Same content — keep existing reference verbatim so
+                    // subscribers don't re-render. (Geometry on the
+                    // existing node is the live geometry — we'd preserve
+                    // it anyway.)
+                    mergedNodesById[incoming.id] = existing
+                    continue
+                  }
+
+                  // When content changed (e.g. shape switch), accept the
+                  // incoming width/height — the new dimensions are
+                  // intentional (shape defaults). Only preserve live
+                  // geometry for pure layout-driven position updates.
+                  const keepGeometry = preserveGeometry && !contentChanged
+
+                  mergedNodesById[incoming.id] = {
+                    ...incoming,
+                    x: preserveGeometry ? existing.x : incoming.x,
+                    y: preserveGeometry ? existing.y : incoming.y,
+                    width: keepGeometry ? existing.width : incoming.width,
+                    height: keepGeometry ? existing.height : incoming.height,
+                    version: existing.version + 1,
+                  }
+                }
+
+                document.nodesById = mergedNodesById
+                document.nodeOrder = nextNodes.map((node) => node.id)
+                document.childIdsByGroupId = getChildIdsByGroupId(
+                  Object.values(mergedNodesById),
+                )
+
+                const clonedEdges = payload.edges.map((edge) => {
+                  const cloned = cloneCanvasEdge(edge)
+                  return preserveGeometry
+                    ? preserveEdgeRouteGeometry(
+                        cloned,
+                        document.edgesById[cloned.id],
+                      )
+                    : cloned
+                })
+                document.edgesById = R.indexBy(clonedEdges, R.prop('id'))
+                document.edgeOrder = clonedEdges.map((edge) => edge.id)
+
+                // Preserve transient state, but drop references to nodes
+                // that no longer exist.
+                if (
+                  state.editingNodeId &&
+                  !nextNodesById[state.editingNodeId]
+                ) {
+                  console.log(
+                    '[canvasStore.reconcileGraph] editing node removed; clearing editingNodeId',
+                  )
+                  state.editingNodeId = null
+                }
+                if (
+                  document.selectedNodeId &&
+                  !nextNodesById[document.selectedNodeId]
+                ) {
+                  document.selectedNodeId = null
+                }
+                document.selectedNodeIds = document.selectedNodeIds.filter(
+                  (id) => nextNodesById[id],
+                )
+
+                document.isSeeded = true
+                markTabDirty(state, tabId, options.markDirty)
+              },
+              false,
+              'canvas/reconcileGraph',
             ),
 
           seedActiveDocument: (payload) =>
@@ -726,6 +906,11 @@ export const createCanvasStore = () =>
                   if (!edge) continue
 
                   edge.routePoints = edgeRoute.points
+                  if (edgeRoute.labelPoint) {
+                    edge.labelPoint = edgeRoute.labelPoint
+                  } else {
+                    delete edge.labelPoint
+                  }
                 }
 
                 markTabDirty(state, tabId, options.markDirty)
@@ -890,6 +1075,7 @@ export const createCanvasStore = () =>
           startEditing: (id) =>
             set(
               (state) => {
+                console.log('[canvasStore.startEditing]', { id })
                 const document = getActiveDocument(state)
                 state.editingNodeId = id
                 document.selectedNodeId = id
@@ -902,6 +1088,10 @@ export const createCanvasStore = () =>
           stopEditing: () =>
             set(
               (state) => {
+                console.log('[canvasStore.stopEditing] called', {
+                  prevEditingNodeId: state.editingNodeId,
+                })
+                console.trace('[canvasStore.stopEditing] trace')
                 state.editingNodeId = null
               },
               false,

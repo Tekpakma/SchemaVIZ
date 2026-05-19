@@ -1,10 +1,28 @@
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
 import { routeTree } from '@/routeTree.gen'
-import { QueryClient } from '@tanstack/react-query'
+import { MutationCache, QueryClient } from '@tanstack/react-query'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
+import { toast } from 'sonner'
 
 export function getRouter() {
-  const queryClient = new QueryClient()
+  const mutationCache = new MutationCache({
+    onSuccess: (_data, _variables, _context, mutation) => {
+      const message = mutation.meta?.successMessage
+      if (typeof message === 'string') {
+        toast.success(message)
+      }
+    },
+    onError: (error, _variables, _context, mutation) => {
+      const message = mutation.meta?.errorMessage
+      if (typeof message === 'string') {
+        toast.error(message)
+      } else if (mutation.meta?.successMessage) {
+        // If we had a successMessage defined, show a generic error
+        toast.error(error instanceof Error ? error.message : 'An error occurred')
+      }
+    },
+  })
+  const queryClient = new QueryClient({ mutationCache })
   const router = createTanStackRouter({
     routeTree,
     context: { queryClient },

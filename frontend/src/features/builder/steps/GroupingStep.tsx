@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/utils'
 import type { BuilderDocumentActions } from '../builderWorkbench'
+import type { CanvasGroupLayoutPolicy } from '@/features/canvas/model/types'
 import type {
   GroupMode,
   RecipeGroupRule,
@@ -14,6 +15,7 @@ import type {
 interface GroupingStepProps {
   actions: Pick<BuilderDocumentActions, 'addGroupRule' | 'removeGroupRule'>
   edges: TraversalEdge[]
+  groupLayout: CanvasGroupLayoutPolicy
   groupRules: RecipeGroupRule[]
   models: RecipeModel[]
 }
@@ -56,11 +58,11 @@ function findGroupRuleForEdge(
 function getModeIcon(mode: GroupMode) {
   switch (mode) {
     case 'group':
-      return <GroupIcon className="size-3" />
+      return <GroupIcon className="size-3" aria-hidden="true" />
     case 'breakout':
-      return <BoxesIcon className="size-3" />
+      return <BoxesIcon className="size-3" aria-hidden="true" />
     default:
-      return <NetworkIcon className="size-3" />
+      return <NetworkIcon className="size-3" aria-hidden="true" />
   }
 }
 
@@ -78,9 +80,10 @@ function ModeSegment({
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors',
+        'flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
         active && mode === 'group'
           ? 'bg-brand text-brand-foreground shadow-sm'
           : active && mode === 'breakout'
@@ -99,6 +102,7 @@ function ModeSegment({
 export function GroupingStep({
   actions,
   edges,
+  groupLayout,
   groupRules,
   models,
 }: GroupingStepProps) {
@@ -123,9 +127,10 @@ export function GroupingStep({
         childModelId: edge.toModelId ?? edge.to,
         via: edge.via,
         mode: nextMode,
+        ...(nextMode === 'group' ? { layout: groupLayout } : {}),
       })
     },
-    [actions, groupRules],
+    [actions, groupLayout, groupRules],
   )
 
   return (
@@ -152,17 +157,11 @@ export function GroupingStep({
                 {/* Relationship label */}
                 <div className="flex items-center gap-1.5 text-[13px]">
                   <span className="font-semibold">
-                    {getModelDisplayName(
-                      models,
-                      edge.fromModelId ?? edge.from,
-                    )}
+                    {getModelDisplayName(models, edge.fromModelId ?? edge.from)}
                   </span>
                   <span className="text-muted-foreground">→</span>
                   <span className="font-medium text-muted-foreground">
-                    {getModelDisplayName(
-                      models,
-                      edge.toModelId ?? edge.to,
-                    )}
+                    {getModelDisplayName(models, edge.toModelId ?? edge.to)}
                   </span>
                 </div>
                 <div className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">
@@ -189,6 +188,7 @@ export function GroupingStep({
 
       <div className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
         <svg
+          aria-hidden="true"
           className="mt-0.5 shrink-0"
           fill="none"
           height="11"

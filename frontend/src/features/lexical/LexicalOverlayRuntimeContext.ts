@@ -32,3 +32,16 @@ export function useLexicalOverlayRuntime() {
 
   return runtime
 }
+
+/**
+ * Non-throwing variant. Returns `null` when no provider is present OR when
+ * the provider is intentionally passing `null` (e.g. the persistent
+ * BuilderInlineEditor before/after an edit session).
+ *
+ * Use this for components rendered inside the editor's contenteditable
+ * (e.g. {@link DataReferenceChip}) that need to gracefully degrade when
+ * no data scope is available.
+ */
+export function useOptionalLexicalOverlayRuntime() {
+  return use(LexicalOverlayRuntimeContext)
+}

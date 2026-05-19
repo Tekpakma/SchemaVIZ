@@ -170,7 +170,7 @@ function ExampleCard({
       type="button"
       onClick={() => onActivate(isActive ? null : example.id)}
       className={cn(
-        'flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        'flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
         isActive
           ? 'border-brand bg-brand-muted ring-1 ring-brand/30'
           : example.isDefault
@@ -249,10 +249,7 @@ function ExampleCard({
 interface ExamplesStepProps {
   actions: Pick<
     BuilderDocumentActions,
-    | 'addExample'
-    | 'removeExample'
-    | 'setActiveExample'
-    | 'setDefaultExample'
+    'addExample' | 'removeExample' | 'setActiveExample' | 'setDefaultExample'
   >
   activeExampleId: string | null
   examples: ExampleRecord[]

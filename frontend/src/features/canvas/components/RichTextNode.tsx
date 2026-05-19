@@ -9,6 +9,7 @@ import {
 } from '@/store/canvasStore'
 import { getRenderTagLayout } from '@/features/rendering/renderTagCache'
 import {
+  CANVAS_NODE_BORDER_FALLBACKS,
   CANVAS_NODE_SURFACE_VARIABLE,
   CANVAS_SELECT_COLOR,
   CANVAS_SURFACE_FALLBACKS,
@@ -40,6 +41,7 @@ type RichTextNodeSurfaceProps = {
   stroke?: string
   dash?: Array<number>
   cornerRadius: number
+  shapeKey?: string
 }
 
 type RichTextNodeContentProps = {
@@ -50,6 +52,82 @@ type RichTextNodeContentProps = {
   layoutResult: LayoutResult
 }
 
+// ---------------------------------------------------------------------------
+// Custom shape scene functions (Konva sceneFunc) for non-default shapes.
+// These paint the same silhouettes as the backend shape_registry SVG, but
+// using the Canvas 2D API so Konva can composite them with fill/stroke.
+// ---------------------------------------------------------------------------
+
+function drawCylinderScene(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  const ry = Math.min(h * 0.12, 16)
+  const top = ry
+  const bottom = h - ry
+
+  // Body
+  ctx.moveTo(0, top)
+  ctx.lineTo(0, bottom)
+  ctx.ellipse(w / 2, bottom, w / 2, ry, 0, Math.PI, 0, true)
+  ctx.lineTo(w, top)
+  ctx.ellipse(w / 2, top, w / 2, ry, 0, 0, Math.PI, true)
+  ctx.closePath()
+}
+
+function drawCloudScene(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  // Normalised cloud path scaled to (w, h)
+  const sx = w / 120
+  const sy = h / 55
+  ctx.moveTo(0 * sx, 35 * sy)
+  ctx.quadraticCurveTo(0 * sx, 15 * sy, 20 * sx, 15 * sy)
+  ctx.quadraticCurveTo(20 * sx, 0 * sy, 40 * sx, 0 * sy)
+  ctx.quadraticCurveTo(60 * sx, 0 * sy, 70 * sx, 10 * sy)
+  ctx.quadraticCurveTo(90 * sx, 5 * sy, 100 * sx, 20 * sy)
+  ctx.quadraticCurveTo(120 * sx, 20 * sy, 120 * sx, 40 * sy)
+  ctx.quadraticCurveTo(120 * sx, 55 * sy, 100 * sx, 55 * sy)
+  ctx.lineTo(20 * sx, 55 * sy)
+  ctx.quadraticCurveTo(0 * sx, 55 * sy, 0 * sx, 35 * sy)
+  ctx.closePath()
+}
+
+function drawServerScene(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  const r = 4
+  const pad = 4
+  const bayH = (h - 2 * pad) / 3
+
+  // Chassis (rounded rect)
+  ctx.moveTo(pad + r, pad)
+  ctx.arcTo(w - pad, pad, w - pad, h - pad, r)
+  ctx.arcTo(w - pad, h - pad, pad, h - pad, r)
+  ctx.arcTo(pad, h - pad, pad, pad, r)
+  ctx.arcTo(pad, pad, w - pad, pad, r)
+  ctx.closePath()
+
+  // Bay dividers
+  ctx.moveTo(pad, pad + bayH)
+  ctx.lineTo(w - pad, pad + bayH)
+  ctx.moveTo(pad, pad + 2 * bayH)
+  ctx.lineTo(w - pad, pad + 2 * bayH)
+
+  // LEDs
+  for (let i = 0; i < 3; i++) {
+    const cy = pad + bayH * i + bayH / 2
+    const cx = pad + 12
+    ctx.moveTo(cx + 3, cy)
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2)
+  }
+}
+
 const RichTextNodeSurface = memo(function RichTextNodeSurface({
   width,
   height,
@@ -58,7 +136,50 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
   stroke,
   dash,
   cornerRadius,
+  shapeKey,
 }: RichTextNodeSurfaceProps) {
+  const isCustomShape =
+    shapeKey && shapeKey !== 'default' && shapeKey !== 'box'
+
+  if (isCustomShape) {
+    return (
+      <Shape
+        width={width}
+        height={height}
+        fill={fill}
+        opacity={opacity}
+        stroke={stroke}
+        dash={dash}
+        strokeScaleEnabled={false}
+        perfectDrawEnabled={false}
+        listening
+        sceneFunc={(context, shape) => {
+          const ctx = context._context
+          ctx.beginPath()
+          if (shapeKey === 'cylinder') {
+            drawCylinderScene(ctx, shape.width(), shape.height())
+          } else if (shapeKey === 'cloud') {
+            drawCloudScene(ctx, shape.width(), shape.height())
+          } else if (shapeKey === 'server') {
+            drawServerScene(ctx, shape.width(), shape.height())
+          } else {
+            // Fallback: rounded rect
+            const w = shape.width()
+            const h = shape.height()
+            const r = cornerRadius
+            ctx.moveTo(r, 0)
+            ctx.arcTo(w, 0, w, h, r)
+            ctx.arcTo(w, h, 0, h, r)
+            ctx.arcTo(0, h, 0, 0, r)
+            ctx.arcTo(0, 0, w, 0, r)
+            ctx.closePath()
+          }
+          context.fillStrokeShape(shape)
+        }}
+      />
+    )
+  }
+
   return (
     <Rect
       width={width}
@@ -69,6 +190,12 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
       dash={dash}
       strokeScaleEnabled={false}
       cornerRadius={cornerRadius}
+      // Konva normally does an extra draw pass to perfectly composite
+      // fill + stroke + opacity together. The visual difference for a
+      // solid rounded rect is imperceptible; skipping the extra pass
+      // is the recommended optimisation when you have many such shapes.
+      // https://konvajs.org/docs/performance/Disable_Perfect_Draw.html
+      perfectDrawEnabled={false}
       listening
     />
   )
@@ -85,6 +212,18 @@ const RichTextNodeContent = memo(function RichTextNodeContent({
   const contentOffsetY = textBounds
     ? height / 2 - (textBounds.top + textBounds.bottom) / 2
     : 0
+
+  // NOTE: We deliberately do NOT call `group.cache()` here even though
+  // Konva recommends it for complex sceneFuncs. The cache rasterises at
+  // a fixed pixel ratio captured at cache time; any later zoom-in
+  // upscales the bitmap and the text turns blurry. The only ways to
+  // avoid that are (a) re-cache on every zoom (expensive), or (b) cache
+  // at a high enough pixelRatio to cover all zoom levels — which at
+  // 5000 nodes × retina × ~3× zoom headroom would be ~1 GB of canvas
+  // memory. Keeping `drawLayout` live trades CPU per redraw for crisp
+  // text at every zoom level. Other Konva tips (perfectDrawEnabled,
+  // layer count, listening, render-tag layout cache, conditional
+  // reconcile) carry the perf load instead.
 
   if (width <= 0 || layoutResult.height <= 0) return null
 
@@ -123,6 +262,8 @@ const RichTextNodeGroupLabel = memo(function RichTextNodeGroupLabel({
   width,
   layoutResult,
 }: RichTextNodeGroupLabelProps) {
+  // No `.cache()` — see explanation on RichTextNodeContent above.
+
   if (width <= 0 || layoutResult.height <= 0) return null
 
   return (
@@ -160,7 +301,7 @@ export const RichTextNode = memo(function RichTextNode({
   const { resolvedTheme } = useTheme()
   const isSelected = selectedNodeIds.includes(nodeId)
 
-  const fill = useMemo(
+  const themeFill = useMemo(
     () =>
       resolveCanvasThemeColor({
         fallback: CANVAS_SURFACE_FALLBACKS[resolvedTheme],
@@ -168,21 +309,38 @@ export const RichTextNode = memo(function RichTextNode({
       }),
     [resolvedTheme],
   )
+  const themeSurfaceStroke = CANVAS_NODE_BORDER_FALLBACKS[resolvedTheme]
+
+  // Per-node style overrides from typeSpecificData (shape, border, background)
+  const fill = node?.styleOverrides?.backgroundColor || themeFill
+  const surfaceStroke = node?.styleOverrides?.borderColor || themeSurfaceStroke
 
   const shapeDefinition = node ? getCanvasNodeShapeDefinition(node) : null
+
+  const handleStartEditing = useCallback(
+    (event?: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      if (readOnly) return
+      if (event) {
+        event.cancelBubble = true
+      }
+      startEditing(nodeId)
+    },
+    [nodeId, readOnly, startEditing],
+  )
 
   if (!node || !shapeDefinition || editingNodeId === node.id) return null
 
   const isGroup = node.kind === 'group'
 
-  const selectThisNode = () => {
+  const selectThisNode = (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (readOnly) return
-    selectNode(node.id)
-  }
 
-  const handleDoubleClick = () => {
-    if (readOnly) return
-    startEditing(node.id)
+    if ('detail' in event.evt && event.evt.detail >= 2) {
+      handleStartEditing(event)
+      return
+    }
+
+    selectNode(node.id)
   }
 
   const handleDragMove = (event: KonvaEventObject<DragEvent>) => {
@@ -222,8 +380,9 @@ export const RichTextNode = memo(function RichTextNode({
       draggable={!readOnly && !node.parentGroupId}
       onClick={selectThisNode}
       onTap={selectThisNode}
-      onDblClick={handleDoubleClick}
-      onDblTap={handleDoubleClick}
+      onMouseDown={selectThisNode}
+      onDblClick={handleStartEditing}
+      onDblTap={handleStartEditing}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
     >
@@ -232,9 +391,10 @@ export const RichTextNode = memo(function RichTextNode({
         height={node.height}
         fill={fill}
         opacity={isGroup ? 0.16 : undefined}
-        stroke={isGroup ? CANVAS_SELECT_COLOR : undefined}
+        stroke={isGroup ? CANVAS_SELECT_COLOR : surfaceStroke}
         dash={isGroup ? [6, 4] : undefined}
         cornerRadius={shapeDefinition.cornerRadius}
+        shapeKey={node.styleOverrides?.shapeKey}
       />
       {isSelected && (
         <Rect
@@ -244,6 +404,7 @@ export const RichTextNode = memo(function RichTextNode({
           stroke={CANVAS_SELECT_COLOR}
           strokeWidth={1.5}
           strokeScaleEnabled={false}
+          perfectDrawEnabled={false}
           listening={false}
         />
       )}
@@ -258,7 +419,7 @@ export const RichTextNodeControls = memo(function RichTextNodeControls({
   const editingNodeId = useCanvasEditingNodeId()
   const selectedNodeId = useSelectedNodeId()
   const selectedNodeIds = useSelectedNodeIds()
-  const { updateNodeFrame } = useCanvasActions()
+  const { startEditing, updateNodeFrame } = useCanvasActions()
   const isSelected = selectedNodeIds.includes(nodeId)
   const isSingleSelected = isSelected && selectedNodeId === nodeId
   const shapeDefinition = node ? getCanvasNodeShapeDefinition(node) : null
@@ -276,6 +437,15 @@ export const RichTextNodeControls = memo(function RichTextNodeControls({
       })
     },
     [node, updateNodeFrame],
+  )
+
+  const handleDoubleClick = useCallback(
+    (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      if (!node) return
+      event.cancelBubble = true
+      startEditing(node.id)
+    },
+    [node, startEditing],
   )
 
   const { nodeRef, transformerRef, handleTransformEnd, transformerProps } =
@@ -309,11 +479,18 @@ export const RichTextNodeControls = memo(function RichTextNodeControls({
         ref={nodeRef}
         x={node.x}
         y={node.y}
+        onDblClick={handleDoubleClick}
+        onDblTap={handleDoubleClick}
         onTransformEnd={handleTransformEnd}
       >
         <Rect width={node.width} height={node.height} listening={false} />
       </Group>
-      <Transformer ref={transformerRef} {...transformerProps} />
+      <Transformer
+        ref={transformerRef}
+        onDblClick={handleDoubleClick}
+        onDblTap={handleDoubleClick}
+        {...transformerProps}
+      />
     </>
   )
 })

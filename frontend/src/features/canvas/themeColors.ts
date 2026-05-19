@@ -8,6 +8,11 @@ export const CANVAS_SURFACE_FALLBACKS: Record<ResolvedTheme, string> = {
   light: 'rgba(255, 255, 255, 0.9)',
 }
 
+export const CANVAS_NODE_BORDER_FALLBACKS: Record<ResolvedTheme, string> = {
+  dark: 'rgba(244, 244, 245, 0.16)',
+  light: 'rgba(24, 24, 27, 0.22)',
+}
+
 // --- Selection / Interactive ---
 export const CANVAS_SELECTION_VARIABLE = '--canvas-selection'
 export const CANVAS_SELECT_COLOR = '#3b82f6'
@@ -66,10 +71,12 @@ export function resolveCanvasThemeColor({
   if (typeof getComputedStyle === 'undefined') return fallback
 
   const targetRoot =
-    root ??
-    (typeof document === 'undefined' ? null : document.documentElement)
+    root ?? (typeof document === 'undefined' ? null : document.documentElement)
 
   if (!targetRoot) return fallback
 
-  return getComputedStyle(targetRoot).getPropertyValue(variableName).trim() || fallback
+  return (
+    getComputedStyle(targetRoot).getPropertyValue(variableName).trim() ||
+    fallback
+  )
 }

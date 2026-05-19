@@ -59,6 +59,11 @@ type WorkbenchActions = {
   openTab: (payload: OpenWorkbenchTabPayload) => WorkbenchTabId
   switchTab: (tabId: WorkbenchTabId) => void
   closeTab: (tabId: WorkbenchTabId) => void
+  retargetTab: (
+    tabId: WorkbenchTabId,
+    resource: WorkbenchTabResource,
+    title?: string,
+  ) => void
   renameTab: (tabId: WorkbenchTabId, title: string) => void
   markDirty: (tabId: WorkbenchTabId, dirty?: boolean) => void
 }
@@ -186,6 +191,24 @@ const useWorkbenchStore = create<WorkbenchState>()(
             },
             false,
             'workbench/closeTab',
+          ),
+
+        retargetTab: (tabId, resource, title) =>
+          set(
+            (state) => {
+              const tab = state.tabsById[tabId]
+              if (!tab) return
+
+              tab.resource = resource
+              tab.dedupeKey = getWorkbenchTabDedupeKey({
+                kind: tab.kind,
+                resource,
+              })
+              const nextTitle = title?.trim()
+              if (nextTitle) tab.title = nextTitle
+            },
+            false,
+            'workbench/retargetTab',
           ),
 
         renameTab: (tabId, title) =>

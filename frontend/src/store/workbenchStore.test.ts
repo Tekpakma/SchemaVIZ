@@ -61,6 +61,39 @@ describe('workbenchStore', () => {
     expect(getWorkbenchTabsSnapshot()[0]?.title).toBe('Original')
   })
 
+  it('retargets a local draft tab to a persisted template', () => {
+    const actions = getWorkbenchActionsSnapshot()
+    const tabId = actions.openTab({
+      kind: 'generation-builder',
+      title: 'Draft',
+      resource: {
+        type: 'draft',
+        localId: 'draft-1',
+      },
+    })
+
+    actions.retargetTab(
+      tabId,
+      {
+        type: 'template',
+        id: 'template-1',
+      },
+      'Saved template',
+    )
+
+    expect(getWorkbenchTabsSnapshot()).toMatchObject([
+      {
+        id: tabId,
+        title: 'Saved template',
+        dedupeKey: 'generation-builder:template:template-1',
+        resource: {
+          type: 'template',
+          id: 'template-1',
+        },
+      },
+    ])
+  })
+
   it('deduplicates singleton tools by kind', () => {
     const actions = getWorkbenchActionsSnapshot()
     const firstTabId = actions.openTab({

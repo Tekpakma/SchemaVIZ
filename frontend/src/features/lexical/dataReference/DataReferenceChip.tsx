@@ -1,7 +1,9 @@
-import { Suspense, useMemo } from 'react'
+import { Component, Suspense, useMemo } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { useShowResolvedReferences } from '@/store/canvasStore'
-import { useLexicalOverlayRuntime } from '../LexicalOverlayRuntimeContext'
+import { useOptionalLexicalOverlayRuntime } from '../LexicalOverlayRuntimeContext'
+import type { LexicalOverlayDataScope } from '../LexicalOverlayRuntimeContext'
 import { SCHEMA_QUERIES } from './schemaQueries'
 import { formatReferenceDisplayValue } from './fieldValues'
 import type { DataReferenceInlineStyle } from './DataReferenceNode'
@@ -31,9 +33,13 @@ function ChipShell({
   )
 }
 
-function ResolvedChipContent({ fieldName }: { fieldName: string }) {
-  const { dataScope } = useLexicalOverlayRuntime()
-
+function ResolvedChipContentInner({
+  dataScope,
+  fieldName,
+}: {
+  dataScope: LexicalOverlayDataScope
+  fieldName: string
+}) {
   const rootRef = useMemo(
     () => ({ appLabel: dataScope.appLabel, modelName: dataScope.modelName }),
     [dataScope.appLabel, dataScope.modelName],
@@ -67,6 +73,48 @@ function ResolvedChipContent({ fieldName }: { fieldName: string }) {
   return <>{displayText}</>
 }
 
+function ResolvedChipContent({ fieldName }: { fieldName: string }) {
+  // Non-throwing variant: the chip may be rendered inside a persistent
+  // editor (BuilderInlineEditor) that doesn't always have a non-null
+  // runtime — e.g. when no node is being edited. Fall back to the
+  // template form so the chip still displays sensibly.
+  const runtime = useOptionalLexicalOverlayRuntime()
+  const dataScope = runtime?.dataScope
+  // We need BOTH a data scope AND a concrete recordId to actually
+  // resolve a value. Builder preview nodes have a scope (app/model)
+  // but no record — show the template form there instead of firing
+  // a record fetch that the backend will reject with "id is required".
+  if (!dataScope?.recordId) return <>{`{{${fieldName}}}`}</>
+  return <ResolvedChipContentInner dataScope={dataScope} fieldName={fieldName} />
+}
+
+/**
+ * Last-resort error boundary around the resolved chip content. If any
+ * downstream query fails (e.g. a missing record, schema mismatch) we
+ * degrade to the template form instead of letting a single chip crash
+ * the entire editor.
+ */
+class ChipErrorBoundary extends Component<
+  { fieldName: string; children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.warn('[DataReferenceChip] resolution failed; showing template fallback', {
+      fieldName: this.props.fieldName,
+      error,
+      info,
+    })
+  }
+  render() {
+    if (this.state.hasError) return <>{`{{${this.props.fieldName}}}`}</>
+    return this.props.children
+  }
+}
+
 export function DataReferenceChip({ fieldName, nodeKey, styles }: ChipProps) {
   const showResolved = useShowResolvedReferences()
 
@@ -82,9 +130,11 @@ export function DataReferenceChip({ fieldName, nodeKey, styles }: ChipProps) {
 
   return (
     <ChipShell fieldName={fieldName} nodeKey={nodeKey} styles={styles}>
-      <Suspense fallback={templateFallback}>
-        <ResolvedChipContent fieldName={fieldName} />
-      </Suspense>
+      <ChipErrorBoundary fieldName={fieldName}>
+        <Suspense fallback={templateFallback}>
+          <ResolvedChipContent fieldName={fieldName} />
+        </Suspense>
+      </ChipErrorBoundary>
     </ChipShell>
   )
 }

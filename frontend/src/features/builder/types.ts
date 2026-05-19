@@ -1,6 +1,10 @@
 import type { ParseKeys } from 'i18next'
 
 import type { SchemaRoute } from '@/api/contracts'
+import type {
+  CanvasFlowDirection,
+  CanvasGroupLayoutPolicy,
+} from '@/features/canvas/model/types'
 import type { LayoutAlgorithm } from '@/features/elk/algorithms'
 
 export type RecipeStepKind =
@@ -10,9 +14,9 @@ export type RecipeStepKind =
   | 'grouping'
   | 'style'
   | 'layout'
-  | 'promote'
 
 export type { LayoutAlgorithm }
+export type RecipeLayoutDirection = CanvasFlowDirection
 
 export interface RecipeLayer {
   id: string
@@ -28,6 +32,22 @@ export interface RecipeModel {
   displayName: string
   layerId: string
   alias?: string
+  styleTemplateId?: string | null
+}
+
+export type RecipeStyleDraftSaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+export interface RecipeStyleDraft {
+  sourceTemplateId: string | null
+  persistedTemplateId: string | null
+  name: string
+  textContent: unknown | null
+  visualStyles: unknown
+  dimensions: unknown
+  typeSpecificData: unknown
+  dirty: boolean
+  saveState: RecipeStyleDraftSaveState
+  error?: string
 }
 
 export interface ExampleRecord {
@@ -61,7 +81,12 @@ export interface RecipeGroupRule {
   childModelId: string
   via: string
   mode: GroupMode
+  layout?: CanvasGroupLayoutPolicy
 }
+
+export const DEFAULT_RECIPE_GROUP_LAYOUT = {
+  mode: 'auto-pack',
+} satisfies CanvasGroupLayoutPolicy
 
 export interface RecipeFilter {
   id: string
@@ -90,8 +115,12 @@ export interface RecipeData {
   edges: TraversalEdge[]
   filters: RecipeFilter[]
   groupRules: RecipeGroupRule[]
+  groupLayout: CanvasGroupLayoutPolicy
+  styleDrafts: Record<string, RecipeStyleDraft>
   swatches: string[]
   layoutAlgorithm: LayoutAlgorithm
+  layoutDirection: RecipeLayoutDirection
+  shareSlug: string
   promoteOrg: string
   promoteVisibility: string
   promoteAudience: string

@@ -11,6 +11,11 @@ import type {
 } from '@/api/contracts'
 import type { CanvasLayoutInput } from './layout.schemas'
 import { CANVAS_NODE_SHAPES } from './nodeShapes'
+import {
+  getParentNodeIdByNodeId,
+  isRenderableCanvasEdge,
+} from './compoundGraph'
+import { createPackedGroupLayout } from './groupLayout'
 import type {
   CanvasEdge,
   CanvasFlowDirection,
@@ -350,11 +355,9 @@ function getDirectChildIds(input: CanvasLayoutInput, parentId: NodeId) {
   return input.childIdsByGroupId[parentId] ?? []
 }
 
-const GROUP_LABEL_GAP = 12
-
 /** Recursively converts a canvas node subtree into an ELK node tree and attaches fixed-side ports for routing. */
 function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
-  const children = R.pipe(
+  let children = R.pipe(
     getDirectChildIds(input, node.id),
     R.flatMap((childId) => {
       const childNode = input.nodesById[childId]
@@ -369,29 +372,39 @@ function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
   const layoutOptions: LayoutOptions = {
     [ELK_PORT_CONSTRAINTS_OPTION]: 'FIXED_SIDE',
   }
+  let width = node.width
+  let height = node.height
 
   // Groups with labels need extra top padding for the label area
-  if (node.kind === 'group' && node.contentHeight > 0) {
-    const topPadding = node.contentHeight + GROUP_LABEL_GAP
-    layoutOptions['elk.padding'] =
-      `[top=${topPadding},left=36,bottom=36,right=36]`
+  if (node.kind === 'group') {
+    const packed = createPackedGroupLayout(node, children)
+    children = packed.children
+    width = packed.width
+    height = packed.height
+    Object.assign(layoutOptions, packed.layoutOptions)
   }
 
   return {
     id: node.id,
     x: node.x,
     y: node.y,
-    width: node.width,
-    height: node.height,
+    width,
+    height,
     ports: createElkPortsForNode(node),
     layoutOptions,
     ...(children.length > 0 ? { children } : {}),
   }
 }
 
-function isValidLayoutEdge(input: CanvasLayoutInput, edge: CanvasEdge) {
+function isValidLayoutEdge(
+  input: CanvasLayoutInput,
+  edge: CanvasEdge,
+  parentNodeIdByNodeId: Map<NodeId, NodeId>,
+) {
   return Boolean(
-    input.nodesById[edge.sourceNodeId] && input.nodesById[edge.targetNodeId],
+    input.nodesById[edge.sourceNodeId] &&
+    input.nodesById[edge.targetNodeId] &&
+    isRenderableCanvasEdge(edge, parentNodeIdByNodeId),
   )
 }
 
@@ -461,6 +474,9 @@ export function createElkGraph(input: CanvasLayoutInput): ElkNode {
     input.flowDirection,
     input.layoutOptions,
   )
+  const parentNodeIdByNodeId = getParentNodeIdByNodeId(
+    Object.values(input.nodesById),
+  )
   const rootChildren = R.pipe(
     input.nodeOrder,
     R.flatMap((nodeId) => {
@@ -477,7 +493,7 @@ export function createElkGraph(input: CanvasLayoutInput): ElkNode {
     input.edgeOrder,
     R.flatMap((edgeId) => {
       const edge = input.edgesById[edgeId]
-      if (!edge || !isValidLayoutEdge(input, edge)) {
+      if (!edge || !isValidLayoutEdge(input, edge, parentNodeIdByNodeId)) {
         return []
       }
 
@@ -604,6 +620,18 @@ function getSectionPoints(edge: ElkExtendedEdge): Array<CanvasPoint> {
   }))
 }
 
+function getEdgeLabelPoint(edge: ElkExtendedEdge): CanvasPoint | undefined {
+  const label = edge.labels?.[0]
+  if (typeof label?.x !== 'number' || typeof label.y !== 'number') {
+    return undefined
+  }
+
+  return {
+    x: label.x + (label.width ?? 0) / 2,
+    y: label.y + (label.height ?? 0) / 2,
+  }
+}
+
 /** Adjusts the first and last route points against the owning node frames, even when ELK edges target port IDs. */
 function clipEdgeRoutePoints(
   edge: ElkExtendedEdge,
@@ -670,9 +698,12 @@ export function createGraphLayoutResult(
       )
       if (points.length < 2 || !edge.id) return []
 
+      const labelPoint = getEdgeLabelPoint(edge)
+
       return [
         {
           id: edge.id,
+          ...(labelPoint ? { labelPoint } : {}),
           points,
         },
       ]

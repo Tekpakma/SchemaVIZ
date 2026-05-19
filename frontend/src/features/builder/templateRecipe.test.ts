@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
-import { createRecipeFromTemplate, recipeToInlineDefinition } from './templateRecipe'
+import {
+  createRecipeFromTemplate,
+  recipeToGenerationTemplateWriteRequest,
+  recipeToInlineDefinition,
+} from './templateRecipe'
 
 type GenerationTemplateVersion = NonNullable<
   GenerationTemplateRead['draftVersion']
@@ -55,12 +59,14 @@ describe('builder template recipe conversion', () => {
                 resolvedModelId: 'cloud.Provider',
                 childIds: ['region'],
                 label: 'Provider',
+                styleTemplateId: 'style-provider',
               },
               region: {
                 parentId: 'provider',
                 relationship: 'regions',
                 resolvedModelId: 'cloud.Region',
                 childIds: [],
+                styleTemplateId: 'style-region',
                 filter: {
                   active: true,
                 },
@@ -93,12 +99,14 @@ describe('builder template recipe conversion', () => {
           modelId: 'cloud.Provider',
           displayName: 'Provider',
           layerId: 'layer-provider',
+          styleTemplateId: 'style-provider',
         },
         {
           id: 'region',
           modelId: 'cloud.Region',
           displayName: 'Region',
           layerId: 'layer-region',
+          styleTemplateId: 'style-region',
         },
       ],
       edges: [
@@ -124,8 +132,56 @@ describe('builder template recipe conversion', () => {
       ],
       swatches: ['#111111', '#222222'],
       layoutAlgorithm: 'Force',
+      shareSlug: '',
       promoteVisibility: 'org-wide',
       promoteAudience: 'All users',
+    })
+  })
+
+  it('converts builder recipes to backend write payloads', () => {
+    const recipe = {
+      ...createRecipeFromTemplate(
+        createTemplate({
+          name: 'Cloud overview',
+          description: 'Existing description',
+          scope: 'owner',
+          shareSlug: 'old-cloud-overview',
+        }),
+      ),
+      title: 'Cloud overview draft',
+      models: [
+        {
+          id: 'provider',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'CloudProvider',
+          modelId: 'infrastructure.CloudProvider',
+          displayName: 'Cloud provider',
+          layerId: 'layer-provider',
+        },
+      ],
+      shareSlug: 'cloud-overview',
+    }
+
+    expect(
+      recipeToGenerationTemplateWriteRequest(recipe, {
+        template: createTemplate({
+          description: 'Existing description',
+          scope: 'owner',
+        }),
+      }),
+    ).toMatchObject({
+      name: 'Cloud overview draft',
+      description: 'Existing description',
+      rootModel: 'infrastructure.CloudProvider',
+      scope: 'owner',
+      shareSlug: 'cloud-overview',
+      definition: {
+        rootStepId: 'provider',
+      },
+      layoutSettings: {
+        layoutAlgorithm: 'Layered',
+      },
     })
   })
 
@@ -278,6 +334,7 @@ describe('builder template recipe conversion', () => {
           modelId: 'infrastructure.Network',
           displayName: 'Network',
           layerId: 'layer-network',
+          styleTemplateId: 'style-network',
         },
       ],
       edges: [
@@ -321,5 +378,115 @@ describe('builder template recipe conversion', () => {
         },
       ],
     })
+    expect(
+      previewSource?.inlineDefinition.stepsById.network?.styleTemplateId,
+    ).toBe('style-network')
+  })
+
+  it('exports group rules by marking the parent step as the compound group', () => {
+    const previewSource = recipeToInlineDefinition({
+      ...createRecipeFromTemplate(createTemplate()),
+      models: [
+        {
+          id: 'business-group',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'BusinessGroup',
+          modelId: 'infrastructure.BusinessGroup',
+          displayName: 'Business group',
+          layerId: 'layer-business-group',
+        },
+        {
+          id: 'cloud-provider',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'CloudProvider',
+          modelId: 'infrastructure.CloudProvider',
+          displayName: 'Cloud provider',
+          layerId: 'layer-cloud-provider',
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-business-provider',
+          from: 'Business group',
+          to: 'Cloud provider',
+          fromModelId: 'business-group',
+          toModelId: 'cloud-provider',
+          via: 'provider',
+          auto: true,
+          cost: 1,
+        },
+      ],
+      groupRules: [
+        {
+          id: 'group-provider',
+          parentModelId: 'business-group',
+          childModelId: 'cloud-provider',
+          via: 'provider',
+          mode: 'group',
+        },
+      ],
+    })
+
+    expect(
+      previewSource?.inlineDefinition.stepsById['business-group']?.groupMode,
+    ).toBe('group')
+    expect(
+      previewSource?.inlineDefinition.stepsById['cloud-provider']?.groupMode,
+    ).toBe('none')
+  })
+
+  it('imports parent group definitions as builder group rules', () => {
+    const recipe = createRecipeFromTemplate(
+      createTemplate({
+        draftVersion: {
+          id: '018f3b2e-8a9a-7c6d-9e0f-grouped000001',
+          versionNumber: 1,
+          rootModel: 'infrastructure.BusinessGroup',
+          createdBy: null,
+          createdAt: '2026-05-13T12:00:00+00:00',
+          layoutSettings: {},
+          definition: {
+            rootStepId: 'business-group',
+            stepsById: {
+              'business-group': {
+                id: 'business-group',
+                parentId: null,
+                childIds: ['cloud-provider'],
+                relationship: null,
+                resolvedModelId: 'infrastructure.BusinessGroup',
+                visibility: 'visible',
+                groupMode: 'group',
+                styleTemplateId: null,
+                label: 'Business group',
+                filter: null,
+              },
+              'cloud-provider': {
+                id: 'cloud-provider',
+                parentId: 'business-group',
+                childIds: [],
+                relationship: 'provider',
+                resolvedModelId: 'infrastructure.CloudProvider',
+                visibility: 'visible',
+                groupMode: 'none',
+                styleTemplateId: null,
+                label: 'Cloud provider',
+                filter: null,
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    expect(recipe.groupRules).toMatchObject([
+      {
+        parentModelId: 'business-group',
+        childModelId: 'cloud-provider',
+        mode: 'group',
+        layout: { mode: 'auto-pack' },
+      },
+    ])
   })
 })

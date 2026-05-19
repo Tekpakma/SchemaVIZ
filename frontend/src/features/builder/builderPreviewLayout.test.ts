@@ -17,8 +17,12 @@ function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
     edges: [],
     filters: [],
     groupRules: [],
+    groupLayout: { mode: 'auto-pack' },
+    styleDrafts: {},
     swatches: ['#111111', '#222222'],
     layoutAlgorithm: 'Layered',
+    layoutDirection: 'LR',
+    shareSlug: '',
     promoteOrg: '',
     promoteVisibility: 'org-wide',
     promoteAudience: '',
@@ -39,6 +43,32 @@ function createModel(overrides: Partial<RecipeModel>): RecipeModel {
     displayName: overrides.displayName ?? modelName,
     layerId: overrides.layerId ?? 'service',
     alias: overrides.alias,
+  }
+}
+
+function createTextContent(text: string) {
+  return {
+    root: {
+      children: [
+        {
+          children: [
+            {
+              detail: 0,
+              format: 0,
+              mode: 'normal',
+              style: '',
+              text,
+              type: 'text',
+              version: 1,
+            },
+          ],
+          type: 'paragraph',
+          version: 1,
+        },
+      ],
+      type: 'root',
+      version: 1,
+    },
   }
 }
 
@@ -243,31 +273,283 @@ describe('builder preview layout', () => {
 
     expect(graph.columns).toHaveLength(2)
 
-    // First two nodes are ELK layer groups, then model nodes
     const groupNodes = graph.nodes.filter((n) => n.kind === 'group')
-    const modelNodes = graph.nodes.filter((n) => n.kind === 'generation')
-    expect(groupNodes).toHaveLength(2)
-    expect(groupNodes).toMatchObject([
-      { kind: 'group', shape: 'group', layoutMode: 'auto' },
-      { kind: 'group', shape: 'group', layoutMode: 'auto' },
-    ])
+    const modelNodes = graph.nodes.filter((n) => n.kind === 'editable')
+    expect(groupNodes).toHaveLength(0)
     expect(modelNodes).toMatchObject([
-      { kind: 'generation', layoutMode: 'auto', shape: 'box' },
-      { kind: 'generation', layoutMode: 'auto', shape: 'box' },
+      { kind: 'editable', layoutMode: 'auto', shape: 'box' },
+      { kind: 'editable', layoutMode: 'auto', shape: 'box' },
     ])
-    // Model nodes reference their parent group
-    expect(modelNodes[0]?.parentGroupId).toContain('service')
-    expect(modelNodes[1]?.parentGroupId).toContain('database')
-    expect(modelNodes[0]?.html).toContain('1 filter')
+    expect(modelNodes[0]?.parentGroupId).toBeUndefined()
+    expect(modelNodes[1]?.parentGroupId).toBeUndefined()
+    // Node HTML is rendered through the Lexical template path (label text)
+    expect(modelNodes[0]?.html).toContain('Service')
+    expect(modelNodes[0]?.html).toContain('background: #111111')
+    expect(graph.layers).toMatchObject([
+      { id: 'service', label: 'Services', nodeIds: ['service-model'] },
+      { id: 'database', label: 'Data', nodeIds: ['database-model'] },
+    ])
 
     expect(graph.edges).toMatchObject([
       {
         id: 'edge-service-data',
         kind: 'default',
         label: 'persists',
+        labelPoint: { x: 284, y: 46 },
+        routePoints: [
+          { x: 220, y: 60 },
+          { x: 284, y: 60 },
+          { x: 284, y: 60 },
+          { x: 348, y: 60 },
+        ],
       },
     ])
-    expect(graph.key).toContain('builder-preview-v3')
+    expect(graph.key).toContain('builder-preview-v5')
+  })
+
+  it('keeps recipe layer positions in the static preview graph', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [
+          { id: 'l1', label: 'L1' },
+          { id: 'l2', label: 'L2' },
+          { id: 'l3', label: 'L3' },
+          { id: 'l4', label: 'L4' },
+        ],
+        models: [
+          createModel({
+            id: 'business',
+            displayName: 'Business',
+            layerId: 'l1',
+          }),
+          createModel({ id: 'network', displayName: 'Network', layerId: 'l2' }),
+          createModel({ id: 'region', displayName: 'Region', layerId: 'l3' }),
+          createModel({
+            id: 'provider',
+            displayName: 'Cloud provider',
+            layerId: 'l4',
+          }),
+        ],
+      }),
+      { showEdges: false },
+    )
+
+    expect(graph.layers).toMatchObject([
+      { id: 'l1', nodeIds: ['business'] },
+      { id: 'l2', nodeIds: ['network'] },
+      { id: 'l3', nodeIds: ['region'] },
+      { id: 'l4', nodeIds: ['provider'] },
+    ])
+    expect(graph.nodes).toMatchObject([
+      { id: 'business', x: 0 },
+      { id: 'network', x: 348 },
+      { id: 'region', x: 696 },
+      { id: 'provider', x: 1044 },
+    ])
+  })
+
+  it('widens static preview lanes for long route labels', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [
+          { id: 'l1', label: 'L1' },
+          { id: 'l2', label: 'L2' },
+        ],
+        models: [
+          createModel({
+            id: 'business',
+            displayName: 'Business',
+            layerId: 'l1',
+          }),
+          createModel({
+            id: 'provider',
+            displayName: 'Cloud provider',
+            layerId: 'l2',
+          }),
+        ],
+        edges: [
+          {
+            id: 'edge-business-provider',
+            from: 'Business',
+            to: 'Cloud provider',
+            fromModelId: 'business',
+            toModelId: 'provider',
+            via: 'networks -> region -> provider',
+            auto: false,
+            cost: 3,
+          },
+        ],
+      }),
+    )
+
+    const provider = graph.nodes.find((node) => node.id === 'provider')
+    expect(provider?.x).toBeGreaterThan(348)
+    expect(graph.edges[0]?.routePoints).toMatchObject([
+      { x: 220, y: 60 },
+      { y: 60 },
+      { y: 60 },
+      { x: provider?.x, y: 60 },
+    ])
+    expect(graph.edges[0]?.labelPoint).toMatchObject({ y: 46 })
+  })
+
+  it('suppresses grouped parent-child edges in the static preview graph', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [
+          { id: 'provider-layer', label: 'L1' },
+          { id: 'region-layer', label: 'L2' },
+        ],
+        models: [
+          createModel({
+            id: 'provider',
+            displayName: 'Cloud provider',
+            layerId: 'provider-layer',
+          }),
+          createModel({
+            id: 'region',
+            displayName: 'Region',
+            layerId: 'region-layer',
+          }),
+        ],
+        edges: [
+          {
+            id: 'edge-provider-region',
+            from: 'Cloud provider',
+            to: 'Region',
+            fromModelId: 'provider',
+            toModelId: 'region',
+            via: 'regions',
+            auto: true,
+            cost: 1,
+          },
+        ],
+        groupRules: [
+          {
+            id: 'group-region',
+            parentModelId: 'provider',
+            childModelId: 'region',
+            via: 'regions',
+            mode: 'group',
+          },
+        ],
+      }),
+    )
+
+    expect(graph.nodes).toMatchObject([
+      {
+        id: 'builder-model-group:provider',
+        kind: 'group',
+        groupLayout: { mode: 'auto-pack' },
+      },
+      {
+        id: 'region',
+        kind: 'editable',
+        parentGroupId: 'builder-model-group:provider',
+      },
+    ])
+    expect(graph.edges).toEqual([])
+  })
+
+  it('uses the recipe group layout when a group rule has no override', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        groupLayout: { mode: 'freeform' },
+        layers: [{ id: 'service', label: 'Services' }],
+        models: [
+          createModel({
+            id: 'provider',
+            modelId: 'infra.provider',
+            displayName: 'Provider',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'region',
+            modelId: 'infra.region',
+            displayName: 'Region',
+            layerId: 'service',
+          }),
+        ],
+        groupRules: [
+          {
+            id: 'group-region',
+            parentModelId: 'provider',
+            childModelId: 'region',
+            via: 'regions',
+            mode: 'group',
+          },
+        ],
+      }),
+    )
+
+    expect(graph.nodes[0]).toMatchObject({
+      id: 'builder-model-group:provider',
+      groupLayout: { mode: 'freeform' },
+    })
+  })
+
+  it('reflects saved style templates in node subtitles and the remount key', () => {
+    const baseRecipe = createRecipe({
+      layers: [{ id: 'service', label: 'Services' }],
+      models: [
+        createModel({
+          id: 'service-model',
+          displayName: 'Service',
+          layerId: 'service',
+        }),
+      ],
+    })
+    const styledRecipe = createRecipe({
+      ...baseRecipe,
+      models: [
+        {
+          ...baseRecipe.models[0]!,
+          styleTemplateId: 'style-service',
+        },
+      ],
+    })
+
+    const baseGraph = getBuilderPreviewCanvasGraph(baseRecipe)
+    const styledGraph = getBuilderPreviewCanvasGraph(styledRecipe)
+    const styledModel = styledGraph.nodes.find(
+      (node) => node.kind === 'editable',
+    )
+
+    expect(styledGraph.key).not.toBe(baseGraph.key)
+    // HTML now uses the Lexical template path; the key difference is what matters
+    expect(styledModel?.html).toContain('Service')
+  })
+
+  it('renders dirty style drafts in the static preview', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [{ id: 'service', label: 'Services' }],
+        models: [
+          createModel({
+            id: 'service-model',
+            displayName: 'Service',
+            layerId: 'service',
+          }),
+        ],
+        styleDrafts: {
+          'service-model': {
+            sourceTemplateId: null,
+            persistedTemplateId: null,
+            name: 'Service node',
+            textContent: createTextContent('Draft node'),
+            visualStyles: {},
+            dimensions: {},
+            typeSpecificData: {},
+            dirty: true,
+            saveState: 'idle',
+          },
+        },
+      }),
+    )
+
+    const modelNode = graph.nodes.find((node) => node.kind === 'editable')
+    expect(modelNode?.html).toContain('Draft node')
+    expect(modelNode?.html).toContain('background: #111111')
   })
 
   it('changes the canvas remount key only when preview graph inputs change', () => {
@@ -306,9 +588,36 @@ describe('builder preview layout', () => {
       ...baseRecipe,
       layers: [{ id: 'service', label: 'Applications' }],
     }).key
+    const changedLayoutAlgorithmKey = getBuilderPreviewCanvasGraph({
+      ...baseRecipe,
+      layoutAlgorithm: 'Tree',
+    }).key
+    const changedLayoutDirectionKey = getBuilderPreviewCanvasGraph({
+      ...baseRecipe,
+      layoutDirection: 'TB',
+    }).key
+    const changedDraftTextKey = getBuilderPreviewCanvasGraph({
+      ...baseRecipe,
+      styleDrafts: {
+        'service-model': {
+          sourceTemplateId: null,
+          persistedTemplateId: null,
+          name: 'Service node',
+          textContent: createTextContent('Changed node text'),
+          visualStyles: {},
+          dimensions: {},
+          typeSpecificData: {},
+          dirty: true,
+          saveState: 'idle',
+        },
+      },
+    }).key
 
     expect(changedFilterExpressionKey).toBe(baseKey)
     expect(changedLayerKey).not.toBe(baseKey)
+    expect(changedLayoutAlgorithmKey).not.toBe(baseKey)
+    expect(changedLayoutDirectionKey).not.toBe(baseKey)
+    expect(changedDraftTextKey).not.toBe(baseKey)
   })
 
   it('produces different key when model order changes within a layer', () => {
@@ -343,12 +652,11 @@ describe('builder preview layout', () => {
     // Key must change so canvas remounts
     expect(reorderedGraph.key).not.toBe(originalGraph.key)
 
-    // Model nodes (after group nodes) should swap: Alpha was first, now Beta is first
     const originalModels = originalGraph.nodes.filter(
-      (n) => n.kind === 'generation',
+      (n) => n.kind === 'editable',
     )
     const reorderedModels = reorderedGraph.nodes.filter(
-      (n) => n.kind === 'generation',
+      (n) => n.kind === 'editable',
     )
     expect(originalModels[0]?.html).toContain('Alpha')
     expect(originalModels[1]?.html).toContain('Beta')

@@ -13,6 +13,8 @@ import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBuilderRouteImport } from './routes/_app/builder'
+import { Route as GenerateSlugIndexRouteImport } from './routes/generate/$slug.index'
+import { Route as GenerateSlugRecordIdRouteImport } from './routes/generate/$slug.$recordId'
 
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
@@ -33,16 +35,30 @@ const AppBuilderRoute = AppBuilderRouteImport.update({
   path: '/builder',
   getParentRoute: () => AppRoute,
 } as any)
+const GenerateSlugIndexRoute = GenerateSlugIndexRouteImport.update({
+  id: '/generate/$slug/',
+  path: '/generate/$slug/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GenerateSlugRecordIdRoute = GenerateSlugRecordIdRouteImport.update({
+  id: '/generate/$slug/$recordId',
+  path: '/generate/$slug/$recordId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/mcp': typeof McpRoute
   '/builder': typeof AppBuilderRoute
+  '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
+  '/generate/$slug/': typeof GenerateSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
   '/builder': typeof AppBuilderRoute
   '/': typeof AppIndexRoute
+  '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
+  '/generate/$slug': typeof GenerateSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,18 +66,39 @@ export interface FileRoutesById {
   '/mcp': typeof McpRoute
   '/_app/builder': typeof AppBuilderRoute
   '/_app/': typeof AppIndexRoute
+  '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
+  '/generate/$slug/': typeof GenerateSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/mcp' | '/builder'
+  fullPaths:
+    | '/'
+    | '/mcp'
+    | '/builder'
+    | '/generate/$slug/$recordId'
+    | '/generate/$slug/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/mcp' | '/builder' | '/'
-  id: '__root__' | '/_app' | '/mcp' | '/_app/builder' | '/_app/'
+  to:
+    | '/mcp'
+    | '/builder'
+    | '/'
+    | '/generate/$slug/$recordId'
+    | '/generate/$slug'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/mcp'
+    | '/_app/builder'
+    | '/_app/'
+    | '/generate/$slug/$recordId'
+    | '/generate/$slug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   McpRoute: typeof McpRoute
+  GenerateSlugRecordIdRoute: typeof GenerateSlugRecordIdRoute
+  GenerateSlugIndexRoute: typeof GenerateSlugIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -94,6 +131,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBuilderRouteImport
       parentRoute: typeof AppRoute
     }
+    '/generate/$slug/': {
+      id: '/generate/$slug/'
+      path: '/generate/$slug'
+      fullPath: '/generate/$slug/'
+      preLoaderRoute: typeof GenerateSlugIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/generate/$slug/$recordId': {
+      id: '/generate/$slug/$recordId'
+      path: '/generate/$slug/$recordId'
+      fullPath: '/generate/$slug/$recordId'
+      preLoaderRoute: typeof GenerateSlugRecordIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -112,6 +163,8 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   McpRoute: McpRoute,
+  GenerateSlugRecordIdRoute: GenerateSlugRecordIdRoute,
+  GenerateSlugIndexRoute: GenerateSlugIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -114,6 +114,7 @@ from .utils.generation_steps import GenerationStepValidationError
 from .template_uniqueness import (
     build_template_uniqueness_errors,
     check_template_uniqueness,
+    generate_unique_template_name,
 )
 from .i18n import (
     DEFAULT_LOCALE,
@@ -2069,10 +2070,17 @@ class GenerationTemplateViewSet(
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
 
+        unique_name = generate_unique_template_name(
+            base_name=payload["name"],
+            template_kind="generation",
+            owner=request.user,
+            is_global=payload["is_global"],
+        )
+
         try:
             template = GenerationTemplate.objects.create(
                 owner=request.user,
-                name=payload["name"],
+                name=unique_name,
                 description=payload.get("description", ""),
                 root_model=payload["root_model"],
                 export_name=payload.get("export_name"),
@@ -2086,7 +2094,7 @@ class GenerationTemplateViewSet(
             raise s.ValidationError(
                 build_template_uniqueness_errors(
                     template_kind="generation",
-                    name=payload["name"],
+                    name=unique_name,
                     owner=request.user,
                     is_global=payload["is_global"],
                     locale=getattr(request, "schema_viz_locale", None),

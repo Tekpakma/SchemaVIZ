@@ -1,20 +1,45 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { Check, Eye, EyeOff, Loader2, RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { BareLoader } from '@/components/GlobalLoader'
 import { Button } from '@/components/ui/button'
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { cn } from '@/lib/utils'
+import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
 import { BuilderPreview } from '../BuilderPreview'
+import type {
+  BuilderPreviewCommit,
+  BuilderPreviewResize,
+} from '../BuilderPreview'
+import type { BuilderDocumentActions } from '../builderWorkbench'
 import { GENERATION_PREVIEW_QUERIES } from '../generationPreviewQuery'
 import { recipeToInlineDefinition } from '../templateRecipe'
-import type { RecipeData, RecipeStepKind } from '../types'
+import type {
+  ExampleRecord,
+  RecipeData,
+  RecipeModel,
+  RecipeStepKind,
+} from '../types'
 import { getPreviewErrorMessage } from '#/errors'
 
 type BuilderPreviewPaneProps = {
+  actions: Pick<BuilderDocumentActions, 'addExample' | 'setActiveExample'>
   activeExampleId: string | null
   activeStepKind: RecipeStepKind
+  examples: ExampleRecord[]
+  models: RecipeModel[]
+  onCommitNodeText?: (commit: BuilderPreviewCommit) => void
+  onNodeResize?: (resize: BuilderPreviewResize) => void
+  onNodeSelect?: (nodeId: string | null) => void
   recipe: RecipeData
 }
 
@@ -42,14 +67,40 @@ function getRecordPkFromExample(
   return colonIndex >= 0 ? example.idValue.slice(colonIndex + 1) : null
 }
 
+/**
+ * Returns the canvas interaction mode for the given builder step.
+ * The style step uses "edit" mode so users can double-click nodes
+ * to open the inline Lexical editor.
+ */
+function getInteractionMode(
+  stepKind: RecipeStepKind,
+): 'edit' | 'viewport' | 'static' {
+  return stepKind === 'style' ? 'edit' : 'viewport'
+}
+
+function getStartModel(models: RecipeModel[]): RecipeModel | undefined {
+  return models[0]
+}
+
+function getRecordId(fields: Record<string, unknown>): string {
+  const pk = fields.pk ?? fields.id ?? ''
+  return String(pk)
+}
 
 export function BuilderPreviewPane({
+  actions,
   activeExampleId,
   activeStepKind,
+  examples,
+  models,
+  onCommitNodeText,
+  onNodeResize,
+  onNodeSelect,
   recipe,
 }: BuilderPreviewPaneProps) {
   const { t } = useTranslation()
   const showEdges = shouldShowEdges(activeStepKind)
+  const interactionMode = getInteractionMode(activeStepKind)
   const layerCount = t('builder.preview.layerCount', {
     count: recipe.layers.length,
   })
@@ -57,7 +108,68 @@ export function BuilderPreviewPane({
     count: recipe.edges.length,
   })
 
+  // ---------------------------------------------------------------------------
+  // Preview toggle + record picker (moved from BuilderHeader)
+  // ---------------------------------------------------------------------------
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const startModel = getStartModel(models)
+  const isPreviewActive = activeExampleId != null
+  const activeExample = activeExampleId
+    ? examples.find((ex) => ex.id === activeExampleId)
+    : null
+
+  const existingIds = useMemo(
+    () => new Set(examples.map((ex) => ex.idValue)),
+    [examples],
+  )
+
+  const recordsQuery = useQuery({
+    ...SCHEMA_QUERIES.records({
+      appLabel: startModel?.appLabel ?? '',
+      modelName: startModel?.modelName ?? '',
+      page: 1,
+      pageSize: 50,
+    }),
+    enabled: pickerOpen && !!startModel,
+  })
+
+  const records = recordsQuery.data?.results ?? []
+
+  const handlePreviewToggle = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      const activeElement = document.activeElement
+      if (activeElement instanceof HTMLElement) {
+        activeElement.blur()
+      }
+    }
+
+    if (isPreviewActive) {
+      actions.setActiveExample(null)
+    } else if (startModel) {
+      setPickerOpen(true)
+    }
+  }, [actions, isPreviewActive, startModel])
+
+  const handlePickExistingExample = useCallback(
+    (exampleId: string) => {
+      actions.setActiveExample(exampleId)
+      setPickerOpen(false)
+    },
+    [actions],
+  )
+
+  const handlePickNewRecord = useCallback(
+    (record: ExampleRecord) => {
+      actions.addExample(record)
+      actions.setActiveExample(record.id)
+      setPickerOpen(false)
+    },
+    [actions],
+  )
+
+  // ---------------------------------------------------------------------------
   // Live preview: resolve the active example against the generation engine
+  // ---------------------------------------------------------------------------
   const hasActiveExample = activeExampleId != null
   const inlineSource = useMemo(
     () => (hasActiveExample ? recipeToInlineDefinition(recipe) : null),
@@ -72,15 +184,12 @@ export function BuilderPreviewPane({
   )
   const generationQuery = useQuery(queryOptions)
 
-  const isResolving = hasActiveExample
-  const activeExample = activeExampleId
-    ? recipe.examples.find((ex) => ex.id === activeExampleId)
-    : null
+  const isResolving =
+    hasActiveExample && Boolean(inlineSource) && Boolean(recordPk)
   const previewErrorMessage = getPreviewErrorMessage(generationQuery.error)
   const isPreviewLoading =
     isResolving && generationQuery.fetchStatus === 'fetching'
 
-  // TODO: Wire to backend generation-runs invalidation endpoint
   const handleRecheck = () => {
     void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })
   }
@@ -95,13 +204,13 @@ export function BuilderPreviewPane({
           <span className="text-[12px] text-muted-foreground">
             {isResolving && activeExample
               ? t('builder.preview.resolvedFor', {
-                record: activeExample.label,
-              })
+                  record: activeExample.label,
+                })
               : showEdges
                 ? t('builder.preview.layerAndEdgeCount', {
-                  edges: edgeCount,
-                  layers: layerCount,
-                })
+                    edges: edgeCount,
+                    layers: layerCount,
+                  })
                 : layerCount}
           </span>
           {isResolving && (
@@ -112,20 +221,34 @@ export function BuilderPreviewPane({
               variant="ghost"
             >
               <RefreshCw
-                className={cn(
-                  'size-3',
-                  isPreviewLoading && 'animate-spin',
-                )}
+                className={cn('size-3', isPreviewLoading && 'animate-spin')}
               />
               {t('builder.preview.recheck')}
             </Button>
           )}
+          {isPreviewActive && activeExample && (
+            <span className="rounded-full bg-brand/15 px-2.5 py-0.5 text-[11px] font-medium text-brand">
+              {activeExample.label}
+            </span>
+          )}
+          <Button
+            variant={isPreviewActive ? 'default' : 'ghost'}
+            size="xs"
+            className="gap-1.5 text-[12px]"
+            disabled={!startModel}
+            onClick={handlePreviewToggle}
+          >
+            {isPreviewActive ? (
+              <EyeOff className="size-3" />
+            ) : (
+              <Eye className="size-3" />
+            )}
+            {t('builder.header.preview')}
+          </Button>
         </div>
       </div>
 
-      {isPreviewLoading && (
-        <BareLoader nodes={3} speed={280} />
-      )}
+      {isPreviewLoading && <BareLoader nodes={3} speed={280} />}
 
       {isResolving && generationQuery.isError && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
@@ -148,6 +271,7 @@ export function BuilderPreviewPane({
           </Button>
           <BuilderPreview
             className="min-h-0 flex-1"
+            interactionMode="viewport"
             recipe={recipe}
             showEdges={showEdges}
           />
@@ -157,7 +281,8 @@ export function BuilderPreviewPane({
       {isResolving && generationQuery.data && (
         <BuilderPreview
           className="min-h-0 flex-1"
-          generationResult={generationQuery.data.result}
+          generationResponse={generationQuery.data}
+          interactionMode="viewport"
           recipe={recipe}
           showEdges
         />
@@ -166,9 +291,104 @@ export function BuilderPreviewPane({
       {!isResolving && (
         <BuilderPreview
           className="min-h-0 flex-1"
+          interactionMode={interactionMode}
+          onCommitNodeText={onCommitNodeText}
+          onNodeResize={onNodeResize}
+          onNodeSelect={onNodeSelect}
           recipe={recipe}
           showEdges={showEdges}
         />
+      )}
+
+      {startModel && (
+        <CommandDialog
+          title={t('builder.header.previewPickerTitle')}
+          description={t('builder.header.previewPickerDescription', {
+            model: startModel.displayName,
+          })}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          showCloseButton={false}
+        >
+          <CommandInput placeholder={t('builder.header.previewPickerSearch')} />
+          <CommandList>
+            {examples.length > 0 && (
+              <CommandGroup heading={t('builder.header.pinnedRecords')}>
+                {examples.map((ex) => (
+                  <CommandItem
+                    key={ex.id}
+                    value={`${ex.label} ${ex.idValue}`}
+                    onSelect={() => handlePickExistingExample(ex.id)}
+                  >
+                    {activeExampleId === ex.id ? (
+                      <Eye className="size-4 text-brand" />
+                    ) : (
+                      <Check className="size-4 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{ex.label}</span>
+                    <span className="font-mono text-[10.5px] text-muted-foreground">
+                      {ex.idValue}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {recordsQuery.isLoading && (
+              <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                {t('builder.header.loadingRecords')}
+              </div>
+            )}
+            <CommandEmpty>{t('builder.header.noRecordsFound')}</CommandEmpty>
+            {records.length > 0 && (
+              <CommandGroup heading={startModel.displayName}>
+                {records.map((record) => {
+                  const recordId = getRecordId(record.fields)
+                  const idValue = `${startModel.appLabel}:${recordId}`
+                  const isAdded = existingIds.has(idValue)
+
+                  return (
+                    <CommandItem
+                      key={idValue}
+                      value={`${record.displayName} ${idValue}`}
+                      onSelect={() => {
+                        if (isAdded) {
+                          const existing = examples.find(
+                            (ex) => ex.idValue === idValue,
+                          )
+                          if (existing) {
+                            handlePickExistingExample(existing.id)
+                          }
+                        } else {
+                          handlePickNewRecord({
+                            id: `ex-${startModel.modelName}-${recordId}`,
+                            label: record.displayName,
+                            kind: startModel.displayName,
+                            idValue,
+                            isDefault: examples.length === 0,
+                          })
+                        }
+                      }}
+                    >
+                      {isAdded ? (
+                        <Check className="size-4 text-brand" />
+                      ) : (
+                        <Search className="size-4" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">
+                        {record.displayName}
+                      </span>
+                      <span className="font-mono text-[10.5px] text-muted-foreground">
+                        {idValue}
+                      </span>
+                    </CommandItem>
+                  )
+                })}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </CommandDialog>
       )}
     </section>
   )

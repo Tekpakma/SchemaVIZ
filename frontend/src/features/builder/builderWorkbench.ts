@@ -12,6 +12,7 @@ import {
   useWorkbenchActions,
 } from '@/store/workbenchStore'
 import type { WorkbenchTabId } from '@/store/workbenchStore'
+import type { CanvasGroupLayoutPolicy } from '@/features/canvas/model/types'
 import type {
   ExampleRecord,
   LayoutAlgorithm,
@@ -19,7 +20,10 @@ import type {
   RecipeFilter,
   RecipeGroupRule,
   RecipeLayer,
+  RecipeLayoutDirection,
   RecipeModel,
+  RecipeStyleDraft,
+  RecipeStyleDraftSaveState,
   TraversalEdge,
 } from './types'
 import { createBlankRecipe, createRecipeFromTemplate } from './templateRecipe'
@@ -39,6 +43,22 @@ export type BuilderDocumentActions = {
   removeModel: (id: string) => void
   reorderModels: (models: RecipeModel[]) => void
   setModelLayer: (modelId: string, layerId: string) => void
+  setModelStyleTemplate: (
+    modelId: string,
+    styleTemplateId: string | null,
+  ) => void
+  clearStyleDraft: (modelId: string) => void
+  markStyleDraftSaved: (
+    modelId: string,
+    draft: RecipeStyleDraft,
+    styleTemplateId: string,
+  ) => void
+  setStyleDraft: (modelId: string, draft: RecipeStyleDraft) => void
+  setStyleDraftSaveState: (
+    modelId: string,
+    saveState: RecipeStyleDraftSaveState,
+    error?: string,
+  ) => void
   addExample: (example: ExampleRecord) => void
   removeExample: (id: string) => void
   setDefaultExample: (id: string) => void
@@ -50,8 +70,9 @@ export type BuilderDocumentActions = {
   removeFilter: (id: string) => void
   addGroupRule: (rule: RecipeGroupRule) => void
   removeGroupRule: (id: string) => void
-  setSwatch: (index: number, color: string) => void
+  setGroupLayout: (groupLayout: CanvasGroupLayoutPolicy) => void
   setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void
+  setLayoutDirection: (direction: RecipeLayoutDirection) => void
 }
 
 export type BuilderOpenIntent =
@@ -124,6 +145,22 @@ export function setBuilderDocumentTitle(tabId: WorkbenchTabId, title: string) {
   getWorkbenchActionsSnapshot().markDirty(tabId)
 }
 
+export function markBuilderTemplateSaved(
+  tabId: WorkbenchTabId,
+  template: GenerationTemplateRead,
+) {
+  const workbenchActions = getWorkbenchActionsSnapshot()
+  workbenchActions.retargetTab(
+    tabId,
+    {
+      type: 'template',
+      id: template.id,
+    },
+    getBuilderTabTitle(template.name),
+  )
+  workbenchActions.markDirty(tabId, false)
+}
+
 export function openBuilderTabFromIntent(intent: BuilderOpenIntent) {
   if (intent.type === 'template') {
     return openBuilderTemplateTab(intent.template)
@@ -148,6 +185,12 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
 
   return useMemo(() => {
     if (!tabId || !document) return null
+    const activeStepIndex = Math.min(
+      document.activeStepIndex,
+      Math.max(steps.length - 1, 0),
+    )
+    const activeStep = steps[activeStepIndex]
+    if (!activeStep) return null
 
     const markDirty = () => {
       workbenchActions.markDirty(tabId)
@@ -156,8 +199,8 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
     return {
       tabId,
       activeExampleId: document.activeExampleId,
-      activeStep: steps[document.activeStepIndex]!,
-      activeStepIndex: document.activeStepIndex,
+      activeStep,
+      activeStepIndex,
       recipe: document.recipe,
       steps,
       actions: {
@@ -200,6 +243,46 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
         setModelLayer: (modelId: string, layerId: string) => {
           builderActions.setModelLayer(tabId, modelId, layerId)
           markDirty()
+        },
+        setModelStyleTemplate: (
+          modelId: string,
+          styleTemplateId: string | null,
+        ) => {
+          builderActions.setModelStyleTemplate(tabId, modelId, styleTemplateId)
+          markDirty()
+        },
+        clearStyleDraft: (modelId: string) => {
+          builderActions.clearStyleDraft(tabId, modelId)
+          markDirty()
+        },
+        markStyleDraftSaved: (
+          modelId: string,
+          draft: RecipeStyleDraft,
+          styleTemplateId: string,
+        ) => {
+          builderActions.markStyleDraftSaved(
+            tabId,
+            modelId,
+            draft,
+            styleTemplateId,
+          )
+          markDirty()
+        },
+        setStyleDraft: (modelId: string, draft: RecipeStyleDraft) => {
+          builderActions.setStyleDraft(tabId, modelId, draft)
+          markDirty()
+        },
+        setStyleDraftSaveState: (
+          modelId: string,
+          saveState: RecipeStyleDraftSaveState,
+          error?: string,
+        ) => {
+          builderActions.setStyleDraftSaveState(
+            tabId,
+            modelId,
+            saveState,
+            error,
+          )
         },
         addExample: (example: ExampleRecord) => {
           builderActions.addExample(tabId, example)
@@ -244,12 +327,16 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
           builderActions.removeGroupRule(tabId, id)
           markDirty()
         },
-        setSwatch: (index: number, color: string) => {
-          builderActions.setSwatch(tabId, index, color)
+        setGroupLayout: (groupLayout: CanvasGroupLayoutPolicy) => {
+          builderActions.setGroupLayout(tabId, groupLayout)
           markDirty()
         },
         setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => {
           builderActions.setLayoutAlgorithm(tabId, algorithm)
+          markDirty()
+        },
+        setLayoutDirection: (direction: RecipeLayoutDirection) => {
+          builderActions.setLayoutDirection(tabId, direction)
           markDirty()
         },
       } satisfies BuilderDocumentActions,

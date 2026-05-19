@@ -11,6 +11,7 @@ type BuilderInspectorProps = {
   activeStep: RecipeStep
   activeStepIndex: number
   recipe: RecipeData
+  selectedCanvasNodeId?: string | null
   stepCount: number
 }
 
@@ -19,6 +20,7 @@ export function BuilderInspector({
   activeStep,
   activeStepIndex,
   recipe,
+  selectedCanvasNodeId,
   stepCount,
 }: BuilderInspectorProps) {
   const { t } = useTranslation()
@@ -45,6 +47,7 @@ export function BuilderInspector({
           actions={actions}
           kind={activeStep.kind}
           recipe={recipe}
+          selectedCanvasNodeId={selectedCanvasNodeId}
         />
       </div>
 

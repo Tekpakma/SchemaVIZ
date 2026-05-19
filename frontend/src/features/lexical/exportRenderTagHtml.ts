@@ -19,6 +19,8 @@ export const renderTagEditorStyle = {
   fontSize: 12,
   lineHeight: 1.2,
   color: 'var(--foreground, rgb(0, 0, 0))',
+  caretColor: 'var(--foreground, rgb(0, 0, 0))',
+  cursor: 'text',
   textAlign: 'center',
   overflow: 'visible',
   overflowWrap: 'break-word',
@@ -152,12 +154,9 @@ export function resolveDeepPathSpans(
 ): string {
   if (resolvedPaths.size === 0) return html
 
-  return html.replace(
-    UNRESOLVED_DEEP_PATH_PATTERN,
-    (match, path: string) => {
-      const display = resolvedPaths.get(path)
-      if (display == null) return match
-      return `<span data-lexical-data-reference="${path}">${display}</span>`
-    },
-  )
+  return html.replace(UNRESOLVED_DEEP_PATH_PATTERN, (match, path: string) => {
+    const display = resolvedPaths.get(path)
+    if (display == null) return match
+    return `<span data-lexical-data-reference="${path}">${display}</span>`
+  })
 }

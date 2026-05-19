@@ -128,7 +128,7 @@ export function FiltersStep({ actions, filters, models }: FiltersStepProps) {
   const operations = selectedField?.allowedOperations ?? []
   const operation = operations.includes(selectedOperation)
     ? selectedOperation
-    : operations[0] ?? ''
+    : (operations[0] ?? '')
   const canAdd = Boolean(selectedModel && selectedField && operation)
 
   function handleAddFilter() {
@@ -176,7 +176,7 @@ export function FiltersStep({ actions, filters, models }: FiltersStepProps) {
             ) : (
               <button
                 type="button"
-                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 aria-label={t('builder.filters.removeFilter')}
                 onClick={() => actions.removeFilter(filter.id)}
                 title={t('builder.filters.removeFilter')}

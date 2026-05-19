@@ -31,6 +31,36 @@ export type CanvasNodeLayoutMode = 'auto' | 'manual'
 
 export type CanvasRoutingAuthorityMode = 'auto' | 'manual'
 
+export type CanvasGroupLayoutMode = 'auto-pack' | 'freeform'
+
+export type CanvasGroupLayoutPolicy = {
+  mode?: CanvasGroupLayoutMode
+  aspectRatio?: number
+  gapX?: number
+  gapY?: number
+  maxColumns?: number
+  maxWidth?: number
+  padding?: {
+    top?: number
+    right?: number
+    bottom?: number
+    left?: number
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Style overrides — per-node visual customisation from style templates
+// ---------------------------------------------------------------------------
+
+export type CanvasNodeStyleOverrides = {
+  /** Backend shape key (e.g. "cylinder", "cloud", "server"). */
+  shapeKey?: string
+  /** Explicit border / stroke color (hex). */
+  borderColor?: string
+  /** Explicit background / fill color (hex). */
+  backgroundColor?: string
+}
+
 // ---------------------------------------------------------------------------
 // Node types — discriminated on `kind`
 // ---------------------------------------------------------------------------
@@ -53,6 +83,9 @@ type CanvasNodeBase = {
 
   contentHeight: number
   version: number
+
+  /** Per-node visual overrides from style template typeSpecificData. */
+  styleOverrides?: CanvasNodeStyleOverrides
 }
 
 /** User-editable rich-text node. Can take any visual shape. */
@@ -67,6 +100,7 @@ export type CanvasEditableNode = CanvasNodeBase & {
 export type CanvasGroupNode = CanvasNodeBase & {
   kind: 'group'
   shape: 'group'
+  groupLayout?: CanvasGroupLayoutPolicy
 }
 
 /** Read-only schema model display. */
@@ -114,7 +148,11 @@ export function isContainerNodeKind(kind: CanvasNodeKind): boolean {
 export function hasDataScope(
   node: CanvasNode,
 ): node is CanvasEditableNode | CanvasDatabaseNode | CanvasPlaceholderNode {
-  return node.kind === 'editable' || node.kind === 'database' || node.kind === 'placeholder'
+  return (
+    node.kind === 'editable' ||
+    node.kind === 'database' ||
+    node.kind === 'placeholder'
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +186,7 @@ export type CanvasEdge = {
   sourcePort?: CanvasPortRef
   targetPort?: CanvasPortRef
   label?: string
+  labelPoint?: CanvasPoint
   routePoints?: Array<CanvasPoint>
 }
 
@@ -165,6 +204,7 @@ export type CanvasNodeFrame = {
 
 export type CanvasEdgeRoute = {
   id: EdgeId
+  labelPoint?: CanvasPoint
   points: Array<CanvasPoint>
 }
 

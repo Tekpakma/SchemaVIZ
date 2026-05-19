@@ -8,6 +8,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
 
+import { Toaster } from 'sonner'
 import { GlobalLoader } from '@/components/GlobalLoader'
 import { CanvasDevtoolsPanel } from '@/features/canvas/components/CanvasDevtoolsPanel'
 import { I18nProvider } from '@/features/i18n/useI18n'
@@ -104,6 +105,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <ThemeProvider initialTheme={theme}>
             <I18nProvider initialLocale={locale}>{children}</I18nProvider>
           </ThemeProvider>
+          <Toaster
+            position="bottom-right"
+            theme={resolvedTheme}
+            richColors
+          />
           <TanStackDevtools
             config={{
               position: 'bottom-right',

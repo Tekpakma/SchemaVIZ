@@ -14,6 +14,10 @@ import type {
   CanvasPoint,
 } from '@/features/canvas/model/types'
 import { createFallbackEdgeRoute } from '../layoutAdapters'
+import {
+  getParentNodeIdByNodeId,
+  isRenderableCanvasEdge,
+} from '../compoundGraph'
 import { useTheme } from '@/features/theme/useTheme'
 import {
   CANVAS_EDGE_COLOR_FALLBACK,
@@ -43,17 +47,15 @@ function getEdgeRoute(
   return createFallbackEdgeRoute(edge, nodes, flowDirection, layoutOptions)
 }
 
-/**
- * Draws a label at the midpoint of the edge route with a background pill.
- */
-function drawEdgeLabel(
-  ctx: CanvasRenderingContext2D,
-  label: string,
-  points: Array<CanvasPoint>,
-  color: string,
-  pillFill: string,
-) {
-  // Find the midpoint along the polyline
+function getRouteMidpoint(points: Array<CanvasPoint>): CanvasPoint {
+  if (points.length === 0) {
+    return { x: 0, y: 0 }
+  }
+
+  if (points.length === 1) {
+    return points[0]!
+  }
+
   let totalLength = 0
   for (let i = 1; i < points.length; i++) {
     const dx = points[i]!.x - points[i - 1]!.x
@@ -63,8 +65,6 @@ function drawEdgeLabel(
 
   const halfLength = totalLength / 2
   let walked = 0
-  let labelX = points[0]!.x
-  let labelY = points[0]!.y
 
   for (let i = 1; i < points.length; i++) {
     const p0 = points[i - 1]!
@@ -75,13 +75,28 @@ function drawEdgeLabel(
 
     if (walked + segLen >= halfLength) {
       const t = segLen === 0 ? 0 : (halfLength - walked) / segLen
-      labelX = p0.x + dx * t
-      labelY = p0.y + dy * t
-      break
+      return {
+        x: p0.x + dx * t,
+        y: p0.y + dy * t,
+      }
     }
 
     walked += segLen
   }
+
+  return points.at(-1)!
+}
+
+/** Draws a label with a background pill at ELK's label point, or the route midpoint as fallback. */
+function drawEdgeLabel(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  points: Array<CanvasPoint>,
+  color: string,
+  pillFill: string,
+  labelPoint?: CanvasPoint,
+) {
+  const { x: labelX, y: labelY } = labelPoint ?? getRouteMidpoint(points)
 
   const metrics = ctx.measureText(label)
   const pillW = metrics.width + EDGE_LABEL_PADDING_X * 2
@@ -138,19 +153,20 @@ export const CanvasEdges = memo(function CanvasEdges() {
     [resolvedTheme],
   )
 
-  const edgeRoutes = useMemo(
-    () =>
-      edgeIds.flatMap((edgeId) => {
-        const edge = edges[edgeId]
-        if (!edge) return []
+  const edgeRoutes = useMemo(() => {
+    const parentNodeIdByNodeId = getParentNodeIdByNodeId(Object.values(nodes))
 
-        const points = getEdgeRoute(edge, nodes, flowDirection, layoutOptions)
-        if (!points) return []
+    return edgeIds.flatMap((edgeId) => {
+      const edge = edges[edgeId]
+      if (!edge) return []
+      if (!isRenderableCanvasEdge(edge, parentNodeIdByNodeId)) return []
 
-        return [{ points, label: edge.label }]
-      }),
-    [edgeIds, edges, flowDirection, layoutOptions, nodes],
-  )
+      const points = getEdgeRoute(edge, nodes, flowDirection, layoutOptions)
+      if (!points) return []
+
+      return [{ points, label: edge.label, labelPoint: edge.labelPoint }]
+    })
+  }, [edgeIds, edges, flowDirection, layoutOptions, nodes])
 
   if (edgeRoutes.length === 0) return null
 
@@ -208,7 +224,14 @@ export const CanvasEdges = memo(function CanvasEdges() {
 
         for (const edgeRoute of edgeRoutes) {
           if (!edgeRoute.label || edgeRoute.points.length < 2) continue
-          drawEdgeLabel(ctx, edgeRoute.label, edgeRoute.points, labelTextColor, labelPillFill)
+          drawEdgeLabel(
+            ctx,
+            edgeRoute.label,
+            edgeRoute.points,
+            labelTextColor,
+            labelPillFill,
+            edgeRoute.labelPoint,
+          )
         }
 
         ctx.restore()

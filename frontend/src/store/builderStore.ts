@@ -8,10 +8,15 @@ import type {
   RecipeFilter,
   RecipeGroupRule,
   RecipeLayer,
+  RecipeLayoutDirection,
   RecipeModel,
   RecipeStep,
+  RecipeStyleDraft,
+  RecipeStyleDraftSaveState,
   TraversalEdge,
 } from '@/features/builder/types'
+import { DEFAULT_RECIPE_GROUP_LAYOUT } from '@/features/builder/types'
+import type { CanvasGroupLayoutPolicy } from '@/features/canvas/model/types'
 import {
   DEFAULT_SWATCHES,
   createDefaultLayer,
@@ -57,12 +62,6 @@ const RECIPE_STEPS: RecipeStep[] = [
     title: 'builder.steps.layout.title',
     detail: 'builder.steps.layout.detail',
   },
-  {
-    id: 's7',
-    kind: 'promote',
-    title: 'builder.steps.promote.title',
-    detail: 'builder.steps.promote.detail',
-  },
 ]
 
 export type BuilderDocumentState = {
@@ -97,6 +96,29 @@ type BuilderActions = {
     modelId: string,
     layerId: string,
   ) => void
+  setModelStyleTemplate: (
+    tabId: WorkbenchTabId,
+    modelId: string,
+    styleTemplateId: string | null,
+  ) => void
+  clearStyleDraft: (tabId: WorkbenchTabId, modelId: string) => void
+  markStyleDraftSaved: (
+    tabId: WorkbenchTabId,
+    modelId: string,
+    draft: RecipeStyleDraft,
+    styleTemplateId: string,
+  ) => void
+  setStyleDraft: (
+    tabId: WorkbenchTabId,
+    modelId: string,
+    draft: RecipeStyleDraft,
+  ) => void
+  setStyleDraftSaveState: (
+    tabId: WorkbenchTabId,
+    modelId: string,
+    saveState: RecipeStyleDraftSaveState,
+    error?: string,
+  ) => void
 
   addExample: (tabId: WorkbenchTabId, example: ExampleRecord) => void
   removeExample: (tabId: WorkbenchTabId, id: string) => void
@@ -113,10 +135,17 @@ type BuilderActions = {
   addGroupRule: (tabId: WorkbenchTabId, rule: RecipeGroupRule) => void
   removeGroupRule: (tabId: WorkbenchTabId, id: string) => void
 
-  setSwatch: (tabId: WorkbenchTabId, index: number, color: string) => void
+  setGroupLayout: (
+    tabId: WorkbenchTabId,
+    groupLayout: CanvasGroupLayoutPolicy,
+  ) => void
   setLayoutAlgorithm: (
     tabId: WorkbenchTabId,
     algorithm: LayoutAlgorithm,
+  ) => void
+  setLayoutDirection: (
+    tabId: WorkbenchTabId,
+    direction: RecipeLayoutDirection,
   ) => void
 }
 
@@ -129,8 +158,12 @@ function createInitialRecipe(): RecipeData {
     edges: [],
     filters: [],
     groupRules: [],
+    groupLayout: { ...DEFAULT_RECIPE_GROUP_LAYOUT },
+    styleDrafts: {},
     swatches: [...DEFAULT_SWATCHES],
     layoutAlgorithm: 'Layered',
+    layoutDirection: 'LR',
+    shareSlug: '',
     promoteOrg: '',
     promoteVisibility: 'org-wide',
     promoteAudience: '',
@@ -138,6 +171,10 @@ function createInitialRecipe(): RecipeData {
 }
 
 function cloneRecipe(recipe: RecipeData): RecipeData {
+  const groupLayout =
+    (recipe as Partial<RecipeData>).groupLayout ?? DEFAULT_RECIPE_GROUP_LAYOUT
+  const layoutDirection =
+    (recipe as Partial<RecipeData>).layoutDirection ?? 'LR'
   const clonedRecipe: RecipeData = {
     ...recipe,
     layers: ensureRecipeHasLayer(recipe.layers),
@@ -145,14 +182,51 @@ function cloneRecipe(recipe: RecipeData): RecipeData {
     examples: recipe.examples.map((example) => ({ ...example })),
     edges: recipe.edges.map((edge) => ({ ...edge })),
     filters: recipe.filters.map((filter) => ({ ...filter })),
-    groupRules: recipe.groupRules.map((rule) => ({ ...rule })),
+    groupRules: recipe.groupRules.map((rule) => ({
+      ...rule,
+      layout: cloneJsonValue(rule.layout),
+    })),
+    groupLayout: cloneJsonValue(groupLayout),
+    styleDrafts: cloneStyleDrafts(recipe.styleDrafts),
     swatches: [...recipe.swatches],
+    layoutDirection,
   }
   clonedRecipe.models = normalizeModelsForLayerRules(
     clonedRecipe,
     recipe.models,
   )
   return clonedRecipe
+}
+
+function cloneJsonValue<T>(value: T): T {
+  if (value == null) return value
+
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
+  }
+}
+
+function cloneStyleDraft(draft: RecipeStyleDraft): RecipeStyleDraft {
+  return {
+    ...draft,
+    textContent: cloneJsonValue(draft.textContent),
+    visualStyles: cloneJsonValue(draft.visualStyles),
+    dimensions: cloneJsonValue(draft.dimensions),
+    typeSpecificData: cloneJsonValue(draft.typeSpecificData),
+  }
+}
+
+function cloneStyleDrafts(
+  styleDrafts: Record<string, RecipeStyleDraft>,
+): Record<string, RecipeStyleDraft> {
+  return Object.fromEntries(
+    Object.entries(styleDrafts).map(([modelId, draft]) => [
+      modelId,
+      cloneStyleDraft(draft),
+    ]),
+  )
 }
 
 function createBuilderDocumentState(
@@ -461,6 +535,76 @@ const useBuilderStore = create<BuilderState>()(
             'builder/setModelLayer',
           ),
 
+        setModelStyleTemplate: (tabId, modelId, styleTemplateId) =>
+          set(
+            (state) => {
+              const model = ensureBuilderDocument(
+                state,
+                tabId,
+              ).recipe.models.find((candidate) => candidate.id === modelId)
+              if (model) {
+                model.styleTemplateId = styleTemplateId
+              }
+            },
+            false,
+            'builder/setModelStyleTemplate',
+          ),
+
+        clearStyleDraft: (tabId, modelId) =>
+          set(
+            (state) => {
+              delete ensureBuilderDocument(state, tabId).recipe.styleDrafts[
+                modelId
+              ]
+            },
+            false,
+            'builder/clearStyleDraft',
+          ),
+
+        markStyleDraftSaved: (tabId, modelId, draft, styleTemplateId) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              const model = document.recipe.models.find(
+                (candidate) => candidate.id === modelId,
+              )
+              if (model) model.styleTemplateId = styleTemplateId
+              document.recipe.styleDrafts[modelId] = {
+                ...cloneStyleDraft(draft),
+                persistedTemplateId: styleTemplateId,
+                sourceTemplateId: draft.sourceTemplateId,
+                dirty: false,
+                saveState: 'saved',
+                error: undefined,
+              }
+            },
+            false,
+            'builder/markStyleDraftSaved',
+          ),
+
+        setStyleDraft: (tabId, modelId, draft) =>
+          set(
+            (state) => {
+              ensureBuilderDocument(state, tabId).recipe.styleDrafts[modelId] =
+                cloneStyleDraft(draft)
+            },
+            false,
+            'builder/setStyleDraft',
+          ),
+
+        setStyleDraftSaveState: (tabId, modelId, saveState, error) =>
+          set(
+            (state) => {
+              const draft = ensureBuilderDocument(state, tabId).recipe
+                .styleDrafts[modelId]
+              if (!draft) return
+              draft.saveState = saveState
+              draft.error = error
+            },
+            false,
+            'builder/setStyleDraftSaveState',
+          ),
+
         addExample: (tabId, example) =>
           set(
             (state) => {
@@ -567,6 +711,7 @@ const useBuilderStore = create<BuilderState>()(
             (state) => {
               ensureBuilderDocument(state, tabId).recipe.groupRules.push({
                 ...rule,
+                layout: cloneJsonValue(rule.layout),
               })
             },
             false,
@@ -585,17 +730,23 @@ const useBuilderStore = create<BuilderState>()(
             'builder/removeGroupRule',
           ),
 
-        setSwatch: (tabId, index, color) =>
+        setGroupLayout: (tabId, groupLayout) =>
           set(
             (state) => {
-              const swatches = ensureBuilderDocument(state, tabId).recipe
-                .swatches
-              if (index >= 0 && index < swatches.length) {
-                swatches[index] = color
-              }
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.groupLayout = cloneJsonValue(groupLayout)
+              document.recipe.groupRules = document.recipe.groupRules.map(
+                (rule) =>
+                  rule.mode === 'group'
+                    ? {
+                        ...rule,
+                        layout: cloneJsonValue(groupLayout),
+                      }
+                    : rule,
+              )
             },
             false,
-            'builder/setSwatch',
+            'builder/setGroupLayout',
           ),
 
         setLayoutAlgorithm: (tabId, algorithm) =>
@@ -606,6 +757,16 @@ const useBuilderStore = create<BuilderState>()(
             },
             false,
             'builder/setLayoutAlgorithm',
+          ),
+
+        setLayoutDirection: (tabId, direction) =>
+          set(
+            (state) => {
+              ensureBuilderDocument(state, tabId).recipe.layoutDirection =
+                direction
+            },
+            false,
+            'builder/setLayoutDirection',
           ),
       },
     })),

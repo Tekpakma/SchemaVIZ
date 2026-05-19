@@ -54,7 +54,7 @@ const edges: Array<CanvasEdge> = [
 
 describe('canvasStore graph layout actions', () => {
   let store: ReturnType<typeof createCanvasStore>
-  
+
   const getCanvasLayoutSnapshot = (tabId?: string) => {
     const state = store.getState()
     const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)
@@ -271,11 +271,129 @@ describe('canvasStore graph layout actions', () => {
     expect(snapshot.edgesById['a-b']?.sourcePort).toBeUndefined()
     expect(snapshot.edgesById['a-b']?.targetPort).toBeUndefined()
   })
+
+  it('preserves existing node geometry when reconciling by default', () => {
+    store.getState().actions.applyGraphLayout({
+      nodeFrames: [
+        {
+          id: 'a',
+          x: 40,
+          y: 50,
+          width: 120,
+          height: 90,
+        },
+      ],
+      edgeRoutes: [],
+    })
+
+    store.getState().actions.reconcileGraph({
+      nodes: [
+        {
+          ...nodes[0]!,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 80,
+        },
+      ],
+      edges: [],
+    })
+
+    expect(getCanvasLayoutSnapshot().nodesById.a).toMatchObject({
+      x: 40,
+      y: 50,
+      width: 120,
+      height: 90,
+    })
+  })
+
+  it('preserves existing edge routes when preserving node geometry', () => {
+    store.getState().actions.applyGraphLayout({
+      nodeFrames: [
+        {
+          id: 'a',
+          x: 40,
+          y: 50,
+          width: 120,
+          height: 90,
+        },
+      ],
+      edgeRoutes: [
+        {
+          id: 'a-b',
+          labelPoint: { x: 180, y: 60 },
+          points: [
+            { x: 160, y: 95 },
+            { x: 220, y: 95 },
+          ],
+        },
+      ],
+    })
+
+    store.getState().actions.reconcileGraph({
+      nodes,
+      edges: [
+        {
+          ...edges[0]!,
+          routePoints: [
+            { x: 100, y: 40 },
+            { x: 200, y: 40 },
+          ],
+        },
+      ],
+    })
+
+    expect(getCanvasLayoutSnapshot().edgesById['a-b']).toMatchObject({
+      labelPoint: { x: 180, y: 60 },
+      routePoints: [
+        { x: 160, y: 95 },
+        { x: 220, y: 95 },
+      ],
+    })
+  })
+
+  it('can reset node geometry when reconciling recipe-owned layouts', () => {
+    store.getState().actions.applyGraphLayout({
+      nodeFrames: [
+        {
+          id: 'a',
+          x: 40,
+          y: 50,
+          width: 120,
+          height: 90,
+        },
+      ],
+      edgeRoutes: [],
+    })
+
+    store.getState().actions.reconcileGraph(
+      {
+        nodes: [
+          {
+            ...nodes[0]!,
+            x: 300,
+            y: 12,
+            width: 100,
+            height: 80,
+          },
+        ],
+        edges: [],
+      },
+      { preserveGeometry: false },
+    )
+
+    expect(getCanvasLayoutSnapshot().nodesById.a).toMatchObject({
+      x: 300,
+      y: 12,
+      width: 100,
+      height: 80,
+    })
+  })
 })
 
 describe('canvasStore document tabs', () => {
   let store: ReturnType<typeof createCanvasStore>
-  
+
   const getCanvasLayoutSnapshot = (tabId?: string) => {
     const state = store.getState()
     const document = getTargetDocument(state, tabId) ?? getActiveDocument(state)

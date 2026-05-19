@@ -78,7 +78,6 @@ describe('builderStore workbench documents', () => {
       displayName: 'First',
       layerId: 'layer-1',
     })
-    builderActions.setSwatch(firstTabId, 0, '#111111')
     builderActions.setActiveStep(firstTabId, 2)
 
     const secondTabId = workbenchActions.openTab({
@@ -120,7 +119,6 @@ describe('builderStore workbench documents', () => {
           layerId: 'layer-1',
         },
       ],
-      swatches: ['#111111', '#1D8B68', '#6A2B4D', '#18181B'],
     })
     expect(firstRecipe?.layers).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'layer-1' })]),
@@ -160,6 +158,60 @@ describe('builderStore workbench documents', () => {
         dirty: false,
       },
     ])
+  })
+
+  it('keeps Step 6 group layout as the source for grouped rules', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Draft',
+      resource: {
+        type: 'draft',
+        localId: 'group-layout-draft',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+
+    builderActions.ensureDocument(tabId)
+    builderActions.addGroupRule(tabId, {
+      id: 'group-region',
+      parentModelId: 'provider',
+      childModelId: 'region',
+      via: 'regions',
+      mode: 'group',
+      layout: { mode: 'auto-pack' },
+    })
+    builderActions.setGroupLayout(tabId, { mode: 'freeform' })
+
+    expect(getBuilderRecipeSnapshot(tabId)).toMatchObject({
+      groupLayout: { mode: 'freeform' },
+      groupRules: [
+        {
+          id: 'group-region',
+          layout: { mode: 'freeform' },
+        },
+      ],
+    })
+  })
+
+  it('stores Step 6 layout direction independently from algorithm', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Draft',
+      resource: {
+        type: 'draft',
+        localId: 'layout-direction-draft',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+
+    builderActions.ensureDocument(tabId)
+    builderActions.setLayoutAlgorithm(tabId, 'Tree')
+    builderActions.setLayoutDirection(tabId, 'TB')
+
+    expect(getBuilderRecipeSnapshot(tabId)).toMatchObject({
+      layoutAlgorithm: 'Tree',
+      layoutDirection: 'TB',
+    })
   })
 
   it('reorders layers inside one builder document', () => {
@@ -354,6 +406,92 @@ describe('builderStore workbench documents', () => {
     ])
   })
 
+  it('updates a model style template without changing its layer', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Styled model',
+      resource: {
+        type: 'draft',
+        localId: 'styled-model',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+    builderActions.ensureDocument(tabId)
+    const startLayerId = getBuilderRecipeSnapshot(tabId)!.layers[0]!.id
+
+    builderActions.addModel(tabId, {
+      id: 'model-service',
+      appLabel: 'catalog',
+      appVerboseName: 'Catalog',
+      modelName: 'service',
+      modelId: 'catalog.service',
+      displayName: 'Service',
+      layerId: startLayerId,
+    })
+    builderActions.setModelStyleTemplate(
+      tabId,
+      'model-service',
+      'style-service',
+    )
+
+    expect(getBuilderRecipeSnapshot(tabId)?.models).toMatchObject([
+      {
+        id: 'model-service',
+        layerId: startLayerId,
+        styleTemplateId: 'style-service',
+      },
+    ])
+  })
+
+  it('keeps style drafts keyed by recipe model id and marks saved templates', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Style drafts',
+      resource: {
+        type: 'draft',
+        localId: 'style-drafts',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+    builderActions.ensureDocument(tabId)
+
+    builderActions.setStyleDraft(tabId, 'model-service', {
+      sourceTemplateId: null,
+      persistedTemplateId: null,
+      name: 'Service node',
+      textContent: { root: { children: [] } },
+      visualStyles: {},
+      dimensions: {},
+      typeSpecificData: {},
+      dirty: true,
+      saveState: 'idle',
+    })
+    builderActions.markStyleDraftSaved(
+      tabId,
+      'model-service',
+      {
+        sourceTemplateId: null,
+        persistedTemplateId: null,
+        name: 'Service node',
+        textContent: { root: { children: [] } },
+        visualStyles: {},
+        dimensions: {},
+        typeSpecificData: {},
+        dirty: true,
+        saveState: 'saving',
+      },
+      'style-service',
+    )
+
+    expect(getBuilderRecipeSnapshot(tabId)?.styleDrafts).toMatchObject({
+      'model-service': {
+        persistedTemplateId: 'style-service',
+        dirty: false,
+        saveState: 'saved',
+      },
+    })
+  })
+
   it('moves overflow seeded start models into a secondary layer', () => {
     const tabId = getWorkbenchActionsSnapshot().openTab({
       kind: 'generation-builder',
@@ -396,8 +534,12 @@ describe('builderStore workbench documents', () => {
       edges: [],
       filters: [],
       groupRules: [],
+      groupLayout: { mode: 'auto-pack' },
+      styleDrafts: {},
       swatches: ['#000000'],
       layoutAlgorithm: 'Tree',
+      layoutDirection: 'LR',
+      shareSlug: '',
       promoteOrg: '',
       promoteVisibility: 'private',
       promoteAudience: '',
@@ -435,8 +577,12 @@ describe('builderStore workbench documents', () => {
       edges: [],
       filters: [],
       groupRules: [],
+      groupLayout: { mode: 'auto-pack' },
+      styleDrafts: {},
       swatches: ['#000000'],
       layoutAlgorithm: 'Tree',
+      layoutDirection: 'LR',
+      shareSlug: '',
       promoteOrg: '',
       promoteVisibility: 'private',
       promoteAudience: '',
@@ -528,8 +674,12 @@ describe('builderStore workbench documents', () => {
       edges: [],
       filters: [],
       groupRules: [],
+      groupLayout: { mode: 'auto-pack' },
+      styleDrafts: {},
       swatches: ['#000000'],
       layoutAlgorithm: 'Tree',
+      layoutDirection: 'LR',
+      shareSlug: '',
       promoteOrg: '',
       promoteVisibility: 'private',
       promoteAudience: '',
@@ -542,8 +692,12 @@ describe('builderStore workbench documents', () => {
       edges: [],
       filters: [],
       groupRules: [],
+      groupLayout: { mode: 'auto-pack' },
+      styleDrafts: {},
       swatches: ['#ffffff'],
       layoutAlgorithm: 'Force',
+      layoutDirection: 'LR',
+      shareSlug: '',
       promoteOrg: '',
       promoteVisibility: 'org-wide',
       promoteAudience: '',

@@ -1,40 +1,67 @@
 import * as R from 'remeda'
 
-import type { CanvasEdge, CanvasNode } from '@/features/canvas/model/types'
 import {
-  builderPreviewGroupLabelHtml,
-  builderPreviewNodeHtml,
+  getParentNodeIdByNodeId,
+  isRenderableCanvasEdge,
+} from '@/features/canvas/compoundGraph'
+import type {
+  CanvasEdge,
+  CanvasGroupLayoutPolicy,
+  CanvasNode,
+  CanvasNodeStyleOverrides,
+} from '@/features/canvas/model/types'
+import { CANVAS_NODE_SHAPES } from '@/features/canvas/nodeShapes'
+import {
+  builderEditableNodeHtml,
+  builderEditableTemplateNodeHtml,
 } from './builderPreviewHtml'
-import type { RecipeData, RecipeGroupRule, RecipeLayer } from './types'
+import {
+  createTemplateTextContent,
+  renderTemplateTextContent,
+  stringifyTemplateTextContent,
+} from '@/features/lexical/templateTextContent'
+import type {
+  RecipeData,
+  RecipeGroupRule,
+  RecipeLayer,
+  RecipeStyleDraft,
+} from './types'
 
 export const BUILDER_PREVIEW_STAGE_WIDTH = 960
 export const BUILDER_PREVIEW_STAGE_HEIGHT = 520
-export const BUILDER_PREVIEW_NODE_WIDTH = 156
-export const BUILDER_PREVIEW_NODE_HEIGHT = 72
-export const BUILDER_PREVIEW_NODE_RADIUS = 9
+/** Use central shape definition for consistent sizing */
+export const BUILDER_PREVIEW_NODE_WIDTH =
+  CANVAS_NODE_SHAPES.box.defaultSize.width
+export const BUILDER_PREVIEW_NODE_HEIGHT =
+  CANVAS_NODE_SHAPES.box.defaultSize.height
+export const BUILDER_PREVIEW_NODE_RADIUS = CANVAS_NODE_SHAPES.box.cornerRadius
 
-/**
- * Minimum initial size for group nodes. ELK overrides these with computed
- * dimensions after layout, but the canvas renders HTML content immediately —
- * `render-tag` requires `width > 0` to measure text, so we must seed a
- * non-zero value to prevent the "width must be a positive number" crash.
- */
-export const BUILDER_PREVIEW_GROUP_MIN_WIDTH = 200
-export const BUILDER_PREVIEW_GROUP_MIN_HEIGHT = 100
+export const BUILDER_PREVIEW_GROUP_MIN_WIDTH = 220
+export const BUILDER_PREVIEW_GROUP_MIN_HEIGHT = 116
 
 const FALLBACK_SWATCHES = ['#C4006A', '#1D8B68', '#6A2B4D', '#18181B']
-const LAYER_GROUP_PREFIX = 'builder-layer:'
-const LAYER_GROUP_LABEL_HEIGHT = 28
+const LAYER_COLUMN_MIN_GAP = 128
+const LAYER_COLUMN_MAX_GAP = 280
+const EDGE_LABEL_APPROX_CHAR_WIDTH = 6
+const EDGE_LABEL_GAP_PADDING = 56
+const STATIC_EDGE_LABEL_Y_OFFSET = 14
+const LAYER_NODE_Y_HINT_SPACING = BUILDER_PREVIEW_NODE_HEIGHT + 48
 
 export type BuilderPreviewNode = {
   accent: string
+  appLabel: string
   id: string
+  layerColumnIndex: number
   layerIndex: number
   layerId: string
   layerLabel: string
+  layerRowIndex: number
   index: number
   label: string
   modelId: string
+  modelName: string
+  styleDraft: RecipeStyleDraft | null
+  styleTemplateId: string | null
 }
 
 export type BuilderPreviewEdge = {
@@ -53,10 +80,18 @@ export type BuilderPreviewColumn = {
   nodeCount: number
 }
 
+export type BuilderPreviewCanvasLayer = {
+  accent: string
+  id: string
+  label: string
+  nodeIds: string[]
+}
+
 export type BuilderPreviewCanvasGraph = {
   columns: BuilderPreviewColumn[]
   edges: CanvasEdge[]
   key: string
+  layers: BuilderPreviewCanvasLayer[]
   nodes: CanvasNode[]
 }
 
@@ -103,16 +138,22 @@ export function getBuilderPreviewNodes(
   return R.pipe(
     columns,
     R.flatMap((col) =>
-      (modelsByLayerId[col.layerId] ?? []).map((model) => {
+      (modelsByLayerId[col.layerId] ?? []).map((model, layerRowIndex) => {
         const node: BuilderPreviewNode = {
           accent: col.accent,
+          appLabel: model.appLabel,
           id: model.id,
+          layerColumnIndex: col.index,
           layerIndex: globalIndex,
           layerId: col.layerId,
           layerLabel: col.label,
+          layerRowIndex,
           index: globalIndex,
           label: model.alias || model.displayName,
           modelId: model.modelId,
+          modelName: model.modelName,
+          styleDraft: recipe.styleDrafts[model.id] ?? null,
+          styleTemplateId: model.styleTemplateId ?? null,
         }
         globalIndex++
         return node
@@ -152,10 +193,30 @@ function getFilterCountByLayer(recipe: RecipeData) {
   )
 }
 
-function getNodeSubtitle(node: BuilderPreviewNode, filterCount: number) {
-  return filterCount > 0
-    ? `${filterCount} filter${filterCount === 1 ? '' : 's'}`
-    : node.modelId
+function readStyleOverrides(
+  draft: RecipeStyleDraft | null,
+): CanvasNodeStyleOverrides | undefined {
+  if (!draft?.typeSpecificData || typeof draft.typeSpecificData !== 'object')
+    return undefined
+  const data = draft.typeSpecificData as Record<string, unknown>
+  const overrides: CanvasNodeStyleOverrides = {}
+  if (typeof data.shapeKey === 'string') overrides.shapeKey = data.shapeKey
+  if (typeof data.borderColor === 'string')
+    overrides.borderColor = data.borderColor
+  if (typeof data.backgroundColor === 'string')
+    overrides.backgroundColor = data.backgroundColor
+  return Object.keys(overrides).length > 0 ? overrides : undefined
+}
+
+function getNodeTextContent(node: BuilderPreviewNode) {
+  return node.styleDraft?.textContent ?? createTemplateTextContent(node.label)
+}
+
+function getNodeHtml(node: BuilderPreviewNode) {
+  return builderEditableTemplateNodeHtml(
+    renderTemplateTextContent(getNodeTextContent(node)),
+    node.accent,
+  )
 }
 
 function encodePreviewKeyPart(value: number | string) {
@@ -166,14 +227,20 @@ function encodePreviewKeyPart(value: number | string) {
 function getBuilderPreviewGraphKey({
   columns,
   filterCountByLayer,
+  groupLayout,
   groupRules,
+  layoutAlgorithm,
+  layoutDirection,
   previewEdges,
   previewNodes,
   showEdges,
 }: {
   columns: BuilderPreviewColumn[]
   filterCountByLayer: Record<string, number>
+  groupLayout: CanvasGroupLayoutPolicy
   groupRules: RecipeGroupRule[]
+  layoutAlgorithm: RecipeData['layoutAlgorithm']
+  layoutDirection: RecipeData['layoutDirection']
   previewEdges: BuilderPreviewEdge[]
   previewNodes: BuilderPreviewNode[]
   showEdges: boolean
@@ -193,12 +260,19 @@ function getBuilderPreviewGraphKey({
       rule.childModelId,
       rule.via,
       rule.mode,
+      JSON.stringify(rule.layout ?? null),
     ]),
   )
 
   const parts: (number | string)[] = [
-    'builder-preview-v4',
+    'builder-preview-v5',
     `edges:${showEdges}`,
+    'layoutAlgorithm',
+    layoutAlgorithm,
+    'layoutDirection',
+    layoutDirection,
+    'groupLayout',
+    JSON.stringify(groupLayout),
     ...R.flatMap(columns, (col) => [
       'column',
       col.index,
@@ -206,16 +280,38 @@ function getBuilderPreviewGraphKey({
       col.accent,
       col.nodeCount,
     ]),
-    ...R.flatMap(previewNodes, (node) => [
-      'node',
-      node.id,
-      node.label,
-      node.modelId,
-      node.layerId,
-      node.layerLabel,
-      node.layerIndex,
-      node.index,
-    ]),
+    ...R.flatMap(previewNodes, (node) => {
+      // Always use the *resolved* textContent so that initialising a
+      // default style draft (which contains the same label-derived
+      // content) does NOT change the key and cause a canvas remount.
+      const textContent = JSON.stringify(getNodeTextContent(node))
+      // Dimensions are intentionally EXCLUDED from the key. ELK
+      // auto-layout updates node.width/height in the canvas store
+      // directly, and ResizeBridge then writes them back to the
+      // styleDraft. Including dimensions here would remount the canvas
+      // mid-edit and destroy the Lexical editor.
+      // Include shapeKey so a shape switch triggers ELK re-layout
+      // (dimensions alone are excluded to avoid the resize feedback loop).
+      const shapeKey =
+        node.styleDraft?.typeSpecificData &&
+        typeof node.styleDraft.typeSpecificData === 'object'
+          ? ((node.styleDraft.typeSpecificData as Record<string, unknown>)
+              .shapeKey ?? '')
+          : ''
+      return [
+        'node',
+        node.id,
+        node.label,
+        node.modelId,
+        node.styleTemplateId ?? '',
+        node.layerId,
+        node.layerLabel,
+        node.layerIndex,
+        node.index,
+        textContent,
+        `shape:${shapeKey}`,
+      ]
+    }),
     ...R.flatMap(previewEdges, (edge) => [
       'edge',
       edge.id,
@@ -235,53 +331,14 @@ export type BuilderPreviewCanvasGraphOptions = {
 }
 
 /**
- * Spacing between initial group x positions. Only used as a hint for
- * ELK's INTERACTIVE layering strategy — actual positions are computed
- * by ELK. Wider spacing prevents adjacent groups from collapsing into
- * the same ELK layer when there are no inter-group edges.
- */
-const LAYER_GROUP_X_HINT_SPACING = 300
-
-/**
- * Creates layer group container nodes. ELK sizes these to fit children
- * after layout — initial dimensions are seeded at a minimum so render-tag
- * can measure content before ELK runs.
- *
- * Initial `x` positions are spaced by column index so ELK's INTERACTIVE
- * layering strategy assigns each group to a separate layer (left→right),
- * even when no inter-group edges exist (e.g. step 1).
- */
-function createLayerGroupNodes(
-  columns: BuilderPreviewColumn[],
-): CanvasNode[] {
-  return R.pipe(
-    columns,
-    R.filter((col) => col.nodeCount > 0),
-    R.map((col) => ({
-      id: `${LAYER_GROUP_PREFIX}${col.layerId}`,
-      kind: 'group' as const,
-      shape: 'group' as const,
-      layoutMode: 'auto' as const,
-      x: col.index * LAYER_GROUP_X_HINT_SPACING,
-      y: 0,
-      width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
-      height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
-      lexicalJson: '',
-      html: builderPreviewGroupLabelHtml(col.label, col.accent),
-      contentHeight: LAYER_GROUP_LABEL_HEIGHT,
-      version: 1,
-    })),
-  )
-}
-
-/**
  * Resolves which model IDs act as group containers based on recipe group rules.
  * Returns a map from child model ID → parent model ID for "group" mode rules.
  * "breakout" mode rules are tracked separately — children that break out
- * stay in their layer group rather than being nested in a parent model.
+ * stay at the canvas root rather than being nested in a parent model.
  */
 function resolveGroupParents(
   groupRules: RecipeGroupRule[],
+  groupLayout: CanvasGroupLayoutPolicy,
   previewNodes: BuilderPreviewNode[],
 ) {
   // Group rules reference recipe model IDs (node.id), not backend model
@@ -294,45 +351,127 @@ function resolveGroupParents(
   const childToGroupParent = new Map<string, string>()
   // model node IDs that are group containers
   const groupParentIds = new Set<string>()
+  const groupLayoutByParentId = new Map<string, CanvasGroupLayoutPolicy>()
 
   for (const rule of groupRules) {
     if (rule.mode !== 'group') continue
-    const parent = nodesById[rule.parentModelId] ?? nodesByModelId[rule.parentModelId]
-    const child = nodesById[rule.childModelId] ?? nodesByModelId[rule.childModelId]
+    const parent =
+      nodesById[rule.parentModelId] ?? nodesByModelId[rule.parentModelId]
+    const child =
+      nodesById[rule.childModelId] ?? nodesByModelId[rule.childModelId]
     if (!parent || !child || parent.id === child.id) continue
 
     childToGroupParent.set(child.id, parent.id)
     groupParentIds.add(parent.id)
+    groupLayoutByParentId.set(parent.id, rule.layout ?? groupLayout)
   }
 
-  return { childToGroupParent, groupParentIds }
+  return { childToGroupParent, groupLayoutByParentId, groupParentIds }
 }
 
 const MODEL_GROUP_PREFIX = 'builder-model-group:'
 
-/**
- * Resolves the `parentGroupId` for a model node after group rules are applied.
- */
-function resolveParentGroupId(
-  node: BuilderPreviewNode,
-  childToGroupParent: Map<string, string>,
+function getCanvasLayers(
+  columns: BuilderPreviewColumn[],
+  previewNodes: BuilderPreviewNode[],
   groupParentIds: Set<string>,
+  childToGroupParent: Map<string, string>,
 ) {
-  const groupParentNodeId = childToGroupParent.get(node.id)
-  if (groupParentNodeId) return `${MODEL_GROUP_PREFIX}${groupParentNodeId}`
-  if (groupParentIds.has(node.id)) return `${MODEL_GROUP_PREFIX}${node.id}`
-  return `${LAYER_GROUP_PREFIX}${node.layerId}`
+  const layersById = new Map<string, BuilderPreviewCanvasLayer>(
+    columns.map((column) => [
+      column.layerId,
+      {
+        accent: column.accent,
+        id: column.layerId,
+        label: column.label,
+        nodeIds: [],
+      },
+    ]),
+  )
+
+  for (const node of previewNodes) {
+    if (childToGroupParent.has(node.id)) continue
+
+    const layer = layersById.get(node.layerId)
+    if (!layer) continue
+    layer.nodeIds.push(
+      groupParentIds.has(node.id) ? `${MODEL_GROUP_PREFIX}${node.id}` : node.id,
+    )
+  }
+
+  return [...layersById.values()].filter((layer) => layer.nodeIds.length > 0)
+}
+
+/**
+ * Resolves the canvas node ID for a preview node, accounting for group
+ * parents being promoted to group container nodes (no separate box node).
+ */
+function resolveCanvasNodeId(nodeId: string, groupParentIds: Set<string>) {
+  return groupParentIds.has(nodeId) ? `${MODEL_GROUP_PREFIX}${nodeId}` : nodeId
+}
+
+function getLayerColumnSpacing(previewEdges: BuilderPreviewEdge[]) {
+  const longestLabelLength = Math.max(
+    0,
+    ...previewEdges.map((edge) => edge.label.length),
+  )
+  const labelGap = longestLabelLength * EDGE_LABEL_APPROX_CHAR_WIDTH
+
+  return (
+    BUILDER_PREVIEW_NODE_WIDTH +
+    Math.min(
+      LAYER_COLUMN_MAX_GAP,
+      Math.max(LAYER_COLUMN_MIN_GAP, labelGap + EDGE_LABEL_GAP_PADDING),
+    )
+  )
+}
+
+function createBuilderPreviewEdgeRoute(
+  edge: BuilderPreviewEdge,
+  nodesById: Map<string, CanvasNode>,
+  groupParentIds: Set<string>,
+): Array<{ x: number; y: number }> | undefined {
+  const sourceNode = nodesById.get(
+    resolveCanvasNodeId(edge.from.id, groupParentIds),
+  )
+  const targetNode = nodesById.get(
+    resolveCanvasNodeId(edge.to.id, groupParentIds),
+  )
+  if (!sourceNode || !targetNode) return undefined
+
+  const sourceX = sourceNode.x + sourceNode.width
+  const sourceY = sourceNode.y + sourceNode.height / 2
+  const targetX = targetNode.x
+  const targetY = targetNode.y + targetNode.height / 2
+  const midX = sourceX + (targetX - sourceX) / 2
+
+  return [
+    { x: sourceX, y: sourceY },
+    { x: midX, y: sourceY },
+    { x: midX, y: targetY },
+    { x: targetX, y: targetY },
+  ]
+}
+
+function createBuilderPreviewEdgeLabelPoint(
+  routePoints: Array<{ x: number; y: number }> | undefined,
+) {
+  const sourcePoint = routePoints?.[0]
+  const firstBend = routePoints?.[1]
+  const secondBend = routePoints?.[2]
+  if (!sourcePoint || !firstBend || !secondBend) return undefined
+
+  return {
+    x: firstBend.x,
+    y: Math.min(sourcePoint.y, secondBend.y) - STATIC_EDGE_LABEL_Y_OFFSET,
+  }
 }
 
 /**
  * Builds the complete canvas graph for the builder preview.
  *
- * ALL layout is delegated to ELK via `INCLUDE_CHILDREN`:
- * - Each non-empty layer becomes a compound group node
- * - Model nodes are children of their layer group (`parentGroupId`)
- * - Group rules promote parent models to group nodes with children inside
- * - All nodes use `layoutMode: 'auto'` — ELK positions everything
- * - Column backgrounds are replaced by ELK group rendering
+ * Layers are non-interactive canvas scaffolding, not graph nodes. Model
+ * grouping rules may still promote a model to a real group container.
  */
 export function getBuilderPreviewCanvasGraph(
   recipe: RecipeData,
@@ -345,26 +484,33 @@ export function getBuilderPreviewCanvasGraph(
     ? getBuilderPreviewEdges(recipe, previewNodes)
     : []
   const filterCountByLayer = getFilterCountByLayer(recipe)
+  const groupLayout = recipe.groupLayout
 
-  const { childToGroupParent, groupParentIds } = resolveGroupParents(
-    recipe.groupRules,
-    previewNodes,
-  )
+  const { childToGroupParent, groupLayoutByParentId, groupParentIds } =
+    resolveGroupParents(recipe.groupRules, groupLayout, previewNodes)
 
   const key = getBuilderPreviewGraphKey({
     columns,
     filterCountByLayer,
+    groupLayout,
     groupRules: recipe.groupRules,
+    layoutAlgorithm: recipe.layoutAlgorithm,
+    layoutDirection: recipe.layoutDirection,
     previewEdges,
     previewNodes,
     showEdges,
   })
+  const layerColumnSpacing = getLayerColumnSpacing(previewEdges)
 
-  const layerGroupNodes = createLayerGroupNodes(columns)
+  const layers = getCanvasLayers(
+    columns,
+    previewNodes,
+    groupParentIds,
+    childToGroupParent,
+  )
 
-  // Create group container nodes for models that act as group parents.
-  // These are separate from the model's own box node — the model box and
-  // its grouped children both live inside this container.
+  // Group parents become group container nodes — they visually ARE the
+  // container, so no separate box node is created for them.
   const modelGroupNodes: CanvasNode[] = R.pipe(
     previewNodes,
     R.filter((node) => groupParentIds.has(node.id)),
@@ -373,74 +519,102 @@ export function getBuilderPreviewCanvasGraph(
       kind: 'group' as const,
       shape: 'group' as const,
       layoutMode: 'auto' as const,
-      parentGroupId: `${LAYER_GROUP_PREFIX}${node.layerId}`,
-      x: 0,
-      y: 0,
+      x: node.layerColumnIndex * layerColumnSpacing,
+      y: node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
       width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
       height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
       lexicalJson: '',
-      html: builderPreviewGroupLabelHtml(node.label, node.accent),
-      contentHeight: LAYER_GROUP_LABEL_HEIGHT,
+      html: builderEditableNodeHtml(node.label, node.modelId, node.accent),
+      contentHeight: 0,
+      groupLayout: groupLayoutByParentId.get(node.id) ?? groupLayout,
       version: 1,
     })),
   )
 
-  const modelNodes: CanvasNode[] = previewNodes.map((node) => {
-    const filterCount =
-      filterCountByLayer[normalizePreviewLabel(node.label)] ??
-      filterCountByLayer[normalizePreviewLabel(node.layerLabel)] ??
-      0
+  // Only create box nodes for non-parent models. Group parents are
+  // represented by their model group container above.
+  const modelNodes: CanvasNode[] = R.pipe(
+    previewNodes,
+    R.filter((node) => !groupParentIds.has(node.id)),
+    R.map((node) => {
+      // Grouped children nest inside their parent's group container.
+      // All other nodes stay at root level; layers are canvas decoration.
+      const groupParentNodeId = childToGroupParent.get(node.id)
 
-    return {
-      id: node.id,
-      kind: 'generation' as const,
-      shape: 'box' as const,
-      layoutMode: 'auto' as const,
-      parentGroupId: resolveParentGroupId(node, childToGroupParent, groupParentIds),
-      x: 0,
-      y: 0,
-      width: BUILDER_PREVIEW_NODE_WIDTH,
-      height: BUILDER_PREVIEW_NODE_HEIGHT,
-      lexicalJson: '',
-      html: builderPreviewNodeHtml(node.label, getNodeSubtitle(node, filterCount)),
-      contentHeight: 0,
-      version: 1,
-    }
-  })
+      // Always populate lexicalJson so Lexical opens with the node's text
+      // (avoids empty editor on first double-click and prevents visual shift)
+      const textContent = getNodeTextContent(node)
+      const lexicalJson = stringifyTemplateTextContent(textContent)
 
-  // After group resolution some layer groups may be empty (all their
-  // children were pulled into a model group in another layer). Collect
-  // which layer group IDs still have at least one direct child.
-  const occupiedLayerGroupIds = R.pipe(
-    [...modelGroupNodes, ...modelNodes],
-    R.map(R.prop('parentGroupId')),
-    R.filter((id): id is string => id != null && id.startsWith(LAYER_GROUP_PREFIX)),
-    (ids) => new Set(ids),
+      // Use style draft dimensions if user customized them, else central defaults
+      const draftDims = node.styleDraft?.dimensions as
+        | { width?: number; height?: number }
+        | null
+        | undefined
+      const width =
+        (draftDims?.width ?? 0) > 0
+          ? draftDims!.width!
+          : BUILDER_PREVIEW_NODE_WIDTH
+      const height =
+        (draftDims?.height ?? 0) > 0
+          ? draftDims!.height!
+          : BUILDER_PREVIEW_NODE_HEIGHT
+
+      const styleOverrides = readStyleOverrides(node.styleDraft)
+
+      return {
+        id: node.id,
+        kind: 'editable' as const,
+        shape: 'box' as const,
+        layoutMode: 'auto' as const,
+        appLabel: node.appLabel,
+        modelName: node.modelName,
+        ...(groupParentNodeId
+          ? { parentGroupId: `${MODEL_GROUP_PREFIX}${groupParentNodeId}` }
+          : {}),
+        x: groupParentNodeId ? 0 : node.layerColumnIndex * layerColumnSpacing,
+        y: groupParentNodeId
+          ? 0
+          : node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
+        width,
+        height,
+        lexicalJson,
+        html: getNodeHtml(node),
+        contentHeight: 0,
+        version: 1,
+        ...(styleOverrides ? { styleOverrides } : {}),
+      }
+    }),
   )
 
-  const activeLayerGroupNodes = layerGroupNodes.filter((node) =>
-    occupiedLayerGroupIds.has(node.id),
-  )
+  const nodes = [...modelGroupNodes, ...modelNodes]
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  const parentNodeIdByNodeId = getParentNodeIdByNodeId(nodes)
 
-  const nodes = [...activeLayerGroupNodes, ...modelGroupNodes, ...modelNodes]
-
-  // Suppress edges where containment already expresses the relationship:
-  // if the child is grouped inside the parent, no arrow is needed.
   const edges: CanvasEdge[] = R.pipe(
     previewEdges,
-    R.filter((edge) => {
-      if (childToGroupParent.get(edge.to.id) === edge.from.id) return false
-      if (childToGroupParent.get(edge.from.id) === edge.to.id) return false
-      return true
+    R.flatMap((edge) => {
+      const routePoints = createBuilderPreviewEdgeRoute(
+        edge,
+        nodesById,
+        groupParentIds,
+      )
+      const labelPoint = createBuilderPreviewEdgeLabelPoint(routePoints)
+
+      const canvasEdge: CanvasEdge = {
+        id: edge.id,
+        sourceNodeId: resolveCanvasNodeId(edge.from.id, groupParentIds),
+        targetNodeId: resolveCanvasNodeId(edge.to.id, groupParentIds),
+        kind: 'default' as const,
+        label: edge.label || undefined,
+        ...(labelPoint ? { labelPoint } : {}),
+        routePoints,
+      }
+
+      if (!isRenderableCanvasEdge(canvasEdge, parentNodeIdByNodeId)) return []
+      return [canvasEdge]
     }),
-    R.map((edge) => ({
-      id: edge.id,
-      sourceNodeId: edge.from.id,
-      targetNodeId: edge.to.id,
-      kind: 'default' as const,
-      label: edge.label || undefined,
-    })),
   )
 
-  return { columns, edges, key, nodes }
+  return { columns, edges, key, layers, nodes }
 }

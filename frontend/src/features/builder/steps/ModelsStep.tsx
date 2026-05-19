@@ -224,7 +224,7 @@ function SortableModelRow({
       <button
         ref={sortable.handleRef}
         type="button"
-        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label={t('builder.models.reorderModel', {
           model: model.displayName,
         })}
@@ -233,7 +233,7 @@ function SortableModelRow({
       </button>
       <button
         type="button"
-        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label={t('builder.models.removeModel', {
           model: model.displayName,
         })}
@@ -336,7 +336,7 @@ function LayerGroup({
         {models.length === 0 ? (
           <button
             type="button"
-            className="rounded-lg border border-dashed border-border px-3 py-3 text-left text-[12.5px] text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            className="rounded-lg border border-dashed border-border p-3 text-left text-[12.5px] text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
             disabled={!hasSchemaModels || !canAddToLayer}
             onClick={() => onAddModel(layer.id)}
           >

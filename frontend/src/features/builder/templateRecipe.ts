@@ -9,6 +9,7 @@ import type {
   GenerationDefinitionSchemaOutput,
   GenerationRunRequestRequest,
   GenerationTemplateRead,
+  GenerationTemplateWriteRequest,
 } from '@/api/contracts'
 import type {
   LayoutAlgorithm,
@@ -16,8 +17,10 @@ import type {
   RecipeFilter,
   RecipeLayer,
   RecipeModel,
+  RecipeStyleDraft,
   TraversalEdge,
 } from './types'
+import { DEFAULT_RECIPE_GROUP_LAYOUT } from './types'
 import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
 import {
   DEFAULT_SWATCHES,
@@ -48,6 +51,7 @@ type DefinitionStep = {
   resolvedModelId: string
   visibility: 'visible' | 'hidden'
   groupMode: 'none' | 'group' | 'breakout'
+  styleTemplateId: string | null
   label: string | null
   filter: unknown
 }
@@ -61,6 +65,7 @@ function normalizeStep(id: string, raw: RawStep): DefinitionStep {
     resolvedModelId: raw.resolvedModelId ?? '',
     visibility: raw.visibility,
     groupMode: raw.groupMode,
+    styleTemplateId: raw.styleTemplateId ?? null,
     label: raw.label ?? null,
     filter: raw.filter ?? null,
   }
@@ -79,8 +84,12 @@ export function createBlankRecipe(): RecipeData {
     edges: [],
     filters: [],
     groupRules: [],
+    groupLayout: { ...DEFAULT_RECIPE_GROUP_LAYOUT },
+    styleDrafts: {},
     swatches: [...DEFAULT_SWATCHES],
     layoutAlgorithm: 'Layered',
+    layoutDirection: 'LR',
+    shareSlug: '',
     promoteOrg: '',
     promoteVisibility: 'org-wide',
     promoteAudience: '',
@@ -150,6 +159,130 @@ function readLayoutSettings(layoutSettings: unknown) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Style drafts → layoutSettings persistence
+// ---------------------------------------------------------------------------
+
+type PersistedStyleDraft = {
+  sourceTemplateId: string | null
+  persistedTemplateId: string | null
+  name: string
+  textContent: unknown | null
+  visualStyles: unknown
+  dimensions: unknown
+  typeSpecificData: unknown
+}
+
+/**
+ * Strips transient UI state (dirty, saveState, error) from a style draft
+ * so only the data that should be persisted is included.
+ */
+function serializeStyleDraft(draft: RecipeStyleDraft): PersistedStyleDraft {
+  return {
+    sourceTemplateId: draft.sourceTemplateId,
+    persistedTemplateId: draft.persistedTemplateId,
+    name: draft.name,
+    textContent: draft.textContent,
+    visualStyles: draft.visualStyles,
+    dimensions: draft.dimensions,
+    typeSpecificData: draft.typeSpecificData,
+  }
+}
+
+function serializeStyleDrafts(
+  drafts: Record<string, RecipeStyleDraft>,
+): Record<string, PersistedStyleDraft> | undefined {
+  const entries = Object.entries(drafts)
+  if (entries.length === 0) return undefined
+
+  return Object.fromEntries(
+    entries.map(([key, draft]) => [key, serializeStyleDraft(draft)]),
+  )
+}
+
+function deserializeStyleDrafts(
+  raw: unknown,
+): Record<string, RecipeStyleDraft> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+
+  const record = raw as Record<string, unknown>
+  const result: Record<string, RecipeStyleDraft> = {}
+
+  for (const [key, value] of Object.entries(record)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const entry = value as Record<string, unknown>
+
+    result[key] = {
+      sourceTemplateId:
+        typeof entry.sourceTemplateId === 'string'
+          ? entry.sourceTemplateId
+          : null,
+      persistedTemplateId:
+        typeof entry.persistedTemplateId === 'string'
+          ? entry.persistedTemplateId
+          : null,
+      name: typeof entry.name === 'string' ? entry.name : '',
+      textContent: entry.textContent ?? null,
+      visualStyles: entry.visualStyles ?? {},
+      dimensions: entry.dimensions ?? {},
+      typeSpecificData: entry.typeSpecificData ?? {},
+      dirty: false,
+      saveState: 'idle',
+    }
+  }
+
+  return result
+}
+
+function readStyleDraftsFromLayoutSettings(
+  layoutSettings: unknown,
+): Record<string, RecipeStyleDraft> {
+  if (!layoutSettings || typeof layoutSettings !== 'object') return {}
+  const settings = layoutSettings as Record<string, unknown>
+  return deserializeStyleDrafts(settings.styleDrafts)
+}
+
+// ---------------------------------------------------------------------------
+// Edges persistence — routeSteps and full edge data don't survive the
+// definition round-trip (parent/child only stores the last hop), so we
+// persist the original recipe edges in layoutSettings.
+// ---------------------------------------------------------------------------
+
+function deserializeEdges(raw: unknown): TraversalEdge[] | null {
+  if (!Array.isArray(raw)) return null
+
+  return raw.flatMap((entry: unknown) => {
+    if (!entry || typeof entry !== 'object') return []
+    const e = entry as Record<string, unknown>
+    if (typeof e.id !== 'string' || typeof e.via !== 'string') return []
+
+    return [
+      {
+        id: e.id,
+        from: typeof e.from === 'string' ? e.from : '',
+        to: typeof e.to === 'string' ? e.to : '',
+        fromModelId: typeof e.fromModelId === 'string' ? e.fromModelId : undefined,
+        toModelId: typeof e.toModelId === 'string' ? e.toModelId : undefined,
+        via: e.via,
+        routeSteps: Array.isArray(e.routeSteps) ? e.routeSteps : undefined,
+        auto: typeof e.auto === 'boolean' ? e.auto : true,
+        cost: typeof e.cost === 'number' ? e.cost : 1,
+        alt: typeof e.alt === 'boolean' ? e.alt : undefined,
+      } satisfies TraversalEdge,
+    ]
+  })
+}
+
+function readEdgesFromLayoutSettings(
+  layoutSettings: unknown,
+): TraversalEdge[] | null {
+  if (!layoutSettings || typeof layoutSettings !== 'object') return null
+  const settings = layoutSettings as Record<string, unknown>
+  return deserializeEdges(settings.edges)
+}
+
+// ---------------------------------------------------------------------------
+
 function stringifyFilter(filter: unknown): string | null {
   if (filter == null) return null
   if (typeof filter === 'string') return filter
@@ -199,6 +332,7 @@ export function createRecipeFromTemplate(
         ? `layer-${step.id}`
         : `layer-${step.id}`,
       alias: step.label ?? undefined,
+      styleTemplateId: step.styleTemplateId,
     }
   })
 
@@ -227,18 +361,26 @@ export function createRecipeFromTemplate(
   const groupRules = R.pipe(
     visibleSteps,
     R.flatMap((step) => {
-      if (
-        (step.groupMode !== 'group' && step.groupMode !== 'breakout') ||
-        !step.parentId
-      )
-        return []
+      if (!step.parentId) return []
+      const parent = stepsById[step.parentId]
+      if (!parent) return []
+
+      const mode =
+        step.groupMode === 'breakout'
+          ? 'breakout'
+          : parent.groupMode === 'group' || step.groupMode === 'group'
+            ? 'group'
+            : null
+      if (!mode) return []
+
       return [
         {
           id: `group-${step.id}`,
           parentModelId: step.parentId,
           childModelId: step.id,
           via: step.relationship ?? '',
-          mode: step.groupMode,
+          mode,
+          layout: { ...DEFAULT_RECIPE_GROUP_LAYOUT },
         },
       ]
     }),
@@ -264,17 +406,21 @@ export function createRecipeFromTemplate(
   )
 
   const layout = readLayoutSettings(version?.layoutSettings)
+  const styleDrafts = readStyleDraftsFromLayoutSettings(version?.layoutSettings)
+  const persistedEdges = readEdgesFromLayoutSettings(version?.layoutSettings)
 
   return {
     ...createBlankRecipe(),
     title: template.name,
     layers: normalizedLayers,
     models,
-    edges,
+    edges: persistedEdges ?? edges,
     filters,
     groupRules,
+    styleDrafts,
     swatches: layout.swatches,
     layoutAlgorithm: layout.layoutAlgorithm,
+    shareSlug: template.shareSlug ?? '',
     promoteVisibility: template.scope === 'global' ? 'org-wide' : 'private',
     promoteAudience: template.scope === 'global' ? 'All users' : '',
   }
@@ -396,6 +542,7 @@ export function recipeToInlineDefinition(
       resolvedModelId: model.modelId,
       visibility: 'visible',
       groupMode: 'none',
+      styleTemplateId: model.styleTemplateId ?? null,
       label: getModelLabel(model),
       filter: getFilterForModel(model, filtersByModel),
     }
@@ -433,6 +580,7 @@ export function recipeToInlineDefinition(
         resolvedModelId: routeStep.toModel,
         visibility: isLastStep ? 'visible' : 'hidden',
         groupMode: existingStep?.groupMode ?? 'none',
+        styleTemplateId: targetModel?.styleTemplateId ?? null,
         label: targetModel ? getModelLabel(targetModel) : null,
         filter:
           isLastStep && targetModel
@@ -444,11 +592,49 @@ export function recipeToInlineDefinition(
     }
   }
 
-  // Apply grouping rules — mark child steps with their group mode
-  for (const rule of recipe.groupRules) {
-    const childStep = stepsById[rule.childModelId]
+  const groupedParentStepIds = new Set(
+    recipe.groupRules
+      .filter((rule) => rule.mode === 'group')
+      .map((rule) => rule.parentModelId),
+  )
+  const breakoutChildStepIds = new Set(
+    recipe.groupRules
+      .filter((rule) => rule.mode === 'breakout')
+      .map((rule) => rule.childModelId),
+  )
+
+  for (const stepId of groupedParentStepIds) {
+    const parentStep = stepsById[stepId]
+    if (parentStep) {
+      parentStep.groupMode = 'group'
+    }
+  }
+
+  for (const stepId of breakoutChildStepIds) {
+    const childStep = stepsById[stepId]
     if (childStep) {
-      childStep.groupMode = rule.mode
+      childStep.groupMode = 'breakout'
+    }
+  }
+
+  // Remove steps that are unreachable from the root — the backend rejects
+  // definitions containing orphan steps. Models with no edge connecting
+  // them to the root (e.g. a second layer not yet linked) would otherwise
+  // appear in stepsById with no parent and nobody's childIds referencing them.
+  const reachableIds = new Set<string>()
+  const queue = [rootStepId]
+  while (queue.length > 0) {
+    const id = queue.pop()!
+    if (reachableIds.has(id)) continue
+    reachableIds.add(id)
+    const step = stepsById[id]
+    if (step?.childIds) {
+      queue.push(...step.childIds)
+    }
+  }
+  for (const id of Object.keys(stepsById)) {
+    if (!reachableIds.has(id)) {
+      delete stepsById[id]
     }
   }
 
@@ -459,5 +645,38 @@ export function recipeToInlineDefinition(
       layoutAlgorithm: recipe.layoutAlgorithm,
       swatches: recipe.swatches,
     },
+  }
+}
+
+export function recipeToGenerationTemplateWriteRequest(
+  recipe: RecipeData,
+  options: {
+    scope?: 'owner' | 'global'
+    template?: GenerationTemplateRead | null
+    shareSlug?: string | null
+  } = {},
+): GenerationTemplateWriteRequest | null {
+  const source = recipeToInlineDefinition(recipe)
+  if (!source) return null
+
+  const selectedShareSlug =
+    options.shareSlug ?? (recipe.shareSlug || options.template?.shareSlug || '')
+  const shareSlug = selectedShareSlug.trim()
+
+  const persistedDrafts = serializeStyleDrafts(recipe.styleDrafts)
+
+  return {
+    name: recipe.title.trim() || 'Untitled template',
+    description: options.template?.description ?? '',
+    rootModel: source.rootModel,
+    scope: options.scope ?? options.template?.scope ?? 'owner',
+    featured: options.template?.featured,
+    shareSlug: shareSlug || undefined,
+    definition: source.inlineDefinition,
+    layoutSettings: {
+      ...source.layoutSettings,
+      ...(persistedDrafts ? { styleDrafts: persistedDrafts } : {}),
+      ...(recipe.edges.length > 0 ? { edges: recipe.edges } : {}),
+    } as typeof source.layoutSettings,
   }
 }

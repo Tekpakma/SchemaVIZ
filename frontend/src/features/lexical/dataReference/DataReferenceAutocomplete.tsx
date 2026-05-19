@@ -21,6 +21,7 @@ import { useDataReferenceSuggestions } from './useDataReferenceSuggestions'
 
 import { useLexicalOverlayRuntime } from '../LexicalOverlayRuntimeContext'
 import { extractSelectionStyles } from './styles'
+import type { SchemaModelRef } from './schemaQueries'
 
 const TRIGGER = '{{'
 const TRIGGER_END = '}}'
@@ -76,8 +77,11 @@ function insertTextIntoNode(
   selection.insertText(text)
 }
 
-export function DataReferenceAutocomplete(): React.ReactElement | null {
-  const { dataScope } = useLexicalOverlayRuntime()
+function DataReferenceAutocompleteInner({
+  dataScope,
+}: {
+  dataScope: SchemaModelRef
+}): React.ReactElement {
   const [queryText, setQueryText] = useState('')
 
   const suggestions = useDataReferenceSuggestions(
@@ -169,22 +173,24 @@ export function DataReferenceAutocomplete(): React.ReactElement | null {
                   ref={option.setRefElement}
                   role="option"
                   aria-selected={isSelected}
-                  className={`cursor-pointer px-2 py-1 text-sm ${isSelected ? 'bg-primary/10' : ''
-                    }`}
-                  onMouseMove={() => {
-                    if (!isSelected) setHighlightedIndex(index)
-                  }}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectOptionAndCleanUp(option)}
+                  className={isSelected ? 'bg-primary/10' : undefined}
                 >
-                  <div className="flex flex-col">
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer flex-col px-2 py-1 text-left text-sm"
+                    onMouseMove={() => {
+                      if (!isSelected) setHighlightedIndex(index)
+                    }}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectOptionAndCleanUp(option)}
+                  >
                     <span className="font-medium">
                       {option.suggestion.label}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {option.suggestion.description}
                     </span>
-                  </div>
+                  </button>
                 </li>
               )
             })}
@@ -209,4 +215,10 @@ export function DataReferenceAutocomplete(): React.ReactElement | null {
       preselectFirstItem
     />
   )
+}
+
+export function DataReferenceAutocomplete(): React.ReactElement | null {
+  const { dataScope } = useLexicalOverlayRuntime()
+  if (!dataScope) return null
+  return <DataReferenceAutocompleteInner dataScope={dataScope} />
 }
