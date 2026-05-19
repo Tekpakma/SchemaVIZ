@@ -29,8 +29,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy only the Nitro build output
+# Copy the Nitro build output and the ELK worker used by server-side layout.
 COPY --from=build /app/.output ./.output
+COPY --from=build /app/node_modules/elkjs/package.json ./node_modules/elkjs/package.json
+COPY --from=build /app/node_modules/elkjs/lib/elk-worker.min.js ./node_modules/elkjs/lib/elk-worker.min.js
 
 EXPOSE 3000
 
