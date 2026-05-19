@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { buildSourceAuthRedirectUrl, redirectToLogin } from './sourceAuth'
+import {
+  __resetSourceAuthRedirectStateForTests,
+  buildSourceAuthRedirectUrl,
+  redirectToLogin,
+} from './sourceAuth'
 
 afterEach(() => {
+  __resetSourceAuthRedirectStateForTests()
   vi.unstubAllGlobals()
 })
 
@@ -43,5 +48,39 @@ describe('source auth redirects', () => {
     expect(assign).toHaveBeenCalledWith(
       '/_schema-viz/auth/login?next=%2Fcanvas',
     )
+  })
+
+  it('deduplicates repeated login redirects from concurrent 401 responses', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('window', {
+      location: {
+        assign,
+        hash: '',
+        pathname: '/',
+        search: '',
+      },
+    })
+
+    redirectToLogin()
+    redirectToLogin()
+
+    expect(assign).toHaveBeenCalledTimes(1)
+    expect(assign).toHaveBeenCalledWith('/_schema-viz/auth/login?next=%2F')
+  })
+
+  it('does not redirect again while already on a source auth route', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('window', {
+      location: {
+        assign,
+        hash: '',
+        pathname: '/_schema-viz/auth/callback',
+        search: '?code=test',
+      },
+    })
+
+    redirectToLogin()
+
+    expect(assign).not.toHaveBeenCalled()
   })
 })

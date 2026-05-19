@@ -1,38 +1,61 @@
+import type {
+  GenerationRunResponse,
+  GenerationTemplateRead,
+} from '@/api/contracts'
+import type { RecipeData } from '@/features/builder/types'
+
 export type TemplateHue = 'pink' | 'green' | 'plum'
 
 export type PromotionLevel = 'featured' | 'personal' | 'system'
 
-export interface TemplateStart {
-  id: string
-  label: string
-  kind: string
-  count: number
-}
+export type HomeTemplatePreviewStatus = 'ready' | 'no_record' | 'error'
 
-// TODO: Align with backend GenerationTemplate shape once API is wired
-// The backend GenerationTemplate (god node, 105 edges) likely has fields like:
-//   - version, scope, steps[], publishedBy, etc.
-// This POC type captures the homepage-relevant subset.
-export interface Template {
-  id: string
-  title: string
+export type HomeTemplateSource = 'own' | 'featured'
+
+export type HomeTemplateFilter =
+  | 'all'
+  | 'ready'
+  | 'needs_record'
+  | 'issues'
+  | 'own'
+  | 'featured'
+
+export type HomeTemplateNavigationTarget =
+  | {
+      type: 'generation-run'
+      shareSlug: string
+      recordId: string
+    }
+  | {
+      type: 'generation-select-record'
+      shareSlug: string
+    }
+  | {
+      type: 'builder'
+      templateId: string
+    }
+
+export interface HomeTemplatePreview {
+  accent: string
   author: string
-  nodes: number
-  edges: number
+  description: string
+  edgeCount: number
+  generationResponse: GenerationRunResponse | null
   hue: TemplateHue
-  desc: string
-  recent?: boolean
-  promotion?: PromotionLevel
-  promotedBy?: string | null
-  promotedWhen?: string | null
-  usedBy?: number
-  starts?: TemplateStart[]
-}
-
-// TODO: Wire to backend stats endpoint
-export interface HomeStats {
-  templateCount: number
-  ownedLandscapes: number
-  sharedWithYou: number
-  nodePresets: number
+  id: string
+  navigationTarget: HomeTemplateNavigationTarget
+  nodeCount: number
+  promotion: PromotionLevel
+  recipe: RecipeData
+  rootModel: string
+  sampleRecordDisplayName: string | null
+  sampleRecordId: string | null
+  shareSlug: string | null
+  source: HomeTemplateSource
+  sourceLabel: string
+  status: HomeTemplatePreviewStatus
+  statusLabel: string
+  template: GenerationTemplateRead
+  title: string
+  updatedAt: string
 }
