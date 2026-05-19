@@ -1,5 +1,7 @@
-.PHONY: help dev build test lint format check generate-api release-patch release-minor release-major
+.PHONY: help dev build test lint format check generate-api docker-build docker-run release-patch release-minor release-major
 
+DOCKER_IMAGE ?= schema-viz-frontend
+DOCKER_TAG ?= latest
 RELEASE_REMOTE ?= origin
 RELEASE_BRANCH ?= main
 RELEASE_ARGS = --branch $(RELEASE_BRANCH) --remote $(RELEASE_REMOTE)
@@ -22,6 +24,8 @@ help:
 	@echo "  make format          - Format with Prettier + ESLint fix"
 	@echo "  make check           - Check formatting"
 	@echo "  make generate-api    - Regenerate API client from OpenAPI schema"
+	@echo "  make docker-build    - Build Docker image (DOCKER_TAG=latest)"
+	@echo "  make docker-run      - Run Docker container on port 3000"
 	@echo "  make release-patch   - Bump patch version, commit, and tag frontend-vX.Y.Z"
 	@echo "  make release-minor   - Bump minor version, commit, and tag frontend-vX.Y.Z"
 	@echo "  make release-major   - Bump major version, commit, and tag frontend-vX.Y.Z"
@@ -49,6 +53,12 @@ check:
 
 generate-api:
 	bun ./scripts/generate-api-client.ts
+
+docker-build:
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+
+docker-run:
+	docker run --rm -p 3000:3000 $(DOCKER_IMAGE):$(DOCKER_TAG)
 
 release-patch:
 	python3 scripts/release_frontend.py patch $(RELEASE_ARGS)
