@@ -78,6 +78,7 @@ function BuilderPageContent({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [publishOpen, setPublishOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [savedTemplate, setSavedTemplate] =
     useState<GenerationTemplateRead | null>(template)
   const [selectedCanvasNodeId, setSelectedCanvasNodeId] = useState<
@@ -279,6 +280,7 @@ function BuilderPageContent({
         title={recipe.title}
         onPublish={() => setPublishOpen(true)}
         onSave={() => saveMutation.mutate(null)}
+        onShare={() => setExportOpen(true)}
         onTitleChange={actions.setTitle}
       />
 
@@ -293,8 +295,10 @@ function BuilderPageContent({
           activeExampleId={activeExampleId}
           activeStepKind={activeStep.kind}
           examples={recipe.examples}
+          exportOpen={exportOpen}
           models={recipe.models}
           onCommitNodeText={handleCommitNodeText}
+          onExportOpenChange={setExportOpen}
           onNodeResize={handleNodeResize}
           onNodeSelect={setSelectedCanvasNodeId}
           recipe={recipe}

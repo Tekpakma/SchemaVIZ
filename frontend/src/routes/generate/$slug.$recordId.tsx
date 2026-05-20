@@ -1,9 +1,10 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { Loader2 } from 'lucide-react'
+import { DownloadIcon, Loader2 } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { BuilderPreview } from '@/features/builder/BuilderPreview'
 import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQueries'
 import { createRecipeFromTemplate } from '@/features/builder/templateRecipe'
@@ -14,8 +15,8 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/generate/$slug/$recordId')({
-  ssr: false,
   validateSearch: searchSchema,
+  ssr: false,
   loader: ({ context: { queryClient }, params: { slug, recordId } }) =>
     Promise.all([
       queryClient.ensureQueryData(SHARED_GENERATION_QUERIES.template(slug)),
@@ -39,6 +40,7 @@ function GenerateViewPage() {
   const { slug, recordId } = Route.useParams()
   const { embed } = Route.useSearch()
   const isEmbed = embed === 1
+  const [exportOpen, setExportOpen] = useState(false)
 
   const { data: template } = useSuspenseQuery(
     SHARED_GENERATION_QUERIES.template(slug),
@@ -70,9 +72,20 @@ function GenerateViewPage() {
             {template.name || 'Untitled'}
           </h1>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-[13px]"
+          onClick={() => setExportOpen(true)}
+        >
+          <DownloadIcon className="size-3.5" />
+          Teilen
+        </Button>
       </header>
       <main className="relative min-h-0 flex-1">
         <BuilderPreview
+          exportOpen={exportOpen}
+          onExportOpenChange={setExportOpen}
           recipe={recipe}
           generationResponse={runData}
           interactionMode="viewport"

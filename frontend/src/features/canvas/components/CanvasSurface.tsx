@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useRef } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { Stage, Layer, Rect } from 'react-konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
+import type Konva from 'konva'
 
 import { TEST_IDS } from '@/constants'
+import { cn } from '@/lib/utils'
 import { LexicalOverlayWrapper } from '@/features/lexical/LexicalOverlay'
 import {
   useCanvasActions,
@@ -11,6 +19,7 @@ import {
   useSelectedNodeId,
 } from '@/store/canvasStore'
 import { CanvasEdges } from './CanvasEdges'
+import { CanvasExportDialog } from './CanvasExportDialog'
 import { CanvasHelperLines } from './CanvasHelperLines'
 import { CanvasTabBar } from './CanvasTabBar'
 import { CanvasViewportPanel } from './CanvasViewportPanel'
@@ -31,6 +40,9 @@ import type { CanvasNode, NodeId } from '../model/types'
 import { isEditableNodeKind } from '../model/types'
 import { CANVAS_MARQUEE_FILL, CANVAS_SELECT_COLOR } from '../themeColors'
 
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect
+
 type CanvasSurfaceFitWorld = {
   width: number
   height: number
@@ -38,6 +50,7 @@ type CanvasSurfaceFitWorld = {
 
 type CanvasSurfaceProps = {
   backgroundLayer?: React.ReactNode
+  exportOpen?: boolean
   fitWorld?: CanvasSurfaceFitWorld
   /**
    * Optional override for the inline rich-text editor. When undefined,
@@ -47,9 +60,13 @@ type CanvasSurfaceProps = {
    */
   inlineEditor?: React.ReactNode
   interactionMode?: 'edit' | 'viewport' | 'static'
+  isContentPending?: boolean
+  onExportOpenChange?: (open: boolean) => void
   readOnly?: boolean
   seedDefaultNode?: boolean
   showChrome?: boolean
+  showChromeEditActions?: boolean
+  showFullscreenToggle?: boolean
   showNodeToolbar?: boolean
   showTabBar?: boolean
 }
@@ -63,7 +80,7 @@ function useFitWorldViewport(
   const fitWorldHeight = fitWorld?.height
   const appliedFitKeyRef = useRef<string | null>(null)
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (
       fitWorldWidth === undefined ||
       fitWorldHeight === undefined ||
@@ -99,12 +116,17 @@ function useFitWorldViewport(
 
 export function CanvasSurface({
   backgroundLayer,
+  exportOpen = false,
   fitWorld,
   inlineEditor,
   interactionMode,
+  isContentPending = false,
+  onExportOpenChange,
   readOnly = false,
   seedDefaultNode = true,
   showChrome = true,
+  showChromeEditActions,
+  showFullscreenToggle = false,
   showNodeToolbar = true,
   showTabBar = true,
 }: CanvasSurfaceProps) {
@@ -112,7 +134,71 @@ export function CanvasSurface({
     interactionMode ?? (readOnly ? 'static' : 'edit')
   const canEditCanvas = resolvedInteractionMode === 'edit'
   const canUseViewport = resolvedInteractionMode !== 'static'
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const [isViewportSettling, setIsViewportSettling] = useState(false)
+  const konvaStageRef = useRef<Konva.Stage | null>(null)
+  const viewportSettleFrameRef = useRef<number | null>(null)
+
+  const hideStageUntilViewportSettles = useCallback(() => {
+    if (viewportSettleFrameRef.current !== null) {
+      window.cancelAnimationFrame(viewportSettleFrameRef.current)
+    }
+
+    setIsViewportSettling(true)
+    viewportSettleFrameRef.current = window.requestAnimationFrame(() => {
+      viewportSettleFrameRef.current = window.requestAnimationFrame(() => {
+        viewportSettleFrameRef.current = null
+        setIsViewportSettling(false)
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (viewportSettleFrameRef.current !== null) {
+        window.cancelAnimationFrame(viewportSettleFrameRef.current)
+      }
+    }
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    setIsResizing(true)
+    setIsFullscreen((prev) => !prev)
+  }, [])
+
+  // Escape key exits fullscreen
+  useEffect(() => {
+    if (!isFullscreen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setIsResizing(true)
+        setIsFullscreen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isFullscreen])
+
   const { ref: stageContainerRef, size } = useCanvasStageSize()
+
+  // Clear the resizing mask once the viewport has settled after the
+  // container resize. We wait two animation frames: one for the
+  // ResizeObserver → Stage re-render, one for useFitWorldViewport
+  // to adjust the viewport.
+  useEffect(() => {
+    if (!isResizing) return
+    let cancelled = false
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) setIsResizing(false)
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isResizing, size])
   const nodeIds = useCanvasNodeIds()
   const nodesById = useCanvasNodes()
   const selectedNodeId = useSelectedNodeId()
@@ -265,119 +351,169 @@ export function CanvasSurface({
     [canUseViewport, handleStageDragMove],
   )
 
+  const handleFitView = useCallback(() => {
+    hideStageUntilViewportSettles()
+    fitView()
+  }, [fitView, hideStageUntilViewportSettles])
+
+  const handleLayout = useCallback(() => {
+    hideStageUntilViewportSettles()
+    handleLayoutGraph()
+  }, [handleLayoutGraph, hideStageUntilViewportSettles])
+
+  const handleZoomIn = useCallback(() => {
+    hideStageUntilViewportSettles()
+    zoomIn()
+  }, [hideStageUntilViewportSettles, zoomIn])
+
+  const handleZoomOut = useCallback(() => {
+    hideStageUntilViewportSettles()
+    zoomOut()
+  }, [hideStageUntilViewportSettles, zoomOut])
+
   const handleNodeDragEnd = useCallback(() => {
     clearHelperLines()
   }, [clearHelperLines])
 
+  const isStageMasked =
+    isContentPending || isLayoutPending || isResizing || isViewportSettling
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {showTabBar ? <CanvasTabBar /> : null}
-      <div
-        data-node-count={nodeIds.length}
-        data-testid={TEST_IDS.CANVAS_STAGE_CONTAINER}
-        ref={stageContainerRef}
-        style={{
-          position: 'relative',
-          width: '100%',
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
-      >
-        {hasStageSize ? (
-          <Stage
-            width={size.width}
-            height={size.height}
-            x={viewport.x}
-            y={viewport.y}
-            scaleX={viewport.scale}
-            scaleY={viewport.scale}
-            draggable={canUseViewport && !isSelecting}
-            onDragMove={handleStageDrag}
-            onDragEnd={handleStageDrag}
-            onWheel={handleStageWheel}
-            onMouseDown={handleStagePointerDown}
-            onDblClick={handleStageDoubleClick}
-            onDblTap={handleStageDoubleClick}
-            onMouseMove={handleStageMouseMove}
-            onMouseUp={handleStageMouseUp}
-            onTouchStart={handleStageTouchStart}
-          >
-            {backgroundLayer ? (
-              <Layer listening={false}>{backgroundLayer}</Layer>
-            ) : null}
-            <Layer listening={false}>
-              <CanvasEdges />
-            </Layer>
-            <Layer listening={canEditCanvas}>
-              {nodeIds.map((id: NodeId) => (
-                <RichTextNode
-                  key={id}
-                  nodeId={id}
-                  onDragEnd={handleNodeDragEnd}
-                  readOnly={!canEditCanvas}
-                />
-              ))}
-            </Layer>
-            <Layer listening={false}>
-              {nodeIds.map((id: NodeId) => (
-                <RichTextNodeText key={id} nodeId={id} />
-              ))}
-            </Layer>
-            {canEditCanvas ? (
-              // Single overlay layer for all edit-mode visuals: transformer
-              // controls, selected-node frame, marquee, and helper lines.
-              // Each Konva layer is a separate <canvas> element with its own
-              // memory + composite cost; keeping the total ≤5 matches
-              // Konva's recommendation.
-              <Layer>
-                <SelectedNodesFrame />
-                {nodeIds.map((id: NodeId) => (
-                  <RichTextNodeControls key={id} nodeId={id} />
-                ))}
-                {selectionRect && (
-                  <Rect
-                    x={selectionRect.x}
-                    y={selectionRect.y}
-                    width={selectionRect.width}
-                    height={selectionRect.height}
-                    fill={CANVAS_MARQUEE_FILL}
-                    stroke={CANVAS_SELECT_COLOR}
-                    strokeWidth={1}
-                    strokeScaleEnabled={false}
-                    perfectDrawEnabled={false}
-                    listening={false}
-                  />
-                )}
-                <CanvasHelperLines viewport={viewport} stageSize={size} />
+    <div
+      className={cn(
+        'flex h-full min-h-0 flex-col overflow-hidden bg-background',
+        isFullscreen && 'fixed inset-0 z-50',
+      )}
+    >
+      {showTabBar && !isFullscreen ? <CanvasTabBar /> : null}
+      {/* Sizing wrapper — flex item whose size comes purely from layout,
+          not from the Konva <canvas> pixel dimensions inside it. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div
+          data-node-count={nodeIds.length}
+          data-testid={TEST_IDS.CANVAS_STAGE_CONTAINER}
+          ref={stageContainerRef}
+          aria-busy={isStageMasked}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            overflow: 'hidden',
+            opacity: isStageMasked ? 0 : 1,
+            pointerEvents: isStageMasked ? 'none' : undefined,
+          }}
+        >
+          {hasStageSize ? (
+            <Stage
+              ref={konvaStageRef}
+              width={size.width}
+              height={size.height}
+              x={viewport.x}
+              y={viewport.y}
+              scaleX={viewport.scale}
+              scaleY={viewport.scale}
+              draggable={canUseViewport && !isSelecting}
+              onDragMove={handleStageDrag}
+              onDragEnd={handleStageDrag}
+              onWheel={handleStageWheel}
+              onMouseDown={handleStagePointerDown}
+              onDblClick={handleStageDoubleClick}
+              onDblTap={handleStageDoubleClick}
+              onMouseMove={handleStageMouseMove}
+              onMouseUp={handleStageMouseUp}
+              onTouchStart={handleStageTouchStart}
+            >
+              {backgroundLayer ? (
+                <Layer listening={false}>{backgroundLayer}</Layer>
+              ) : null}
+              <Layer listening={false}>
+                <CanvasEdges />
               </Layer>
-            ) : null}
-          </Stage>
-        ) : null}
-        {showChrome && canUseViewport ? (
-          <>
-            <CanvasViewportPanel
-              canFitView={canFitView}
-              canZoomIn={canZoomIn}
-              canZoomOut={canZoomOut}
-              isLayoutPending={isLayoutPending}
-              onFitView={fitView}
-              onLayout={handleLayoutGraph}
-              onZoomIn={zoomIn}
-              onZoomOut={zoomOut}
-              showEditActions={canEditCanvas}
-            />
-            {canEditCanvas ? (
-              <>
-                {showNodeToolbar ? <SelectedNodeToolbar /> : null}
-                {inlineEditor === undefined ? (
-                  <LexicalOverlayWrapper />
-                ) : (
-                  inlineEditor
-                )}
-              </>
-            ) : null}
-          </>
+              <Layer listening={canEditCanvas}>
+                {nodeIds.map((id: NodeId) => (
+                  <RichTextNode
+                    key={id}
+                    nodeId={id}
+                    onDragEnd={handleNodeDragEnd}
+                    readOnly={!canEditCanvas}
+                  />
+                ))}
+              </Layer>
+              <Layer listening={false}>
+                {nodeIds.map((id: NodeId) => (
+                  <RichTextNodeText key={id} nodeId={id} />
+                ))}
+              </Layer>
+              {canEditCanvas ? (
+                // Single overlay layer for all edit-mode visuals: transformer
+                // controls, selected-node frame, marquee, and helper lines.
+                // Each Konva layer is a separate <canvas> element with its own
+                // memory + composite cost; keeping the total ≤5 matches
+                // Konva's recommendation.
+                <Layer>
+                  <SelectedNodesFrame />
+                  {nodeIds.map((id: NodeId) => (
+                    <RichTextNodeControls key={id} nodeId={id} />
+                  ))}
+                  {selectionRect && (
+                    <Rect
+                      x={selectionRect.x}
+                      y={selectionRect.y}
+                      width={selectionRect.width}
+                      height={selectionRect.height}
+                      fill={CANVAS_MARQUEE_FILL}
+                      stroke={CANVAS_SELECT_COLOR}
+                      strokeWidth={1}
+                      strokeScaleEnabled={false}
+                      perfectDrawEnabled={false}
+                      listening={false}
+                    />
+                  )}
+                  <CanvasHelperLines viewport={viewport} stageSize={size} />
+                </Layer>
+              ) : null}
+            </Stage>
+          ) : null}
+          {showChrome && canUseViewport ? (
+            <>
+              <CanvasViewportPanel
+                canFitView={canFitView}
+                canZoomIn={canZoomIn}
+                canZoomOut={canZoomOut}
+                isFullscreen={isFullscreen}
+                isLayoutPending={isLayoutPending}
+                onFitView={handleFitView}
+                onLayout={handleLayout}
+                onToggleFullscreen={
+                  showFullscreenToggle ? toggleFullscreen : undefined
+                }
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+                showEditActions={showChromeEditActions ?? canEditCanvas}
+              />
+              {onExportOpenChange ? (
+                <CanvasExportDialog
+                  open={exportOpen}
+                  onOpenChange={onExportOpenChange}
+                  stageRef={konvaStageRef}
+                />
+              ) : null}
+              {canEditCanvas ? (
+                <>
+                  {showNodeToolbar ? <SelectedNodeToolbar /> : null}
+                  {inlineEditor === undefined ? (
+                    <LexicalOverlayWrapper />
+                  ) : (
+                    inlineEditor
+                  )}
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+        {isContentPending || isLayoutPending ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background">
+            <div className="size-5 animate-spin rounded-full border-2 border-border border-t-foreground" />
+          </div>
         ) : null}
       </div>
     </div>

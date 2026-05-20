@@ -1,9 +1,6 @@
 import { useIsMutating, useMutation } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
-import {
-  useCanvasActions,
-  useCanvasSnapshotGetters,
-} from '@/store/canvasStore'
+import { useCanvasActions, useCanvasSnapshotGetters } from '@/store/canvasStore'
 import { layoutCanvasGraph } from '../layout.functions'
 import { getCanvasFitViewportForFrames } from '../fitView'
 
@@ -20,7 +17,7 @@ export const CANVAS_LAYOUT_MUTATION_KEY = ['canvas-layout'] as const
  * the viewport to the new node positions.
  */
 export function useCanvasLayout(stageSize: StageSize) {
-  const { applyGraphLayout, setViewport } = useCanvasActions()
+  const { applyGraphLayout } = useCanvasActions()
   const { getActiveCanvasTabIdSnapshot, getCanvasLayoutSnapshot } =
     useCanvasSnapshotGetters()
   const layoutCanvas = useServerFn(layoutCanvasGraph)
@@ -37,15 +34,11 @@ export function useCanvasLayout(stageSize: StageSize) {
       return { layout, tabId }
     },
     onSuccess: ({ layout, tabId }) => {
-      applyGraphLayout(layout, { tabId })
-
       const nextViewport = getCanvasFitViewportForFrames(
         layout.nodeFrames,
         stageSize,
       )
-      if (nextViewport) {
-        setViewport(nextViewport, { tabId })
-      }
+      applyGraphLayout(layout, { tabId, viewport: nextViewport })
     },
   })
 

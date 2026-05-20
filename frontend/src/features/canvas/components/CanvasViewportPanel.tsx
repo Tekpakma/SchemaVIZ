@@ -2,6 +2,8 @@ import { memo } from 'react'
 import {
   BracesIcon,
   MagnetIcon,
+  ExpandIcon,
+  ShrinkIcon,
   ScanIcon,
   WorkflowIcon,
   ZoomInIcon,
@@ -17,9 +19,11 @@ type CanvasViewportPanelProps = {
   canFitView: boolean
   canZoomIn: boolean
   canZoomOut: boolean
+  isFullscreen?: boolean
   isLayoutPending: boolean
   onFitView: () => void
   onLayout: () => void
+  onToggleFullscreen?: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   showEditActions?: boolean
@@ -60,9 +64,11 @@ export const CanvasViewportPanel = memo(function CanvasViewportPanel({
   canFitView,
   canZoomIn,
   canZoomOut,
+  isFullscreen = false,
   isLayoutPending,
   onFitView,
   onLayout,
+  onToggleFullscreen,
   onZoomIn,
   onZoomOut,
   showEditActions = true,
@@ -111,6 +117,23 @@ export const CanvasViewportPanel = memo(function CanvasViewportPanel({
           <HelperLinesButton />
           <div className="h-px bg-border" />
           <ReferenceValuesButton />
+        </>
+      ) : null}
+      {onToggleFullscreen ? (
+        <>
+          <div className="h-px bg-border" />
+          <ViewportPanelButton
+            label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            disabled={false}
+            pressed={isFullscreen}
+            onClick={onToggleFullscreen}
+          >
+            {isFullscreen ? (
+              <ShrinkIcon className="size-4" />
+            ) : (
+              <ExpandIcon className="size-4" />
+            )}
+          </ViewportPanelButton>
         </>
       ) : null}
     </div>

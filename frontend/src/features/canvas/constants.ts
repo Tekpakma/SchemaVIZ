@@ -9,7 +9,7 @@ export const CANVAS_INITIAL_STAGE_SIZE = {
   height: 600,
 }
 
-export const CANVAS_MIN_SCALE = 0.25
+export const CANVAS_MIN_SCALE = 0.125
 export const CANVAS_MAX_SCALE = 4
 export const CANVAS_SCALE_STEP = 1.06
 export const CANVAS_HELPER_LINE_SNAP_RADIUS = 6

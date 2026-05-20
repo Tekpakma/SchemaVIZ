@@ -29,10 +29,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy the Nitro build output and the ELK worker used by server-side layout.
+# Copy only the Nitro build output (elkjs is traced via traceDeps in vite.config.ts)
 COPY --from=build /app/.output ./.output
-COPY --from=build /app/node_modules/elkjs/package.json ./node_modules/elkjs/package.json
-COPY --from=build /app/node_modules/elkjs/lib/elk-worker.min.js ./node_modules/elkjs/lib/elk-worker.min.js
 
 EXPOSE 3000
 

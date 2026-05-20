@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Loader2, Save, UploadCloud } from 'lucide-react'
+import { ArrowLeft, DownloadIcon, Loader2, Save, UploadCloud } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -11,12 +11,14 @@ type BuilderHeaderProps = {
   title: string
   onPublish: () => void
   onSave: () => void
+  onShare: () => void
   onTitleChange: (title: string) => void
 }
 
 export function BuilderHeader({
   onPublish,
   onSave,
+  onShare,
   onTitleChange,
   saveError,
   saving = false,
@@ -64,6 +66,15 @@ export function BuilderHeader({
             <Save className="size-3.5" />
           )}
           {saving ? t('builder.header.saving') : t('builder.header.save')}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-[13px]"
+          onClick={onShare}
+        >
+          <DownloadIcon className="size-3.5" />
+          {t('builder.header.share')}
         </Button>
         <Button size="sm" className="gap-1.5 text-[13px]" onClick={onPublish}>
           <UploadCloud className="size-3.5" />

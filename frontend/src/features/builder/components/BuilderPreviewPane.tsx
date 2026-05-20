@@ -36,8 +36,10 @@ type BuilderPreviewPaneProps = {
   activeExampleId: string | null
   activeStepKind: RecipeStepKind
   examples: ExampleRecord[]
+  exportOpen?: boolean
   models: RecipeModel[]
   onCommitNodeText?: (commit: BuilderPreviewCommit) => void
+  onExportOpenChange?: (open: boolean) => void
   onNodeResize?: (resize: BuilderPreviewResize) => void
   onNodeSelect?: (nodeId: string | null) => void
   recipe: RecipeData
@@ -78,6 +80,15 @@ function getInteractionMode(
   return stepKind === 'style' ? 'edit' : 'viewport'
 }
 
+/**
+ * Steps 1–5 use deterministic client-side grid positions (no ELK).
+ * Step 6 (layout) runs the real ELK algorithm so users can preview
+ * the effect of algorithm/direction changes.
+ */
+function shouldAutoLayout(stepKind: RecipeStepKind): boolean {
+  return stepKind === 'layout'
+}
+
 function getStartModel(models: RecipeModel[]): RecipeModel | undefined {
   return models[0]
 }
@@ -92,8 +103,10 @@ export function BuilderPreviewPane({
   activeExampleId,
   activeStepKind,
   examples,
+  exportOpen,
   models,
   onCommitNodeText,
+  onExportOpenChange,
   onNodeResize,
   onNodeSelect,
   recipe,
@@ -101,6 +114,7 @@ export function BuilderPreviewPane({
   const { t } = useTranslation()
   const showEdges = shouldShowEdges(activeStepKind)
   const interactionMode = getInteractionMode(activeStepKind)
+  const autoLayout = shouldAutoLayout(activeStepKind)
   const layerCount = t('builder.preview.layerCount', {
     count: recipe.layers.length,
   })
@@ -270,8 +284,11 @@ export function BuilderPreviewPane({
             {t('builder.preview.retry')}
           </Button>
           <BuilderPreview
+            autoLayout={autoLayout}
             className="min-h-0 flex-1"
+            exportOpen={exportOpen}
             interactionMode="viewport"
+            onExportOpenChange={onExportOpenChange}
             recipe={recipe}
             showEdges={showEdges}
           />
@@ -280,9 +297,12 @@ export function BuilderPreviewPane({
 
       {isResolving && generationQuery.data && (
         <BuilderPreview
+          autoLayout
           className="min-h-0 flex-1"
+          exportOpen={exportOpen}
           generationResponse={generationQuery.data}
           interactionMode="viewport"
+          onExportOpenChange={onExportOpenChange}
           recipe={recipe}
           showEdges
         />
@@ -290,9 +310,12 @@ export function BuilderPreviewPane({
 
       {!isResolving && (
         <BuilderPreview
+          autoLayout={autoLayout}
           className="min-h-0 flex-1"
+          exportOpen={exportOpen}
           interactionMode={interactionMode}
           onCommitNodeText={onCommitNodeText}
+          onExportOpenChange={onExportOpenChange}
           onNodeResize={onNodeResize}
           onNodeSelect={onNodeSelect}
           recipe={recipe}

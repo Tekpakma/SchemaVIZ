@@ -15,7 +15,12 @@ const config = defineConfig({
     devtools(),
     tailwindcss(),
     tanstackStart(),
-    nitro({ preset: 'bun' }),
+    nitro({
+      preset: 'bun',
+      // elkjs/lib/elk-worker.min.js is loaded via require.resolve() at runtime
+      // for the Web Worker. Full-trace copies the package into .output/node_modules/.
+      traceDeps: ['elkjs*'],
+    }),
     viteReact(),
     svgr(),
     babel({ presets: [reactCompilerPreset()] }),

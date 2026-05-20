@@ -94,6 +94,13 @@ const TARGET_PORT_SIDE_BY_FLOW_DIRECTION: Record<
 
 const SCHEMA_GROUP_PREFIX = 'schema-group:'
 
+/** Directional algorithms (layered, mrtree) use elk.direction + fixed-side ports.
+ *  Non-directional algorithms (radial, force) ignore direction and need free ports. */
+function isDirectionalAlgorithm(layoutOptions?: LayoutOptions): boolean {
+  const algorithm = layoutOptions?.['elk.algorithm']
+  return !algorithm || algorithm === 'layered' || algorithm === 'mrtree'
+}
+
 function getElkDirectionForCanvasFlowDirection(
   flowDirection: CanvasFlowDirection,
 ): ElkDirection {
@@ -356,7 +363,11 @@ function getDirectChildIds(input: CanvasLayoutInput, parentId: NodeId) {
 }
 
 /** Recursively converts a canvas node subtree into an ELK node tree and attaches fixed-side ports for routing. */
-function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
+function createElkNode(
+  input: CanvasLayoutInput,
+  node: CanvasNode,
+  directional: boolean,
+): ElkNode {
   let children = R.pipe(
     getDirectChildIds(input, node.id),
     R.flatMap((childId) => {
@@ -365,12 +376,12 @@ function createElkNode(input: CanvasLayoutInput, node: CanvasNode): ElkNode {
         return []
       }
 
-      return [createElkNode(input, childNode)]
+      return [createElkNode(input, childNode, directional)]
     }),
   )
 
   const layoutOptions: LayoutOptions = {
-    [ELK_PORT_CONSTRAINTS_OPTION]: 'FIXED_SIDE',
+    [ELK_PORT_CONSTRAINTS_OPTION]: directional ? 'FIXED_SIDE' : 'FREE',
   }
   let width = node.width
   let height = node.height
@@ -437,23 +448,32 @@ function createElkEdge(
   flowDirection: CanvasFlowDirection,
   layoutOptions?: LayoutOptions,
 ): ElkExtendedEdge {
-  const sourceSide = resolveEdgePortSide(
-    edge.sourcePort,
-    'source',
-    flowDirection,
-    layoutOptions,
-  )
-  const targetSide = resolveEdgePortSide(
-    edge.targetPort,
-    'target',
-    flowDirection,
-    layoutOptions,
-  )
+  const directional = isDirectionalAlgorithm(layoutOptions)
+
+  // Non-directional algorithms (radial, force): connect edges directly to
+  // node IDs so ELK picks the best attachment point freely.
+  // Directional algorithms: route through fixed-side ports.
+  const sources = directional
+    ? [
+        createElkPortId(
+          edge.sourceNodeId,
+          resolveEdgePortSide(edge.sourcePort, 'source', flowDirection, layoutOptions),
+        ),
+      ]
+    : [edge.sourceNodeId]
+  const targets = directional
+    ? [
+        createElkPortId(
+          edge.targetNodeId,
+          resolveEdgePortSide(edge.targetPort, 'target', flowDirection, layoutOptions),
+        ),
+      ]
+    : [edge.targetNodeId]
 
   return {
     id: edge.id,
-    sources: [createElkPortId(edge.sourceNodeId, sourceSide)],
-    targets: [createElkPortId(edge.targetNodeId, targetSide)],
+    sources,
+    targets,
     ...(edge.label
       ? {
           labels: [
@@ -477,6 +497,7 @@ export function createElkGraph(input: CanvasLayoutInput): ElkNode {
   const parentNodeIdByNodeId = getParentNodeIdByNodeId(
     Object.values(input.nodesById),
   )
+  const directional = isDirectionalAlgorithm(input.layoutOptions)
   const rootChildren = R.pipe(
     input.nodeOrder,
     R.flatMap((nodeId) => {
@@ -485,7 +506,7 @@ export function createElkGraph(input: CanvasLayoutInput): ElkNode {
         return []
       }
 
-      return [createElkNode(input, node)]
+      return [createElkNode(input, node, directional)]
     }),
   )
 
@@ -501,13 +522,21 @@ export function createElkGraph(input: CanvasLayoutInput): ElkNode {
     }),
   )
 
+  // Directional algorithms get Layered defaults as base + explicit direction.
+  // Non-directional algorithms (radial, force) use only their own config —
+  // Layered defaults (elk.direction, elk.edgeRouting, layered.* spacing)
+  // would conflict with how radial/force arrange nodes.
+  const rootLayoutOptions: LayoutOptions = directional
+    ? {
+        ...DEFAULT_ELK_LAYOUT_OPTIONS,
+        ...input.layoutOptions,
+        'elk.direction': getElkDirectionForCanvasFlowDirection(flowDirection),
+      }
+    : { ...input.layoutOptions }
+
   return {
     id: 'root',
-    layoutOptions: {
-      ...DEFAULT_ELK_LAYOUT_OPTIONS,
-      ...input.layoutOptions,
-      'elk.direction': getElkDirectionForCanvasFlowDirection(flowDirection),
-    },
+    layoutOptions: rootLayoutOptions,
     children: rootChildren,
     edges,
   }

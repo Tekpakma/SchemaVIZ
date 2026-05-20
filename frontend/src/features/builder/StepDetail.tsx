@@ -3,7 +3,6 @@ import type { RecipeData, RecipeStepKind } from './types'
 import { ModelsStep } from './steps/ModelsStep'
 import { TraversalStep } from './steps/TraversalStep'
 import { FiltersStep } from './steps/FiltersStep'
-import { GroupingStep } from './steps/GroupingStep'
 import { StyleStep } from './steps/StyleStep'
 import { LayoutStep } from './steps/LayoutStep'
 
@@ -20,10 +19,10 @@ interface StepDetailProps {
     | 'removeGroupRule'
     | 'removeLayer'
     | 'removeModel'
+    | 'renameLayer'
     | 'reorderModels'
     | 'setLayoutAlgorithm'
     | 'setLayoutDirection'
-    | 'setGroupLayout'
     | 'setModelLayer'
     | 'setModelStyleTemplate'
     | 'setStyleDraft'
@@ -67,16 +66,6 @@ export function StepDetail({
           models={recipe.models}
         />
       )
-    case 'grouping':
-      return (
-        <GroupingStep
-          actions={actions}
-          edges={recipe.edges}
-          groupLayout={recipe.groupLayout}
-          groupRules={recipe.groupRules}
-          models={recipe.models}
-        />
-      )
     case 'style':
       return (
         <StyleStep
@@ -91,13 +80,12 @@ export function StepDetail({
     case 'layout':
       return (
         <LayoutStep
-          groupLayout={recipe.groupLayout}
-          groupLayoutEnabled={recipe.groupRules.some(
-            (rule) => rule.mode === 'group',
-          )}
+          actions={actions}
+          edges={recipe.edges}
+          groupRules={recipe.groupRules}
           layoutDirection={recipe.layoutDirection}
+          models={recipe.models}
           selected={recipe.layoutAlgorithm}
-          onGroupLayoutChange={actions.setGroupLayout}
           onLayoutDirectionChange={actions.setLayoutDirection}
           onSelect={actions.setLayoutAlgorithm}
         />

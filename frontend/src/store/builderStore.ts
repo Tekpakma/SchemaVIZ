@@ -46,18 +46,12 @@ const RECIPE_STEPS: RecipeStep[] = [
   },
   {
     id: 's4',
-    kind: 'grouping',
-    title: 'builder.steps.grouping.title',
-    detail: 'builder.steps.grouping.detail',
-  },
-  {
-    id: 's5',
     kind: 'style',
     title: 'builder.steps.style.title',
     detail: 'builder.steps.style.detail',
   },
   {
-    id: 's6',
+    id: 's5',
     kind: 'layout',
     title: 'builder.steps.layout.title',
     detail: 'builder.steps.layout.detail',
@@ -87,6 +81,7 @@ type BuilderActions = {
 
   addLayer: (tabId: WorkbenchTabId, layer: RecipeLayer) => void
   removeLayer: (tabId: WorkbenchTabId, id: string) => void
+  renameLayer: (tabId: WorkbenchTabId, id: string, label: string) => void
   reorderLayers: (tabId: WorkbenchTabId, layers: RecipeLayer[]) => void
   addModel: (tabId: WorkbenchTabId, model: RecipeModel) => void
   removeModel: (tabId: WorkbenchTabId, id: string) => void
@@ -426,11 +421,6 @@ const useBuilderStore = create<BuilderState>()(
                 (layer) => layer.id !== id,
               )
 
-              // Relabel remaining layers sequentially: L1, L2, L3...
-              for (let i = 0; i < document.recipe.layers.length; i++) {
-                document.recipe.layers[i]!.label = `L${i + 1}`
-              }
-
               document.recipe.models = normalizeModelsForLayerRules(
                 document.recipe,
                 document.recipe.models.map((model) =>
@@ -442,6 +432,17 @@ const useBuilderStore = create<BuilderState>()(
             },
             false,
             'builder/removeLayer',
+          ),
+
+        renameLayer: (tabId, id, label) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              const layer = document.recipe.layers.find((l) => l.id === id)
+              if (layer) layer.label = label
+            },
+            false,
+            'builder/renameLayer',
           ),
 
         reorderLayers: (tabId, layers) =>

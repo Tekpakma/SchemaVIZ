@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Text as KonvaText } from 'react-konva'
 
@@ -131,72 +132,86 @@ function BuilderPreviewAutoLayout({
   layoutAlgorithm,
   layoutDirection,
   layoutKey,
+  layoutSignature,
   nodeCount,
+  onLayoutSettled,
 }: {
   layoutAlgorithm: RecipeData['layoutAlgorithm']
   layoutDirection: RecipeData['layoutDirection']
   layoutKey: string
+  layoutSignature: string
   nodeCount: number
+  onLayoutSettled: (layoutSignature: string) => void
 }) {
-  const { applyGraphLayout, setViewport } = useCanvasActions()
+  const { applyGraphLayout } = useCanvasActions()
   const { getActiveCanvasTabIdSnapshot, getCanvasLayoutSnapshot } =
     useCanvasSnapshotGetters()
   const stageSize = useCanvasStageSizeValue()
   const runLayout = useServerFn(layoutCanvasGraph)
-  const inflightRef = useRef(false)
   const layoutOptions = useMemo(
     () => getBuilderPreviewLayoutOptions(layoutAlgorithm),
     [layoutAlgorithm],
   )
-  const flowDirection = getBuilderPreviewFlowDirection(layoutDirection)
+  const flowDirection = useMemo(
+    () => getBuilderPreviewFlowDirection(layoutDirection),
+    [layoutDirection],
+  )
+
+  // useMutation gives us automatic last-write-wins: calling mutate()
+  // while a previous call is in-flight resets the mutation state so the
+  // stale .onSuccess never fires for the superseded request.
+  const { mutate: runAutoLayoutMutation } = useMutation({
+    mutationFn: (input: {
+      layoutSignature: string
+      tabId: string
+      snapshot: ReturnType<typeof getCanvasLayoutSnapshot>
+    }) =>
+      runLayout({
+        data: {
+          ...input.snapshot,
+          flowDirection,
+          layoutOptions,
+        },
+      }),
+    onSuccess: (
+      result,
+      { layoutSignature: completedLayoutSignature, tabId },
+    ) => {
+      const fitWorld =
+        stageSize.width > 0 && stageSize.height > 0
+          ? stageSize
+          : BUILDER_PREVIEW_FIT_WORLD
+      const nextViewport = getCanvasFitViewportForFrames(
+        result.nodeFrames,
+        fitWorld,
+      )
+      applyGraphLayout(result, { tabId, viewport: nextViewport })
+      onLayoutSettled(completedLayoutSignature)
+    },
+    onError: (_error, { layoutSignature: completedLayoutSignature }) => {
+      onLayoutSettled(completedLayoutSignature)
+    },
+  })
 
   useEffect(() => {
-    if (nodeCount === 0 || inflightRef.current) return
+    if (nodeCount === 0) return
     if (stageSize.width === 0 || stageSize.height === 0) return
-
-    inflightRef.current = true
 
     const tabId = getActiveCanvasTabIdSnapshot()
     const snapshot = getCanvasLayoutSnapshot(tabId)
 
-    runLayout({
-      data: {
-        ...snapshot,
-        flowDirection,
-        layoutOptions,
-      },
-    })
-      .then((result) => {
-        applyGraphLayout(result, { tabId })
-
-        // Use the real DOM stage size so the fit works correctly in
-        // both the full builder preview and small card thumbnails.
-        const fitWorld =
-          stageSize.width > 0 && stageSize.height > 0
-            ? stageSize
-            : BUILDER_PREVIEW_FIT_WORLD
-        const nextViewport = getCanvasFitViewportForFrames(
-          result.nodeFrames,
-          fitWorld,
-        )
-        if (nextViewport) {
-          setViewport(nextViewport, { tabId })
-        }
-      })
-      .finally(() => {
-        inflightRef.current = false
-      })
+    runAutoLayoutMutation({ layoutSignature, tabId, snapshot })
   }, [
     layoutKey,
+    layoutSignature,
     nodeCount,
     flowDirection,
     layoutOptions,
-    applyGraphLayout,
-    setViewport,
+    onLayoutSettled,
+    runAutoLayoutMutation,
     stageSize,
     getActiveCanvasTabIdSnapshot,
     getCanvasLayoutSnapshot,
-    runLayout,
   ])
 
   return null
@@ -395,25 +410,39 @@ function BuilderPreviewCanvas({
   layoutDirection,
   graph,
   autoLayout,
+  exportOpen,
   interactionMode,
   layers,
   nodeCount,
   onCommitNodeText,
+  onExportOpenChange,
   onNodeResize,
   onNodeSelect,
 }: {
-  graph: { nodes: CanvasNode[]; edges: CanvasEdge[] }
+  graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; key: string }
   layoutAlgorithm: RecipeData['layoutAlgorithm']
   layoutDirection: RecipeData['layoutDirection']
   autoLayout: boolean
+  exportOpen?: boolean
   interactionMode: 'edit' | 'viewport' | 'static'
   layers: BuilderPreviewCanvasLayer[]
   nodeCount: number
   onCommitNodeText?: (commit: BuilderPreviewCommit) => void
+  onExportOpenChange?: (open: boolean) => void
   onNodeResize?: (resize: BuilderPreviewResize) => void
   onNodeSelect?: (nodeId: string | null) => void
 }) {
   const fitWorld = useMemo(() => getGraphFitWorld(graph.nodes), [graph.nodes])
+  const layoutSignature = `${graph.key}:${layoutAlgorithm}:${layoutDirection}:${nodeCount}`
+  const [settledLayoutSignature, setSettledLayoutSignature] = useState<
+    string | null
+  >(null)
+  const isAutoLayoutPending =
+    autoLayout && nodeCount > 0 && settledLayoutSignature !== layoutSignature
+
+  useEffect(() => {
+    if (!autoLayout) setSettledLayoutSignature(null)
+  }, [autoLayout])
 
   return (
     <CanvasHelperLinesProvider>
@@ -423,7 +452,9 @@ function BuilderPreviewCanvas({
           layoutAlgorithm={layoutAlgorithm}
           layoutDirection={layoutDirection}
           layoutKey={graph.key}
+          layoutSignature={layoutSignature}
           nodeCount={nodeCount}
+          onLayoutSettled={setSettledLayoutSignature}
         />
       ) : null}
       <SelectionBridge onNodeSelect={onNodeSelect} />
@@ -439,11 +470,16 @@ function BuilderPreviewCanvas({
             <BuilderPreviewLayerScaffold layers={layers} />
           ) : undefined
         }
+        exportOpen={exportOpen}
         fitWorld={fitWorld}
         inlineEditor={<BuilderInlineEditor onCommit={onCommitNodeText} />}
         interactionMode={interactionMode}
+        isContentPending={isAutoLayoutPending}
+        onExportOpenChange={onExportOpenChange}
         seedDefaultNode={false}
         showChrome
+        showChromeEditActions={false}
+        showFullscreenToggle
         showNodeToolbar={false}
         showTabBar={false}
       />
@@ -456,32 +492,57 @@ function BuilderPreviewCanvas({
 // ---------------------------------------------------------------------------
 
 export function BuilderPreview({
+  autoLayout = true,
   className,
+  exportOpen,
   generationResponse,
   interactionMode = 'viewport',
   onCommitNodeText,
+  onExportOpenChange,
   onNodeResize,
   onNodeSelect,
   recipe,
   showEdges = true,
 }: {
+  autoLayout?: boolean
   className?: string
+  exportOpen?: boolean
   generationResponse?: GenerationRunResponse
   interactionMode?: 'edit' | 'viewport' | 'static'
   onCommitNodeText?: (commit: BuilderPreviewCommit) => void
+  onExportOpenChange?: (open: boolean) => void
   onNodeResize?: (resize: BuilderPreviewResize) => void
   onNodeSelect?: (nodeId: string | null) => void
   recipe: RecipeData
   showEdges?: boolean
 }) {
-  const graph = useMemo(
-    () =>
-      generationResponse
-        ? getGenerationPreviewCanvasGraph(generationResponse, recipe)
-        : getBuilderPreviewCanvasGraph(recipe, { showEdges }),
-    [generationResponse, recipe, showEdges],
-  )
-  const autoLayout = true
+  const graph = useMemo(() => {
+    if (generationResponse) {
+      return getGenerationPreviewCanvasGraph(generationResponse, recipe)
+    }
+
+    // Static preview (steps 1–5): flat layout (no group nesting — ELK
+    // isn't running to size containers) and strip pre-computed routePoints
+    // so the canvas draws simple fallback lines instead of overlapping
+    // orthogonal routes.
+    const flatLayout = !autoLayout
+    const base = getBuilderPreviewCanvasGraph(recipe, {
+      flatLayout,
+      showEdges,
+    })
+
+    if (flatLayout) {
+      return {
+        ...base,
+        edges: base.edges.map((edge) => {
+          const { routePoints, labelPoint, ...rest } = edge
+          return rest
+        }),
+      }
+    }
+
+    return base
+  }, [autoLayout, generationResponse, recipe, showEdges])
 
   // No remount key. The CanvasStoreProvider is mounted ONCE for the
   // lifetime of this BuilderPreview render. Recipe changes flow into the
@@ -494,6 +555,7 @@ export function BuilderPreview({
       <CanvasStoreProvider initialGraph={graph}>
         <BuilderPreviewCanvas
           autoLayout={autoLayout}
+          exportOpen={exportOpen}
           graph={graph}
           interactionMode={interactionMode}
           layoutAlgorithm={recipe.layoutAlgorithm}
@@ -501,6 +563,7 @@ export function BuilderPreview({
           layers={graph.layers}
           nodeCount={graph.nodes.length}
           onCommitNodeText={onCommitNodeText}
+          onExportOpenChange={onExportOpenChange}
           onNodeResize={onNodeResize}
           onNodeSelect={onNodeSelect}
         />

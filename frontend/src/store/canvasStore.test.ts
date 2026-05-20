@@ -134,6 +134,33 @@ describe('canvasStore graph layout actions', () => {
     ])
   })
 
+  it('can apply graph layout and fit viewport in one store write', () => {
+    store.getState().actions.applyGraphLayout(
+      {
+        nodeFrames: [
+          {
+            id: 'a',
+            x: 20,
+            y: 30,
+            width: 120,
+            height: 90,
+          },
+        ],
+        edgeRoutes: [],
+      },
+      { viewport: { x: 12, y: 24, scale: 0.75 } },
+    )
+
+    const snapshot = getCanvasExportSnapshot()
+    expect(snapshot.nodesById.a).toMatchObject({
+      x: 20,
+      y: 30,
+      width: 120,
+      height: 90,
+    })
+    expect(snapshot.viewport).toEqual({ x: 12, y: 24, scale: 0.75 })
+  })
+
   it('clears connected edge routes and materializes fixed ports when a node moves', () => {
     store.getState().actions.moveNode({
       id: 'a',

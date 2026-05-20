@@ -421,6 +421,10 @@ type TargetTabOptions = {
   markDirty?: boolean
 }
 
+type ApplyGraphLayoutOptions = TargetTabOptions & {
+  viewport?: CanvasViewport | null
+}
+
 type ReconcileGraphOptions = TargetTabOptions & {
   preserveGeometry?: boolean
 }
@@ -479,7 +483,7 @@ type CanvasActions = {
   seedActiveDocument: (payload: SetGraphPayload) => void
   applyGraphLayout: (
     payload: CanvasGraphLayoutResult,
-    options?: TargetTabOptions,
+    options?: ApplyGraphLayoutOptions,
   ) => void
   setStageMounted: (isMounted: boolean) => void
   setStageSize: (stageSize: CanvasStageSize) => void
@@ -911,6 +915,12 @@ export const createCanvasStore = () =>
                   } else {
                     delete edge.labelPoint
                   }
+                }
+
+                if (options.viewport) {
+                  document.viewport.x = options.viewport.x
+                  document.viewport.y = options.viewport.y
+                  document.viewport.scale = options.viewport.scale
                 }
 
                 markTabDirty(state, tabId, options.markDirty)

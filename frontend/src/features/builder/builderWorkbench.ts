@@ -38,6 +38,7 @@ export type BuilderDocumentActions = {
   setTitle: (title: string) => void
   addLayer: (layer: RecipeLayer) => void
   removeLayer: (id: string) => void
+  renameLayer: (id: string, label: string) => void
   reorderLayers: (layers: RecipeLayer[]) => void
   addModel: (model: RecipeModel) => void
   removeModel: (id: string) => void
@@ -222,6 +223,10 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
         },
         removeLayer: (id: string) => {
           builderActions.removeLayer(tabId, id)
+          markDirty()
+        },
+        renameLayer: (id: string, label: string) => {
+          builderActions.renameLayer(tabId, id, label)
           markDirty()
         },
         reorderLayers: (layers: RecipeLayer[]) => {

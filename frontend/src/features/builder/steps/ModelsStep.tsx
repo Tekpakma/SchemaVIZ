@@ -8,10 +8,11 @@ import {
   GripVertical,
   InfoIcon,
   LayersIcon,
+  PencilIcon,
   PlusIcon,
   X,
 } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -31,6 +32,7 @@ interface ModelsStepProps {
     | 'addModel'
     | 'removeLayer'
     | 'removeModel'
+    | 'renameLayer'
     | 'reorderModels'
     | 'setModelLayer'
   >
@@ -245,6 +247,63 @@ function SortableModelRow({
   )
 }
 
+function EditableLayerTitle({
+  label,
+  onRename,
+}: {
+  label: string
+  onRename: (label: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(label)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const commit = useCallback(() => {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== label) {
+      onRename(trimmed)
+    } else {
+      setDraft(label)
+    }
+    setEditing(false)
+  }, [draft, label, onRename])
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        autoFocus
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') {
+            setDraft(label)
+            setEditing(false)
+          }
+        }}
+        className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0 text-[13.5px] font-semibold outline-none ring-1 ring-brand/40 focus:ring-2 focus:ring-brand"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(label)
+        setEditing(true)
+      }}
+      className="group/rename flex min-w-0 flex-1 items-center gap-1 truncate text-left"
+    >
+      <span className="truncate text-[13.5px] font-semibold">{label}</span>
+      <PencilIcon className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/rename:opacity-100" />
+    </button>
+  )
+}
+
 function LayerGroup({
   hasSchemaModels,
   index,
@@ -254,6 +313,7 @@ function LayerGroup({
   onAddModel,
   onRemoveLayer,
   onRemoveModel,
+  onRenameLayer,
 }: {
   hasSchemaModels: boolean
   index: number
@@ -263,6 +323,7 @@ function LayerGroup({
   onAddModel: (layerId: string) => void
   onRemoveLayer: (layerId: string) => void
   onRemoveModel: (modelId: string) => void
+  onRenameLayer: (layerId: string, label: string) => void
 }) {
   const { t } = useTranslation()
   const isStartLayer = index === 0
@@ -280,17 +341,18 @@ function LayerGroup({
       <div className="flex items-center gap-2 border-b border-border/70 pb-2">
         <span
           className={cn(
-            'rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold',
+            'shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold',
             isStartLayer
               ? 'bg-brand text-brand-foreground'
               : 'bg-brand/10 text-brand',
           )}
         >
-          {isStartLayer ? t('builder.models.startBadge') : layer.label}
+          {isStartLayer ? t('builder.models.startBadge') : `L${index + 1}`}
         </span>
-        <h3 className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
-          {title}
-        </h3>
+        <EditableLayerTitle
+          label={layer.label}
+          onRename={(label) => onRenameLayer(layer.id, label)}
+        />
         <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
           {t('builder.models.groupModelCount', { count: models.length })}
         </span>
@@ -398,10 +460,11 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
 
       let nextTargetLayerId = layerId
       if (!nextTargetLayerId) {
+        // Default "Add Model" button: always create a new layer so each
+        // model gets its own layer by default. The per-layer "+" buttons
+        // pass a specific layerId and skip this branch.
         if (startLayer && startLayerModels.length === 0) {
           nextTargetLayerId = startLayer.id
-        } else if (layers[1]) {
-          nextTargetLayerId = layers[1].id
         } else {
           const layer = createRecipeLayer(getNextLayerLabel(layers))
           actions.addLayer(layer)
@@ -496,6 +559,7 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
               onAddModel={openModelPickerForLayer}
               onRemoveLayer={actions.removeLayer}
               onRemoveModel={actions.removeModel}
+              onRenameLayer={actions.renameLayer}
             />
           ))}
         </div>

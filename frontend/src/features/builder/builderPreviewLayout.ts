@@ -327,6 +327,10 @@ function getBuilderPreviewGraphKey({
 }
 
 export type BuilderPreviewCanvasGraphOptions = {
+  /** When true, skip group nesting — all nodes render flat in their layer grid
+   *  positions. Use for the static preview (steps 1–5) where ELK doesn't run
+   *  and can't size group containers to fit children. */
+  flatLayout?: boolean
   showEdges?: boolean
 }
 
@@ -477,7 +481,7 @@ export function getBuilderPreviewCanvasGraph(
   recipe: RecipeData,
   options: BuilderPreviewCanvasGraphOptions = {},
 ): BuilderPreviewCanvasGraph {
-  const { showEdges = true } = options
+  const { flatLayout = false, showEdges = true } = options
   const columns = getBuilderPreviewColumns(recipe)
   const previewNodes = getBuilderPreviewNodes(recipe)
   const previewEdges = showEdges
@@ -486,8 +490,16 @@ export function getBuilderPreviewCanvasGraph(
   const filterCountByLayer = getFilterCountByLayer(recipe)
   const groupLayout = recipe.groupLayout
 
+  // In flat layout mode (static preview, no ELK), skip group nesting entirely.
+  // Without ELK, group containers can't be auto-sized to fit children.
   const { childToGroupParent, groupLayoutByParentId, groupParentIds } =
-    resolveGroupParents(recipe.groupRules, groupLayout, previewNodes)
+    flatLayout
+      ? {
+          childToGroupParent: new Map<string, string>(),
+          groupLayoutByParentId: new Map<string, CanvasGroupLayoutPolicy>(),
+          groupParentIds: new Set<string>(),
+        }
+      : resolveGroupParents(recipe.groupRules, groupLayout, previewNodes)
 
   const key = getBuilderPreviewGraphKey({
     columns,
