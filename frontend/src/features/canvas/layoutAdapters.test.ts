@@ -187,7 +187,7 @@ describe('layoutAdapters', () => {
     expect(graph.edges).toEqual([])
   })
 
-  it('delegates group child packing to a fixed group sublayout before ELK lays out the outer graph', () => {
+  it('delegates group child layout to ELK via SEPARATE_CHILDREN + rectpacking', () => {
     const childNodes: Array<CanvasNode> = Array.from(
       { length: 5 },
       (_, index) => ({
@@ -223,21 +223,76 @@ describe('layoutAdapters', () => {
     )
     const group = graph.children?.[0]
 
+    // Group sizing is now ELK's job — we don't preset width/height so ELK
+    // computes them from the rectpacking pass during layout.
     expect(group).toMatchObject({
       id: 'group',
-      width: 428,
-      height: 260,
       layoutOptions: {
-        'elk.algorithm': 'fixed',
+        'elk.algorithm': 'rectpacking',
+        'elk.hierarchyHandling': 'SEPARATE_CHILDREN',
+        'elk.aspectRatio': '1.35',
       },
     })
-    expect(group?.children).toMatchObject([
-      { id: 'child-1', x: 36, y: 36 },
-      { id: 'child-2', x: 164, y: 36 },
-      { id: 'child-3', x: 292, y: 36 },
-      { id: 'child-4', x: 36, y: 144 },
-      { id: 'child-5', x: 164, y: 144 },
+    expect(group?.width).toBeUndefined()
+    expect(group?.height).toBeUndefined()
+    expect(group?.children?.map((child) => child.id)).toEqual([
+      'child-1',
+      'child-2',
+      'child-3',
+      'child-4',
+      'child-5',
     ])
+  })
+
+  it('uses layered algorithm when group children have internal edges', () => {
+    const childNodes: Array<CanvasNode> = Array.from(
+      { length: 3 },
+      (_, index) => ({
+        ...baseNode,
+        id: `child-${index + 1}`,
+        parentGroupId: 'group',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 80,
+      }),
+    )
+    const nodes: Array<CanvasNode> = [
+      {
+        id: 'group',
+        kind: 'group',
+        shape: 'group',
+        layoutMode: 'auto',
+        x: 0,
+        y: 0,
+        width: 220,
+        height: 160,
+        lexicalJson: '',
+        html: '',
+        contentHeight: 0,
+        version: 1,
+      },
+      ...childNodes,
+    ]
+    const internalEdge: CanvasEdge = {
+      id: 'child-1-child-2',
+      sourceNodeId: 'child-1',
+      targetNodeId: 'child-2',
+      kind: 'relation',
+    }
+
+    const graph = createElkGraph(
+      createCanvasLayoutInputFromGraph(
+        { nodes, edges: [internalEdge] },
+        'LR',
+      ),
+    )
+    const group = graph.children?.[0]
+
+    expect(group?.layoutOptions).toMatchObject({
+      'elk.algorithm': 'layered',
+      'elk.hierarchyHandling': 'SEPARATE_CHILDREN',
+    })
   })
 
   it('creates fallback routes from flow-direction-based default sides', () => {
@@ -460,6 +515,46 @@ describe('layoutAdapters', () => {
       {
         id: 'edge',
         labelPoint: { x: 165, y: 95 },
+        points: [
+          { x: 100, y: 100 },
+          { x: 240, y: 100 },
+        ],
+      },
+    ])
+  })
+
+  it('ignores placeholder ELK edge label positions so route midpoint fallback can render labels', () => {
+    const laidOutGraph: ElkNode = {
+      id: 'root',
+      edges: [
+        {
+          id: 'edge',
+          sources: ['source'],
+          targets: ['target'],
+          labels: [
+            {
+              id: 'edge:label',
+              text: 'relates',
+              x: 0,
+              y: 0,
+              width: 30,
+              height: 14,
+            },
+          ],
+          sections: [
+            {
+              id: 'section',
+              startPoint: { x: 100, y: 100 },
+              endPoint: { x: 240, y: 100 },
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(createGraphLayoutResult(laidOutGraph).edgeRoutes).toEqual([
+      {
+        id: 'edge',
         points: [
           { x: 100, y: 100 },
           { x: 240, y: 100 },

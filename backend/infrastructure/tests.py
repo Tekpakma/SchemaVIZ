@@ -16,6 +16,7 @@ from infrastructure.models import (
     SecurityGroup,
     SecurityRule,
     Server,
+    ServerTemplate,
     Subnet,
 )
 
@@ -122,4 +123,26 @@ class GenerateFakeInfraCommandTests(TestCase):
         self.assertEqual(
             MonitoringAlert.objects.filter(server__hostname__startswith="test-bench-").count(),
             0,
+        )
+
+
+class SeedCanvasBenchmarkCommandTests(TestCase):
+    def test_seed_canvas_benchmark_creates_templates_for_preview_references(self):
+        call_command(
+            "seed_canvas_benchmark",
+            count=3,
+            reset=True,
+            stdout=StringIO(),
+        )
+
+        group = BusinessGroup.objects.get(name="BG-Benchmark-3")
+        providers = CloudProvider.objects.filter(
+            regions__networks__business_group=group,
+        ).distinct()
+
+        self.assertEqual(group.networks.count(), 3)
+        self.assertEqual(providers.count(), 3)
+        self.assertEqual(
+            ServerTemplate.objects.filter(provider__in=providers).count(),
+            3,
         )

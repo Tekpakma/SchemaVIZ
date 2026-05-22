@@ -1,5 +1,5 @@
 import { createStore, useStore } from 'zustand'
-import { createContext, useContext, useState, useMemo } from 'react'
+import { createContext, use, useMemo, useState } from 'react'
 import { devtools } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 import type {
@@ -560,6 +560,10 @@ function preserveEdgeRouteGeometry(
   return merged
 }
 
+function getNodeGroupLayoutSignature(node: CanvasNode) {
+  return node.kind === 'group' ? JSON.stringify(node.groupLayout ?? null) : ''
+}
+
 function createCanvasDocumentState({
   nodes = [],
   edges = [],
@@ -776,6 +780,19 @@ export const createCanvasStore = () =>
                     // Cheap structural fields the canvas reads
                     incoming.kind !== existing.kind ||
                     incoming.shape !== existing.shape ||
+                    incoming.parentGroupId !== existing.parentGroupId ||
+                    getNodeGroupLayoutSignature(incoming) !==
+                      getNodeGroupLayoutSignature(existing) ||
+                    ('appLabel' in incoming ? incoming.appLabel : undefined) !==
+                      ('appLabel' in existing ? existing.appLabel : undefined) ||
+                    ('modelName' in incoming
+                      ? incoming.modelName
+                      : undefined) !==
+                      ('modelName' in existing
+                        ? existing.modelName
+                        : undefined) ||
+                    ('recordId' in incoming ? incoming.recordId : undefined) !==
+                      ('recordId' in existing ? existing.recordId : undefined) ||
                     // Per-node style overrides (shape key, border/bg color)
                     incoming.styleOverrides?.shapeKey !==
                       existing.styleOverrides?.shapeKey ||
@@ -805,12 +822,15 @@ export const createCanvasStore = () =>
                   // incoming width/height — the new dimensions are
                   // intentional (shape defaults). Only preserve live
                   // geometry for pure layout-driven position updates.
+                  const hierarchyChanged =
+                    incoming.parentGroupId !== existing.parentGroupId
                   const keepGeometry = preserveGeometry && !contentChanged
+                  const keepPosition = preserveGeometry && !hierarchyChanged
 
                   mergedNodesById[incoming.id] = {
                     ...incoming,
-                    x: preserveGeometry ? existing.x : incoming.x,
-                    y: preserveGeometry ? existing.y : incoming.y,
+                    x: keepPosition ? existing.x : incoming.x,
+                    y: keepPosition ? existing.y : incoming.y,
                     width: keepGeometry ? existing.width : incoming.width,
                     height: keepGeometry ? existing.height : incoming.height,
                     version: existing.version + 1,
@@ -1465,13 +1485,13 @@ export function CanvasStoreProvider({
 export function useCanvasStoreContext<T>(
   selector: (state: CanvasState) => T,
 ): T {
-  const store = useContext(CanvasStoreContext)
+  const store = use(CanvasStoreContext)
   if (!store) throw new Error('Missing CanvasStoreProvider')
   return useStore(store, selector)
 }
 
 export function useCanvasStoreInstance() {
-  const store = useContext(CanvasStoreContext)
+  const store = use(CanvasStoreContext)
   if (!store) throw new Error('Missing CanvasStoreProvider')
   return store
 }

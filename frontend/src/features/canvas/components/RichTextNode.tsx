@@ -76,11 +76,7 @@ function drawCylinderScene(
   ctx.closePath()
 }
 
-function drawCloudScene(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-) {
+function drawCloudScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
   // Normalised cloud path scaled to (w, h)
   const sx = w / 120
   const sy = h / 55
@@ -96,11 +92,7 @@ function drawCloudScene(
   ctx.closePath()
 }
 
-function drawServerScene(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-) {
+function drawServerScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const r = 4
   const pad = 4
   const bayH = (h - 2 * pad) / 3
@@ -138,8 +130,7 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
   cornerRadius,
   shapeKey,
 }: RichTextNodeSurfaceProps) {
-  const isCustomShape =
-    shapeKey && shapeKey !== 'default' && shapeKey !== 'box'
+  const isCustomShape = shapeKey && shapeKey !== 'default' && shapeKey !== 'box'
 
   if (isCustomShape) {
     return (
@@ -331,6 +322,10 @@ export const RichTextNode = memo(function RichTextNode({
   if (!node || !shapeDefinition || editingNodeId === node.id) return null
 
   const isGroup = node.kind === 'group'
+  // Group children are positioned by ELK (rectpacking / layered / ...).
+  // Manual drag inside a group is deferred to a future per-child override
+  // layer; today only top-level nodes are drag-positionable.
+  const canDragNode = !readOnly && !node.parentGroupId
 
   const selectThisNode = (event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (readOnly) return
@@ -377,7 +372,7 @@ export const RichTextNode = memo(function RichTextNode({
     <Group
       x={node.x}
       y={node.y}
-      draggable={!readOnly && !node.parentGroupId}
+      draggable={canDragNode}
       onClick={selectThisNode}
       onTap={selectThisNode}
       onMouseDown={selectThisNode}
@@ -392,7 +387,7 @@ export const RichTextNode = memo(function RichTextNode({
         fill={fill}
         opacity={isGroup ? 0.16 : undefined}
         stroke={isGroup ? CANVAS_SELECT_COLOR : surfaceStroke}
-        dash={isGroup ? [6, 4] : undefined}
+        dash={isGroup ? [8, 4] : undefined}
         cornerRadius={shapeDefinition.cornerRadius}
         shapeKey={node.styleOverrides?.shapeKey}
       />

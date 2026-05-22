@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { ElkNode } from 'elkjs/lib/elk-api'
 
-import { createPackedGroupLayout } from './groupLayout'
-import type { CanvasGroupNode } from './model/types'
+import { resolveGroupLayoutOptions } from './groupLayout'
+import type { CanvasGroupLayoutPolicy, CanvasGroupNode } from './model/types'
 
 function createGroup(
-  overrides: Partial<CanvasGroupNode> = {},
+  overrides: Partial<CanvasGroupNode> & {
+    groupLayout?: CanvasGroupLayoutPolicy
+  } = {},
 ): CanvasGroupNode {
   return {
     id: 'group',
@@ -24,97 +25,112 @@ function createGroup(
   }
 }
 
-function createChildren(count: number): Array<ElkNode> {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `child-${index + 1}`,
-    width: 100,
-    height: 80,
-  }))
-}
+describe('resolveGroupLayoutOptions', () => {
+  it('auto + no internal edges → rectpacking with aspect ratio', () => {
+    const { layoutOptions, strategy } = resolveGroupLayoutOptions(
+      createGroup(),
+      false,
+    )
 
-describe('group layout', () => {
-  it('packs children into a deterministic grid and sizes the group', () => {
-    const layout = createPackedGroupLayout(createGroup(), createChildren(5))
-
-    expect(layout).toMatchObject({
-      width: 428,
-      height: 260,
-      layoutOptions: {
-        'elk.algorithm': 'fixed',
-        'elk.padding': '[top=36,left=36,bottom=36,right=36]',
-      },
+    expect(strategy).toBe('pack')
+    expect(layoutOptions).toMatchObject({
+      'elk.algorithm': 'rectpacking',
+      'elk.hierarchyHandling': 'SEPARATE_CHILDREN',
+      'elk.aspectRatio': '1.35',
+      'elk.spacing.nodeNode': '28',
+      'elk.padding': '[top=36,left=36,bottom=36,right=36]',
     })
-    expect(layout.children).toMatchObject([
-      { id: 'child-1', x: 36, y: 36 },
-      { id: 'child-2', x: 164, y: 36 },
-      { id: 'child-3', x: 292, y: 36 },
-      { id: 'child-4', x: 36, y: 144 },
-      { id: 'child-5', x: 164, y: 144 },
-    ])
+  })
+
+  it('auto + internal edges → layered (flow)', () => {
+    const { layoutOptions, strategy } = resolveGroupLayoutOptions(
+      createGroup(),
+      true,
+    )
+
+    expect(strategy).toBe('flow')
+    expect(layoutOptions).toMatchObject({
+      'elk.algorithm': 'layered',
+      'elk.hierarchyHandling': 'SEPARATE_CHILDREN',
+      'elk.edgeRouting': 'ORTHOGONAL',
+      'elk.direction': 'RIGHT',
+    })
+    expect(layoutOptions).not.toHaveProperty('elk.aspectRatio')
   })
 
   it('reserves label height as top padding', () => {
-    const layout = createPackedGroupLayout(
+    const { layoutOptions } = resolveGroupLayoutOptions(
       createGroup({ contentHeight: 28 }),
-      createChildren(1),
+      false,
     )
 
-    expect(layout.layoutOptions['elk.padding']).toBe(
+    expect(layoutOptions['elk.padding']).toBe(
       '[top=40,left=36,bottom=36,right=36]',
     )
-    expect(layout.children[0]).toMatchObject({ x: 36, y: 40 })
   })
 
-  it('supports policy-controlled max columns and gaps', () => {
-    const layout = createPackedGroupLayout(
+  it('honors explicit padding and gap overrides', () => {
+    const { layoutOptions } = resolveGroupLayoutOptions(
       createGroup({
         groupLayout: {
-          maxColumns: 2,
+          strategy: 'pack',
+          aspectRatio: 2,
           gapX: 12,
           gapY: 10,
-          padding: {
-            bottom: 20,
-            left: 16,
-            right: 18,
-            top: 14,
-          },
+          padding: { top: 14, right: 18, bottom: 20, left: 16 },
         },
       }),
-      createChildren(5),
+      false,
     )
 
-    expect(layout).toMatchObject({
-      width: 246,
-      height: 294,
+    expect(layoutOptions).toMatchObject({
+      'elk.algorithm': 'rectpacking',
+      'elk.aspectRatio': '2',
+      'elk.spacing.nodeNode': '12',
+      'elk.padding': '[top=14,left=16,bottom=20,right=18]',
     })
-    expect(layout.children).toMatchObject([
-      { id: 'child-1', x: 16, y: 14 },
-      { id: 'child-2', x: 128, y: 14 },
-      { id: 'child-3', x: 16, y: 104 },
-      { id: 'child-4', x: 128, y: 104 },
-      { id: 'child-5', x: 16, y: 194 },
-    ])
   })
 
-  it('keeps freeform child positions while still marking the group fixed for ELK', () => {
-    const layout = createPackedGroupLayout(
-      createGroup({ groupLayout: { mode: 'freeform' } }),
-      [
-        { id: 'a', x: 22, y: 33, width: 100, height: 80 },
-        { id: 'b', x: 180, y: 44, width: 100, height: 80 },
-      ],
+  it.each([
+    ['tree', 'mrtree'],
+    ['cluster', 'force'],
+    ['hub', 'radial'],
+    ['flow', 'layered'],
+    ['pack', 'rectpacking'],
+  ] as const)('explicit strategy %s → algorithm %s', (strategy, algorithm) => {
+    const { layoutOptions } = resolveGroupLayoutOptions(
+      createGroup({ groupLayout: { strategy } }),
+      false,
     )
 
-    expect(layout).toMatchObject({
-      width: 220,
-      height: 160,
-      layoutOptions: {
-        'elk.algorithm': 'fixed',
-      },
-    })
-    expect(layout.children).toMatchObject([
-      { id: 'a', x: 22, y: 33 },
-      { id: 'b', x: 180, y: 44 },
-    ])
+    expect(layoutOptions['elk.algorithm']).toBe(algorithm)
+  })
+
+  it('migrates legacy mode:auto-pack to strategy:auto', () => {
+    const { strategy } = resolveGroupLayoutOptions(
+      createGroup({ groupLayout: { mode: 'auto-pack' } }),
+      false,
+    )
+
+    expect(strategy).toBe('pack')
+  })
+
+  it('migrates legacy mode:freeform to strategy:auto (no dead freeform path)', () => {
+    const { layoutOptions, strategy } = resolveGroupLayoutOptions(
+      createGroup({ groupLayout: { mode: 'freeform' } }),
+      false,
+    )
+
+    expect(strategy).toBe('pack')
+    expect(layoutOptions['elk.algorithm']).toBe('rectpacking')
+  })
+
+  it('legacy mode:freeform with internal edges still gets flow via auto-detection', () => {
+    const { strategy } = resolveGroupLayoutOptions(
+      createGroup({ groupLayout: { mode: 'freeform' } }),
+      true,
+    )
+
+    expect(strategy).toBe('flow')
   })
 })

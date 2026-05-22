@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Eye, EyeOff, Loader2, RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -20,6 +20,7 @@ import type {
   BuilderPreviewCommit,
   BuilderPreviewResize,
 } from '../BuilderPreview'
+import type { FlushInlineNodeEdit } from '../BuilderInlineEditor'
 import type { BuilderDocumentActions } from '../builderWorkbench'
 import { GENERATION_PREVIEW_QUERIES } from '../generationPreviewQuery'
 import { recipeToInlineDefinition } from '../templateRecipe'
@@ -42,6 +43,9 @@ type BuilderPreviewPaneProps = {
   onExportOpenChange?: (open: boolean) => void
   onNodeResize?: (resize: BuilderPreviewResize) => void
   onNodeSelect?: (nodeId: string | null) => void
+  onRegisterFlushInlineEdit?: (flush: FlushInlineNodeEdit | null) => void
+  onRenameLayer?: (layerId: string, label: string) => void
+  onSetLayerTextContent?: (layerId: string, textContent: unknown) => void
   recipe: RecipeData
 }
 
@@ -81,12 +85,12 @@ function getInteractionMode(
 }
 
 /**
- * Steps 1–5 use deterministic client-side grid positions (no ELK).
- * Step 6 (layout) runs the real ELK algorithm so users can preview
- * the effect of algorithm/direction changes.
+ * Early modelling steps use deterministic client-side grid positions.
+ * The style step also needs the real grouped graph so group labels can be
+ * edited in-place; the layout step uses the same path for algorithm previews.
  */
-function shouldAutoLayout(stepKind: RecipeStepKind): boolean {
-  return stepKind === 'layout'
+export function shouldAutoLayout(stepKind: RecipeStepKind): boolean {
+  return stepKind === 'style' || stepKind === 'layout'
 }
 
 function getStartModel(models: RecipeModel[]): RecipeModel | undefined {
@@ -109,12 +113,17 @@ export function BuilderPreviewPane({
   onExportOpenChange,
   onNodeResize,
   onNodeSelect,
+  onRegisterFlushInlineEdit,
+  onRenameLayer,
+  onSetLayerTextContent,
   recipe,
 }: BuilderPreviewPaneProps) {
   const { t } = useTranslation()
   const showEdges = shouldShowEdges(activeStepKind)
   const interactionMode = getInteractionMode(activeStepKind)
   const autoLayout = shouldAutoLayout(activeStepKind)
+  // Layer label editing is only available in the style step (step 4)
+  const isStyleStep = activeStepKind === 'style'
   const layerCount = t('builder.preview.layerCount', {
     count: recipe.layers.length,
   })
@@ -131,6 +140,15 @@ export function BuilderPreviewPane({
   const activeExample = activeExampleId
     ? examples.find((ex) => ex.id === activeExampleId)
     : null
+  const flushInlineNodeEditRef = useRef<FlushInlineNodeEdit | null>(null)
+
+  const handleRegisterFlushInlineEdit = useCallback(
+    (flush: FlushInlineNodeEdit | null) => {
+      flushInlineNodeEditRef.current = flush
+      onRegisterFlushInlineEdit?.(flush)
+    },
+    [onRegisterFlushInlineEdit],
+  )
 
   const existingIds = useMemo(
     () => new Set(examples.map((ex) => ex.idValue)),
@@ -150,6 +168,7 @@ export function BuilderPreviewPane({
   const records = recordsQuery.data?.results ?? []
 
   const handlePreviewToggle = useCallback(() => {
+    flushInlineNodeEditRef.current?.()
     if (typeof document !== 'undefined') {
       const activeElement = document.activeElement
       if (activeElement instanceof HTMLElement) {
@@ -318,6 +337,11 @@ export function BuilderPreviewPane({
           onExportOpenChange={onExportOpenChange}
           onNodeResize={onNodeResize}
           onNodeSelect={onNodeSelect}
+          onRegisterFlushInlineEdit={handleRegisterFlushInlineEdit}
+          onRenameLayer={isStyleStep ? onRenameLayer : undefined}
+          onSetLayerTextContent={
+            isStyleStep ? onSetLayerTextContent : undefined
+          }
           recipe={recipe}
           showEdges={showEdges}
         />

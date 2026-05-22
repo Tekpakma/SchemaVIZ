@@ -1,15 +1,28 @@
-import type { ElkNode, LayoutOptions } from 'elkjs/lib/elk-api'
+import type { LayoutOptions } from 'elkjs/lib/elk-api'
 
-import type { CanvasGroupLayoutPolicy, CanvasGroupNode } from './model/types'
+import type {
+  CanvasGroupLayoutPolicy,
+  CanvasGroupLayoutStrategy,
+  CanvasGroupNode,
+} from './model/types'
+
+// ---------------------------------------------------------------------------
+// Group layout — delegates child positioning to ELK.
+//
+// Each grouped node runs its own ELK algorithm via `hierarchyHandling:
+// SEPARATE_CHILDREN`, so we don't pre-compute coordinates here. The legacy
+// hand-rolled rectpacking lived in this file before; ELK does it natively
+// (and honors child→child edges when present, which the old code couldn't).
+// ---------------------------------------------------------------------------
+
+type ResolvedStrategy = Exclude<CanvasGroupLayoutStrategy, 'auto'>
 
 type ResolvedGroupLayoutPolicy = {
+  strategy: CanvasGroupLayoutStrategy
   aspectRatio: number
   gapX: number
   gapY: number
   labelGap: number
-  maxColumns: number | null
-  maxWidth: number
-  mode: 'auto-pack' | 'freeform'
   padding: {
     bottom: number
     left: number
@@ -18,21 +31,12 @@ type ResolvedGroupLayoutPolicy = {
   }
 }
 
-export type PackedGroupLayout = {
-  children: Array<ElkNode>
-  height: number
-  layoutOptions: LayoutOptions
-  width: number
-}
-
 const DEFAULT_GROUP_LAYOUT_POLICY: ResolvedGroupLayoutPolicy = {
+  strategy: 'auto',
   aspectRatio: 1.35,
   gapX: 28,
   gapY: 28,
   labelGap: 12,
-  maxColumns: null,
-  maxWidth: 1800,
-  mode: 'auto-pack',
   padding: {
     bottom: 36,
     left: 36,
@@ -41,8 +45,29 @@ const DEFAULT_GROUP_LAYOUT_POLICY: ResolvedGroupLayoutPolicy = {
   },
 }
 
+const ELK_ALGORITHM_BY_STRATEGY: Record<ResolvedStrategy, string> = {
+  pack: 'rectpacking',
+  flow: 'layered',
+  tree: 'mrtree',
+  cluster: 'force',
+  hub: 'radial',
+}
+
 function getPositiveNumber(value: number | undefined, fallback: number) {
   return typeof value === 'number' && value > 0 ? value : fallback
+}
+
+/**
+ * Legacy migration: older recipes persisted `mode: 'auto-pack' | 'freeform'`.
+ * Both collapse to `strategy: 'auto'` — freeform never produced meaningful
+ * coordinates anyway, and auto-pack is just the no-internal-edges default.
+ */
+function readStrategy(
+  policy: CanvasGroupLayoutPolicy | undefined,
+): CanvasGroupLayoutStrategy {
+  if (policy?.strategy) return policy.strategy
+  if (policy?.mode === 'auto-pack' || policy?.mode === 'freeform') return 'auto'
+  return DEFAULT_GROUP_LAYOUT_POLICY.strategy
 }
 
 function resolveGroupLayoutPolicy(
@@ -51,6 +76,7 @@ function resolveGroupLayoutPolicy(
   const padding = policy?.padding
 
   return {
+    strategy: readStrategy(policy),
     aspectRatio: getPositiveNumber(
       policy?.aspectRatio,
       DEFAULT_GROUP_LAYOUT_POLICY.aspectRatio,
@@ -58,15 +84,6 @@ function resolveGroupLayoutPolicy(
     gapX: getPositiveNumber(policy?.gapX, DEFAULT_GROUP_LAYOUT_POLICY.gapX),
     gapY: getPositiveNumber(policy?.gapY, DEFAULT_GROUP_LAYOUT_POLICY.gapY),
     labelGap: DEFAULT_GROUP_LAYOUT_POLICY.labelGap,
-    maxColumns:
-      typeof policy?.maxColumns === 'number' && policy.maxColumns > 0
-        ? Math.floor(policy.maxColumns)
-        : DEFAULT_GROUP_LAYOUT_POLICY.maxColumns,
-    maxWidth: getPositiveNumber(
-      policy?.maxWidth,
-      DEFAULT_GROUP_LAYOUT_POLICY.maxWidth,
-    ),
-    mode: policy?.mode ?? DEFAULT_GROUP_LAYOUT_POLICY.mode,
     padding: {
       bottom: getPositiveNumber(
         padding?.bottom,
@@ -101,176 +118,62 @@ function getGroupPaddingOption(top: number, policy: ResolvedGroupLayoutPolicy) {
   return `[top=${top},left=${policy.padding.left},bottom=${policy.padding.bottom},right=${policy.padding.right}]`
 }
 
-function getPackedSize({
-  cell,
-  columns,
-  childCount,
-  policy,
-  topPadding,
-}: {
-  cell: { height: number; width: number }
-  childCount: number
-  columns: number
-  policy: ResolvedGroupLayoutPolicy
-  topPadding: number
-}) {
-  const rows = Math.ceil(childCount / columns)
-
-  return {
-    height:
-      topPadding +
-      rows * cell.height +
-      Math.max(0, rows - 1) * policy.gapY +
-      policy.padding.bottom,
-    rows,
-    width:
-      policy.padding.left +
-      columns * cell.width +
-      Math.max(0, columns - 1) * policy.gapX +
-      policy.padding.right,
-  }
+/**
+ * Auto-detection: without internal edges, `pack` (rectpacking) gives a
+ * compact aspect-ratio-aware grid. With internal edges, `flow` (layered)
+ * routes them properly — something the previous fixed-position approach
+ * couldn't do.
+ */
+function detectStrategy(hasInternalEdges: boolean): ResolvedStrategy {
+  return hasInternalEdges ? 'flow' : 'pack'
 }
 
-function getMaxColumnsForWidth(
-  cell: { height: number; width: number },
+function resolveEffectiveStrategy(
   policy: ResolvedGroupLayoutPolicy,
-) {
-  if (cell.width <= 0) return 1
-
-  const availableWidth =
-    policy.maxWidth - policy.padding.left - policy.padding.right
-  if (availableWidth <= cell.width) return 1
-
-  return Math.max(
-    1,
-    Math.floor((availableWidth + policy.gapX) / (cell.width + policy.gapX)),
-  )
+  hasInternalEdges: boolean,
+): ResolvedStrategy {
+  return policy.strategy === 'auto'
+    ? detectStrategy(hasInternalEdges)
+    : policy.strategy
 }
 
-function getPackedColumnCount({
-  cell,
-  childCount,
-  policy,
-  topPadding,
-}: {
-  cell: { height: number; width: number }
-  childCount: number
-  policy: ResolvedGroupLayoutPolicy
-  topPadding: number
-}) {
-  if (childCount <= 1) return childCount
-
-  const maxColumns = Math.min(
-    childCount,
-    policy.maxColumns ?? Number.POSITIVE_INFINITY,
-    getMaxColumnsForWidth(cell, policy),
-  )
-
-  let best = {
-    columns: 1,
-    emptySlots: childCount - 1,
-    score: Number.POSITIVE_INFINITY,
-  }
-
-  for (let columns = 1; columns <= maxColumns; columns++) {
-    const size = getPackedSize({
-      cell,
-      childCount,
-      columns,
-      policy,
-      topPadding,
-    })
-    const aspectRatio = size.width / Math.max(1, size.height)
-    const emptySlots = size.rows * columns - childCount
-    const score =
-      Math.abs(aspectRatio - policy.aspectRatio) +
-      emptySlots * 0.015 +
-      columns * 0.001
-
-    if (score < best.score) {
-      best = { columns, emptySlots, score }
-    }
-  }
-
-  return best.columns
+export type GroupLayoutResolution = {
+  layoutOptions: LayoutOptions
+  strategy: ResolvedStrategy
 }
 
-function getCellSize(children: Array<ElkNode>) {
-  return {
-    height: Math.max(0, ...children.map((child) => child.height ?? 0)),
-    width: Math.max(0, ...children.map((child) => child.width ?? 0)),
-  }
-}
-
-function createFreeformGroupLayout(
+/**
+ * Returns ELK layout options to apply to a group ElkNode. The group runs its
+ * own ELK algorithm via `SEPARATE_CHILDREN`; ELK computes child positions
+ * and group dimensions during the same `elk.layout()` pass — callers must
+ * NOT preset width/height/x/y on the group or its children.
+ */
+export function resolveGroupLayoutOptions(
   group: CanvasGroupNode,
-  children: Array<ElkNode>,
-  policy: ResolvedGroupLayoutPolicy,
-): PackedGroupLayout {
-  const topPadding = getGroupTopPadding(group, policy)
-
-  return {
-    children,
-    height: group.height,
-    layoutOptions: {
-      'elk.padding': getGroupPaddingOption(topPadding, policy),
-      ...(children.length > 0 ? { 'elk.algorithm': 'fixed' } : {}),
-    },
-    width: group.width,
-  }
-}
-
-export function createPackedGroupLayout(
-  group: CanvasGroupNode,
-  children: Array<ElkNode>,
-): PackedGroupLayout {
+  hasInternalEdges: boolean,
+): GroupLayoutResolution {
   const policy = resolveGroupLayoutPolicy(group.groupLayout)
-  if (policy.mode === 'freeform' || children.length === 0) {
-    return createFreeformGroupLayout(group, children, policy)
-  }
-
-  const cell = getCellSize(children)
+  const strategy = resolveEffectiveStrategy(policy, hasInternalEdges)
+  const algorithm = ELK_ALGORITHM_BY_STRATEGY[strategy]
   const topPadding = getGroupTopPadding(group, policy)
-  const columns = getPackedColumnCount({
-    cell,
-    childCount: children.length,
-    policy,
-    topPadding,
-  })
-  const size = getPackedSize({
-    cell,
-    childCount: children.length,
-    columns,
-    policy,
-    topPadding,
-  })
 
-  const packedChildren = children.map((child, index) => {
-    const column = index % columns
-    const row = Math.floor(index / columns)
-    const childWidth = child.width ?? 0
-    const childHeight = child.height ?? 0
-
-    return {
-      ...child,
-      x:
-        policy.padding.left +
-        column * (cell.width + policy.gapX) +
-        (cell.width - childWidth) / 2,
-      y:
-        topPadding +
-        row * (cell.height + policy.gapY) +
-        (cell.height - childHeight) / 2,
-    }
-  })
-
-  return {
-    children: packedChildren,
-    height: Math.max(group.height, size.height),
-    layoutOptions: {
-      'elk.algorithm': 'fixed',
-      'elk.padding': getGroupPaddingOption(topPadding, policy),
-    },
-    width: Math.max(group.width, size.width),
+  const layoutOptions: LayoutOptions = {
+    'elk.algorithm': algorithm,
+    'elk.hierarchyHandling': 'SEPARATE_CHILDREN',
+    'elk.padding': getGroupPaddingOption(topPadding, policy),
+    'elk.spacing.nodeNode': String(policy.gapX),
   }
+
+  // rectpacking honors aspectRatio; other algorithms ignore it.
+  if (algorithm === 'rectpacking') {
+    layoutOptions['elk.aspectRatio'] = String(policy.aspectRatio)
+  }
+
+  // layered inside a group: keep edge routing orthogonal to match the parent.
+  if (algorithm === 'layered') {
+    layoutOptions['elk.edgeRouting'] = 'ORTHOGONAL'
+    layoutOptions['elk.direction'] = 'RIGHT'
+  }
+
+  return { layoutOptions, strategy }
 }

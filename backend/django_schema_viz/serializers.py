@@ -1017,9 +1017,27 @@ class GenerationLayoutSettingsSchemaSerializer(serializers.Serializer):
         choices=["Layered", "Tree", "Force", "Radial"],
         required=False,
     )
+    layout_direction = serializers.ChoiceField(
+        choices=["LR", "RL", "TB", "BT"],
+        required=False,
+    )
     swatches = serializers.ListField(
         child=serializers.CharField(),
         required=False,
+    )
+    # Per-step in-flight style drafts. Keyed by step id; each draft mirrors the
+    # frontend RecipeStyleDraft shape (most importantly ``textContent`` —
+    # Lexical state). The engine walks these to discover relation paths like
+    # ``{{templates.name}}`` and resolve them server-side.
+    style_drafts = serializers.DictField(
+        child=serializers.JSONField(),
+        required=False,
+        help_text=(
+            "Per-step in-flight style drafts keyed by step id. Each value "
+            "holds the unsaved RecipeStyleDraft (textContent, visualStyles, "
+            "dimensions, …) used to render live previews before the user "
+            "saves them as StyleTemplate rows."
+        ),
     )
 
 

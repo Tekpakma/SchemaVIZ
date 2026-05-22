@@ -1,8 +1,8 @@
-import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, DownloadIcon, Loader2, Save, UploadCloud } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { HomeLink } from '@/components/router/RouterLink'
 import { Input } from '@/components/ui/input'
 
 type BuilderHeaderProps = {
@@ -24,20 +24,14 @@ export function BuilderHeader({
   saving = false,
   title,
 }: BuilderHeaderProps) {
-  const navigate = useNavigate()
   const { t } = useTranslation()
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="gap-1.5 text-[13px] text-muted-foreground"
-        onClick={() => navigate({ to: '/' })}
-      >
+      <HomeLink className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
         <ArrowLeft className="size-3.5" />
         {t('builder.header.back')}
-      </Button>
+      </HomeLink>
 
       <Input
         aria-label={t('builder.header.titleLabel')}

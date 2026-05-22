@@ -15,7 +15,7 @@ import {
   getParentNodeIdByNodeId,
   isRenderableCanvasEdge,
 } from './compoundGraph'
-import { createPackedGroupLayout } from './groupLayout'
+import { resolveGroupLayoutOptions } from './groupLayout'
 import type {
   CanvasEdge,
   CanvasFlowDirection,
@@ -362,14 +362,35 @@ function getDirectChildIds(input: CanvasLayoutInput, parentId: NodeId) {
   return input.childIdsByGroupId[parentId] ?? []
 }
 
+function hasInternalEdges(
+  input: CanvasLayoutInput,
+  groupId: NodeId,
+  childIds: Array<NodeId>,
+): boolean {
+  if (childIds.length < 2) return false
+  const childIdSet = new Set(childIds)
+  for (const edgeId of input.edgeOrder) {
+    const edge = input.edgesById[edgeId]
+    if (!edge) continue
+    if (childIdSet.has(edge.sourceNodeId) && childIdSet.has(edge.targetNodeId)) {
+      return true
+    }
+  }
+  // groupId unused for now (edges live at root); keep param so future
+  // sub-graph-aware traversal can scope without re-introducing the check.
+  void groupId
+  return false
+}
+
 /** Recursively converts a canvas node subtree into an ELK node tree and attaches fixed-side ports for routing. */
 function createElkNode(
   input: CanvasLayoutInput,
   node: CanvasNode,
   directional: boolean,
 ): ElkNode {
-  let children = R.pipe(
-    getDirectChildIds(input, node.id),
+  const childIds = getDirectChildIds(input, node.id)
+  const children = R.pipe(
+    childIds,
     R.flatMap((childId) => {
       const childNode = input.nodesById[childId]
       if (!childNode) {
@@ -383,24 +404,29 @@ function createElkNode(
   const layoutOptions: LayoutOptions = {
     [ELK_PORT_CONSTRAINTS_OPTION]: directional ? 'FIXED_SIDE' : 'FREE',
   }
-  let width = node.width
-  let height = node.height
 
-  // Groups with labels need extra top padding for the label area
+  // Group nodes delegate inner layout to ELK via SEPARATE_CHILDREN; ELK
+  // computes both child positions and the group's own dimensions during
+  // the layout pass, so we don't preset width/height here.
+  let width: number | undefined = node.width
+  let height: number | undefined = node.height
+
   if (node.kind === 'group') {
-    const packed = createPackedGroupLayout(node, children)
-    children = packed.children
-    width = packed.width
-    height = packed.height
-    Object.assign(layoutOptions, packed.layoutOptions)
+    const { layoutOptions: groupOptions } = resolveGroupLayoutOptions(
+      node,
+      hasInternalEdges(input, node.id, childIds),
+    )
+    Object.assign(layoutOptions, groupOptions)
+    width = undefined
+    height = undefined
   }
 
   return {
     id: node.id,
     x: node.x,
     y: node.y,
-    width,
-    height,
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
     ports: createElkPortsForNode(node),
     layoutOptions,
     ...(children.length > 0 ? { children } : {}),
@@ -649,9 +675,16 @@ function getSectionPoints(edge: ElkExtendedEdge): Array<CanvasPoint> {
   }))
 }
 
-function getEdgeLabelPoint(edge: ElkExtendedEdge): CanvasPoint | undefined {
+function getEdgeLabelPoint(
+  edge: ElkExtendedEdge,
+  routePoints: Array<CanvasPoint>,
+): CanvasPoint | undefined {
   const label = edge.labels?.[0]
   if (typeof label?.x !== 'number' || typeof label.y !== 'number') {
+    return undefined
+  }
+
+  if (label.x === 0 && label.y === 0 && routePoints.length >= 2) {
     return undefined
   }
 
@@ -727,7 +760,7 @@ export function createGraphLayoutResult(
       )
       if (points.length < 2 || !edge.id) return []
 
-      const labelPoint = getEdgeLabelPoint(edge)
+      const labelPoint = getEdgeLabelPoint(edge, points)
 
       return [
         {

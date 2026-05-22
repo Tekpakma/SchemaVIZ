@@ -663,7 +663,7 @@ export const getSchemaVizGenerationTemplateQuickAccessRetrieveUrl = () => {
 }
 
 /**
- * Returns the current user's most recently updated non-featured templates for quick access.
+ * Returns the current user's templates ordered by most recent update for quick access.
  * @summary Get Own Recent Generation Template Quick Access
  */
 export const schemaVizGenerationTemplateQuickAccessRetrieve = async ( options?: RequestInit): Promise<schemaVizGenerationTemplateQuickAccessRetrieveResponse> => {

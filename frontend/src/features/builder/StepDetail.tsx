@@ -19,7 +19,6 @@ interface StepDetailProps {
     | 'removeGroupRule'
     | 'removeLayer'
     | 'removeModel'
-    | 'renameLayer'
     | 'reorderModels'
     | 'setLayoutAlgorithm'
     | 'setLayoutDirection'
@@ -70,6 +69,8 @@ export function StepDetail({
       return (
         <StyleStep
           actions={actions}
+          edges={recipe.edges}
+          groupRules={recipe.groupRules}
           layers={recipe.layers}
           models={recipe.models}
           selectedCanvasNodeId={selectedCanvasNodeId}
@@ -80,11 +81,7 @@ export function StepDetail({
     case 'layout':
       return (
         <LayoutStep
-          actions={actions}
-          edges={recipe.edges}
-          groupRules={recipe.groupRules}
           layoutDirection={recipe.layoutDirection}
-          models={recipe.models}
           selected={recipe.layoutAlgorithm}
           onLayoutDirectionChange={actions.setLayoutDirection}
           onSelect={actions.setLayoutAlgorithm}

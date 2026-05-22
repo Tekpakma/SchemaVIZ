@@ -1,8 +1,14 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { AlertCircle, Database, Wand2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { MiniDiagram } from '@/components/MiniDiagram'
 import { cn } from '@/lib/utils'
+import {
+  getCachedPreview,
+  getPreviewCacheKey,
+  setCachedPreview,
+} from './previewImageCache'
 import type { HomeTemplatePreview } from './types'
 
 type TemplatePreviewCanvasVariant = 'card' | 'spotlight' | 'thumb'
@@ -26,6 +32,8 @@ function hasRenderableGraph(template: HomeTemplatePreview) {
 }
 
 function PreviewStatusOverlay({ template }: { template: HomeTemplatePreview }) {
+  const { t } = useTranslation()
+
   if (template.status === 'ready') return null
 
   const Icon = template.status === 'no_record' ? Database : AlertCircle
@@ -42,7 +50,7 @@ function PreviewStatusOverlay({ template }: { template: HomeTemplatePreview }) {
       )}
     >
       <Icon className="size-3" />
-      <span>{template.statusLabel}</span>
+      <span>{t(`home.status.${template.status}`)}</span>
     </div>
   )
 }
@@ -52,8 +60,31 @@ export function TemplatePreviewCanvas({
   template,
   variant = 'card',
 }: TemplatePreviewCanvasProps) {
+  const { t } = useTranslation()
   const renderCanvas = hasRenderableGraph(template)
   const diagramSeed = template.id.length + template.nodeCount
+
+  // ── Preview image cache ──────────────────────────────────────────
+  // On first mount we check if a cached snapshot exists for this
+  // template+variant. If it does we render a lightweight <img> and
+  // skip the heavy BuilderPreview (Zustand store, ELK layout, Konva
+  // stage). On a cache miss the canvas renders normally and captures
+  // a snapshot via onCapture for the next visit.
+  const cacheKey = renderCanvas
+    ? getPreviewCacheKey(template.id, template.updatedAt, variant)
+    : null
+  // Lazy initialiser — only checked once at mount time so we never
+  // swap a live canvas for an image mid-session (no flash).
+  const [cachedImage] = useState(() =>
+    cacheKey ? getCachedPreview(cacheKey) : null,
+  )
+
+  const handleCapture = useCallback(
+    (dataUrl: string) => {
+      if (cacheKey) setCachedPreview(cacheKey, dataUrl)
+    },
+    [cacheKey],
+  )
 
   return (
     <div
@@ -65,23 +96,33 @@ export function TemplatePreviewCanvas({
     >
       {renderCanvas ? (
         <div className="pointer-events-none absolute inset-0">
-          <Suspense
-            fallback={
-              <MiniDiagram
-                hue={template.hue}
-                nodeCount={template.nodeCount || 6}
-                edgeCount={template.edgeCount || 6}
-                seed={diagramSeed}
-                className="h-full w-full"
-              />
-            }
-          >
-            <BuilderPreview
-              generationResponse={template.generationResponse ?? undefined}
-              interactionMode="static"
-              recipe={template.recipe}
+          {cachedImage ? (
+            <img
+              alt=""
+              className="h-full w-full object-cover"
+              draggable={false}
+              src={cachedImage}
             />
-          </Suspense>
+          ) : (
+            <Suspense
+              fallback={
+                <MiniDiagram
+                  hue={template.hue}
+                  nodeCount={template.nodeCount || 6}
+                  edgeCount={template.edgeCount || 6}
+                  seed={diagramSeed}
+                  className="h-full w-full"
+                />
+              }
+            >
+              <BuilderPreview
+                generationResponse={template.generationResponse ?? undefined}
+                interactionMode="static"
+                onCapture={handleCapture}
+                recipe={template.recipe}
+              />
+            </Suspense>
+          )}
         </div>
       ) : (
         <MiniDiagram
@@ -97,7 +138,7 @@ export function TemplatePreviewCanvas({
         <>
           <div className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-card/92 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground shadow-sm backdrop-blur">
             <Wand2 className="size-3" />
-            <span>{template.sourceLabel}</span>
+            <span>{t(`home.source.${template.source}`)}</span>
           </div>
           <PreviewStatusOverlay template={template} />
         </>

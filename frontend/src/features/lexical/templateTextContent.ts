@@ -1,8 +1,6 @@
 import { escapeHtml } from '@/utils/html'
-import {
-  renderTagCss,
-  wrapRenderTagHtml,
-} from './exportRenderTagHtml'
+import { renderTagCss, wrapRenderTagHtml } from './exportRenderTagHtml'
+import { styleObjectToString } from './dataReference/styles'
 
 type SerializedNode = {
   children?: SerializedNode[]
@@ -69,22 +67,131 @@ function sanitizeStyleAttribute(style: string | undefined) {
   return style.replace(/["<>]/g, '')
 }
 
-function renderTextNode(node: SerializedNode) {
-  const text = escapeHtml(node.text ?? '')
+const TEMPLATE_TEXT_PATTERN = /\{\{\s*([^{}]+?)\s*\}\}/g
+
+function renderTemplateText(
+  text: string,
+  recordFields: Record<string, unknown> | undefined,
+) {
+  let result = ''
+  let lastIndex = 0
+
+  TEMPLATE_TEXT_PATTERN.lastIndex = 0
+  let match = TEMPLATE_TEXT_PATTERN.exec(text)
+
+  while (match) {
+    const rawPath = match[1]?.trim() ?? ''
+    result += escapeHtml(text.slice(lastIndex, match.index))
+    result += escapeHtml(
+      rawPath ? getFieldDisplayValue(rawPath, recordFields) : match[0],
+    )
+    lastIndex = match.index + match[0].length
+    match = TEMPLATE_TEXT_PATTERN.exec(text)
+  }
+
+  result += escapeHtml(text.slice(lastIndex))
+  TEMPLATE_TEXT_PATTERN.lastIndex = 0
+  return result
+}
+
+function renderTextNode(
+  node: SerializedNode,
+  recordFields: Record<string, unknown> | undefined,
+) {
+  const text = renderTemplateText(node.text ?? '', recordFields)
   const style = sanitizeStyleAttribute(node.style)
   return style ? `<span style="${style}">${text}</span>` : text
+}
+
+const COLLECTION_MAX_ITEMS = 5
+const COLLECTION_SEPARATOR = ', '
+const UNRESOLVED = Symbol('unresolved')
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readScalar(record: Record<string, unknown>, segment: string): unknown {
+  if (segment in record) return record[segment]
+  const fk = `${segment}_id`
+  if (fk in record) return record[fk]
+  return UNRESOLVED
+}
+
+/**
+ * Walks a dotted path through ``recordFields``. The backend resolver shapes
+ * relations as nested dicts (forward FK / O2O) or arrays of dicts (reverse FK
+ * / M2M); this walker mirrors that shape:
+ *
+ *  - object node → recurse into the next segment's key
+ *  - array node  → recurse into each element with the remaining segments,
+ *                  collect into a flat array of resolved scalars
+ *  - scalar leaf → returned as-is
+ *
+ * Returns ``UNRESOLVED`` (not ``undefined``) when a segment is missing — the
+ * caller uses that sentinel to render the literal ``{{path}}`` marker so the
+ * author can see something needs fixing.
+ */
+function walkPath(segments: string[], data: unknown): unknown {
+  if (segments.length === 0) return data
+  if (data == null) return UNRESOLVED
+
+  if (Array.isArray(data)) {
+    const results: unknown[] = []
+    for (const item of data) {
+      const resolved = walkPath(segments, item)
+      if (resolved === UNRESOLVED) continue
+      if (Array.isArray(resolved)) {
+        results.push(...resolved)
+      } else {
+        results.push(resolved)
+      }
+    }
+    return results
+  }
+
+  if (!isPlainRecord(data)) return UNRESOLVED
+
+  const [head, ...rest] = segments
+  if (head === undefined) return data
+  const next = readScalar(data, head)
+  if (next === UNRESOLVED) return UNRESOLVED
+  return walkPath(rest, next)
+}
+
+function formatScalar(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function formatCollection(values: unknown[]): string {
+  const scalars = values.filter((v) => v != null).map(formatScalar)
+  if (scalars.length === 0) return ''
+  if (scalars.length <= COLLECTION_MAX_ITEMS) {
+    return scalars.join(COLLECTION_SEPARATOR)
+  }
+  const shown = scalars
+    .slice(0, COLLECTION_MAX_ITEMS)
+    .join(COLLECTION_SEPARATOR)
+  return `${shown} (+${scalars.length - COLLECTION_MAX_ITEMS} more)`
 }
 
 function getFieldDisplayValue(
   path: string,
   recordFields: Record<string, unknown> | undefined,
 ) {
-  if (!recordFields || path.includes('.')) return `{{${path}}}`
+  if (!recordFields) return `{{${path}}}`
+  const segments = path.split('.').filter(Boolean)
+  if (segments.length === 0) return `{{${path}}}`
 
-  const value = recordFields[path] ?? recordFields[`${path}_id`]
-  if (value == null) return `{{${path}}}`
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
+  const value = walkPath(segments, recordFields)
+  if (value === UNRESOLVED || value == null) return `{{${path}}}`
+  if (Array.isArray(value)) {
+    const formatted = formatCollection(value)
+    return formatted || `{{${path}}}`
+  }
+  return formatScalar(value)
 }
 
 function renderDataReferenceNode(
@@ -95,11 +202,7 @@ function renderDataReferenceNode(
   if (!path) return ''
 
   const style = sanitizeStyleAttribute(
-    node.styles
-      ? Object.entries(node.styles)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join('; ')
-      : undefined,
+    node.styles ? styleObjectToString(node.styles) : undefined,
   )
   const content = escapeHtml(getFieldDisplayValue(path, recordFields))
 
@@ -121,7 +224,7 @@ function renderTemplateNode(
   node: SerializedNode,
   recordFields: Record<string, unknown> | undefined,
 ): string {
-  if (node.type === 'text') return renderTextNode(node)
+  if (node.type === 'text') return renderTextNode(node, recordFields)
   if (node.type === 'data-reference') {
     return renderDataReferenceNode(node, recordFields)
   }
@@ -136,7 +239,9 @@ function renderTemplateNode(
 }
 
 export function createTemplateTextContent(label: string) {
-  const next = JSON.parse(JSON.stringify(DEFAULT_TEXT_CONTENT)) as typeof DEFAULT_TEXT_CONTENT
+  const next = JSON.parse(
+    JSON.stringify(DEFAULT_TEXT_CONTENT),
+  ) as typeof DEFAULT_TEXT_CONTENT
   next.root.children[0]!.children[0]!.text = label || 'Node'
   return next
 }

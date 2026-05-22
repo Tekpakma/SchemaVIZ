@@ -50,6 +50,7 @@ describe('builder template recipe conversion', () => {
           createdAt: '2026-05-13T12:00:00+00:00',
           layoutSettings: {
             layoutAlgorithm: 'Force',
+            layoutDirection: 'TB',
             swatches: ['#111111', '#222222'],
           },
           definition: {
@@ -132,8 +133,9 @@ describe('builder template recipe conversion', () => {
       ],
       swatches: ['#111111', '#222222'],
       layoutAlgorithm: 'Force',
+      layoutDirection: 'TB',
       shareSlug: '',
-      promoteVisibility: 'org-wide',
+      promoteVisibility: 'shared',
       promoteAudience: 'All users',
     })
   })
@@ -160,6 +162,7 @@ describe('builder template recipe conversion', () => {
           layerId: 'layer-provider',
         },
       ],
+      layoutDirection: 'TB',
       shareSlug: 'cloud-overview',
     }
 
@@ -181,6 +184,100 @@ describe('builder template recipe conversion', () => {
       },
       layoutSettings: {
         layoutAlgorithm: 'Layered',
+        layoutDirection: 'TB',
+      },
+    })
+  })
+
+  it('round-trips style drafts through layout settings', () => {
+    const styleDraft = {
+      sourceTemplateId: 'style-source',
+      persistedTemplateId: 'style-persisted',
+      name: 'Business group node',
+      textContent: { root: { children: [{ text: 'Business group' }] } },
+      visualStyles: { color: '#111111' },
+      dimensions: { width: 220, height: 110 },
+      typeSpecificData: { shapeKey: 'default', borderColor: '#222222' },
+      dirty: true,
+      saveState: 'error' as const,
+      error: 'transient',
+    }
+    const loadedRecipe = createRecipeFromTemplate(
+      createTemplate({
+        draftVersion: {
+          id: '018f3b2e-8a9a-7c6d-9e0f-style000001',
+          versionNumber: 1,
+          rootModel: 'infrastructure.BusinessGroup',
+          createdBy: null,
+          createdAt: '2026-05-13T12:00:00+00:00',
+          layoutSettings: {
+            styleDrafts: {
+              'business-group': {
+                sourceTemplateId: 'style-source',
+                persistedTemplateId: 'style-persisted',
+                name: 'Business group node',
+                textContent: {
+                  root: { children: [{ text: 'Business group' }] },
+                },
+                visualStyles: { color: '#111111' },
+                dimensions: { width: 220, height: 110 },
+                typeSpecificData: {
+                  shapeKey: 'default',
+                  borderColor: '#222222',
+                },
+              },
+            },
+          } as unknown as GenerationTemplateVersion['layoutSettings'],
+          definition: {
+            rootStepId: 'business-group',
+            stepsById: {
+              'business-group': {
+                resolvedModelId: 'infrastructure.BusinessGroup',
+                childIds: [],
+                label: 'Business group',
+                styleTemplateId: 'style-source',
+              },
+            },
+          },
+        },
+      }),
+    )
+    const recipe = {
+      ...loadedRecipe,
+      styleDrafts: {
+        'business-group': styleDraft,
+      },
+    }
+
+    expect(loadedRecipe.styleDrafts['business-group']).toMatchObject({
+      sourceTemplateId: 'style-source',
+      persistedTemplateId: 'style-persisted',
+      dirty: false,
+      saveState: 'idle',
+    })
+
+    expect(recipeToGenerationTemplateWriteRequest(recipe)).toMatchObject({
+      layoutSettings: {
+        styleDrafts: {
+          'business-group': {
+            sourceTemplateId: 'style-source',
+            persistedTemplateId: 'style-persisted',
+            name: 'Business group node',
+            dimensions: { width: 220, height: 110 },
+            typeSpecificData: { shapeKey: 'default', borderColor: '#222222' },
+          },
+        },
+      },
+    })
+    expect(
+      recipeToGenerationTemplateWriteRequest(recipe)?.layoutSettings,
+    ).not.toMatchObject({
+      styleDrafts: {
+        'business-group': {
+          dirty: expect.anything(),
+          error: expect.anything(),
+          saveState: expect.anything(),
+        },
       },
     })
   })
@@ -485,7 +582,7 @@ describe('builder template recipe conversion', () => {
         parentModelId: 'business-group',
         childModelId: 'cloud-provider',
         mode: 'group',
-        layout: { mode: 'auto-pack' },
+        layout: { strategy: 'auto' },
       },
     ])
   })

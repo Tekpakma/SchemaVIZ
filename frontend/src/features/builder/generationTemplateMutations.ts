@@ -1,6 +1,7 @@
 import type { GenerationTemplateRead } from '@/api/contracts'
 import {
   schemaVizGenerationTemplatesCreate,
+  schemaVizGenerationTemplatesDestroy,
   schemaVizGenerationTemplatesPublishCreate,
   schemaVizGenerationTemplatesUpdate,
 } from '@/api/generated/schema-viz'
@@ -27,9 +28,7 @@ function asTemplateRead(data: unknown): GenerationTemplateRead {
  * Handles shapes like `{ name: ["msg"] }`, `{ detail: "msg" }`, and
  * `{ non_field_errors: ["msg"] }`.
  */
-function parseDrfErrors(
-  data: unknown,
-): Record<string, string[]> | null {
+function parseDrfErrors(data: unknown): Record<string, string[]> | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
 
   const record = data as Record<string, unknown>
@@ -59,14 +58,9 @@ function formatDrfErrors(fieldErrors: Record<string, string[]>): string {
   return messages.join('\n')
 }
 
-function throwSaveError(
-  fallbackMessage: string,
-  responseData: unknown,
-): never {
+function throwSaveError(fallbackMessage: string, responseData: unknown): never {
   const fieldErrors = parseDrfErrors(responseData)
-  const message = fieldErrors
-    ? formatDrfErrors(fieldErrors)
-    : fallbackMessage
+  const message = fieldErrors ? formatDrfErrors(fieldErrors) : fallbackMessage
   throw new GenerationTemplateSaveError(message, fieldErrors ?? undefined)
 }
 
@@ -107,7 +101,12 @@ export async function saveGenerationTemplateDraft({
   template?: GenerationTemplateRead | null
   templateId?: string | null
 }) {
-  const request = getTemplateWriteRequest({ recipe, scope, shareSlug, template })
+  const request = getTemplateWriteRequest({
+    recipe,
+    scope,
+    shareSlug,
+    template,
+  })
 
   if (!templateId) {
     const response = await schemaVizGenerationTemplatesCreate(request)
@@ -150,4 +149,12 @@ export async function publishGenerationTemplate(templateId: string) {
     throwSaveError(`Could not publish template: ${status}`, response.data)
   }
   return asTemplateRead(response.data)
+}
+
+export async function deleteGenerationTemplate(templateId: string) {
+  const response = await schemaVizGenerationTemplatesDestroy(templateId)
+  const status = response.status as number
+  if (status !== 204) {
+    throwSaveError(`Could not delete template: ${status}`, response.data)
+  }
 }

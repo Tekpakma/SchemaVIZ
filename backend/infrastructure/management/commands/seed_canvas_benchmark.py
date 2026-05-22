@@ -37,11 +37,13 @@ from infrastructure.models import (
     Environment,
     Network,
     Region,
+    ServerTemplate,
 )
 
 BENCHMARK_BG_PREFIX = "BG-Benchmark-"
 BENCHMARK_SLUG_PREFIX = "bench-"
 BENCHMARK_ENV_NAME = "bench-env"
+BENCHMARK_TEMPLATE_PREFIX = "bench-template-"
 BATCH_SIZE = 1000
 
 
@@ -78,6 +80,7 @@ class Command(BaseCommand):
             env = self._ensure_environment(bg)
             cps_by_slug = self._ensure_cloud_providers(count)
             regions_by_provider_id = self._ensure_regions(cps_by_slug)
+            self._ensure_templates(cps_by_slug)
             self._ensure_networks(bg, env, regions_by_provider_id)
 
         self.stdout.write(self.style.SUCCESS(
@@ -87,6 +90,7 @@ class Command(BaseCommand):
             f"  CloudProviders: {count}\n"
             f"  Regions: {count}\n"
             f"  Networks: {count}\n"
+            f"  ServerTemplates: {count}\n"
             f"\nIn the builder, pick start model = BusinessGroup and example "
             f"record = '{bg.name}', then traverse Network → Region → "
             f"CloudProvider to render {count} CloudProvider nodes."
@@ -106,6 +110,9 @@ class Command(BaseCommand):
         deleted_regions, _ = Region.objects.filter(
             code__startswith=BENCHMARK_SLUG_PREFIX
         ).delete()
+        deleted_templates, _ = ServerTemplate.objects.filter(
+            name__startswith=BENCHMARK_TEMPLATE_PREFIX
+        ).delete()
         deleted_providers, _ = CloudProvider.objects.filter(
             slug__startswith=BENCHMARK_SLUG_PREFIX
         ).delete()
@@ -114,7 +121,8 @@ class Command(BaseCommand):
         ).delete()
         self.stdout.write(
             f"  removed {deleted_bgs} BGs / {deleted_networks} networks / "
-            f"{deleted_regions} regions / {deleted_providers} providers"
+            f"{deleted_regions} regions / {deleted_providers} providers / "
+            f"{deleted_templates} templates"
         )
 
     # ------------------------------------------------------------------
@@ -220,6 +228,39 @@ class Command(BaseCommand):
         )
         # Restrict to the providers we care about (in case --count shrank).
         return {pid: existing[pid] for pid in codes_by_provider if pid in existing}
+
+    def _ensure_templates(self, cps_by_slug: dict[str, CloudProvider]) -> None:
+        names_by_provider = {
+            cp.id: (
+                f"{BENCHMARK_TEMPLATE_PREFIX}"
+                f"{cp.slug.removeprefix(f'{BENCHMARK_SLUG_PREFIX}cp-')}"
+            )
+            for cp in cps_by_slug.values()
+        }
+        existing_provider_ids = set(
+            ServerTemplate.objects.filter(
+                name__startswith=BENCHMARK_TEMPLATE_PREFIX
+            ).values_list("provider_id", flat=True)
+        )
+        to_create = [
+            ServerTemplate(
+                name=name,
+                os_family="Linux",
+                os_version="24.04",
+                provider_id=provider_id,
+                image_id=f"{name}-img",
+            )
+            for provider_id, name in names_by_provider.items()
+            if provider_id not in existing_provider_ids
+        ]
+        if to_create:
+            ServerTemplate.objects.bulk_create(
+                to_create, batch_size=BATCH_SIZE, ignore_conflicts=True
+            )
+        self.stdout.write(
+            f"ServerTemplates: {len(names_by_provider)} ensured "
+            f"({len(to_create)} new)"
+        )
 
     def _ensure_networks(
         self,

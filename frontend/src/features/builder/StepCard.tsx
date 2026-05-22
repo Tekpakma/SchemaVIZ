@@ -43,13 +43,6 @@ export function StepCard({ step, index, active, onPick }: StepCardProps) {
           {t(step.detail)}
         </p>
       </div>
-      <span className="mt-1 text-[10px]">
-        {active ? (
-          <span className="text-brand">●</span>
-        ) : (
-          <span className="text-transparent">●</span>
-        )}
-      </span>
     </button>
   )
 }

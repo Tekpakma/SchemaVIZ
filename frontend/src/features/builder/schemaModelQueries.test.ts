@@ -1,20 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  schemaVizModelTemplateDefaultsCreate,
-  schemaVizModelTemplateDefaultsPartialUpdate,
+  schemaVizTemplateUniquenessCreate,
   schemaVizTemplatesCreate,
   schemaVizTemplatesPartialUpdate,
 } from '@/api/generated/schema-viz'
 import { saveBuilderStyleTemplateDraft } from './schemaModelQueries'
 
 vi.mock('@/api/generated/schema-viz', () => ({
-  schemaVizModelTemplateDefaultsCreate: vi.fn(),
-  schemaVizModelTemplateDefaultsList: vi.fn(),
-  schemaVizModelTemplateDefaultsPartialUpdate: vi.fn(),
   schemaVizModelsList: vi.fn(),
   schemaVizQueryMetadataCreate: vi.fn(),
   schemaVizRouteList: vi.fn(),
+  schemaVizTemplateUniquenessCreate: vi.fn(),
   schemaVizTemplatesCreate: vi.fn(),
   schemaVizTemplatesList: vi.fn(),
   schemaVizTemplatesPartialUpdate: vi.fn(),
@@ -22,8 +19,7 @@ vi.mock('@/api/generated/schema-viz', () => ({
 
 const createTemplateMock = vi.mocked(schemaVizTemplatesCreate)
 const patchTemplateMock = vi.mocked(schemaVizTemplatesPartialUpdate)
-const createDefaultMock = vi.mocked(schemaVizModelTemplateDefaultsCreate)
-const patchDefaultMock = vi.mocked(schemaVizModelTemplateDefaultsPartialUpdate)
+const uniquenessMock = vi.mocked(schemaVizTemplateUniquenessCreate)
 
 const model = {
   id: 'model-service',
@@ -74,42 +70,9 @@ describe('builder schema model mutations', () => {
       headers: new Headers(),
       status: 200,
     })
-    createDefaultMock.mockResolvedValue({
+    uniquenessMock.mockResolvedValue({
       data: {
-        id: '018f3b2e-8a9a-7c6d-9e0f-default000001',
-        modelRef: 'catalog.service',
-        modelStatus: 'ok',
-        styleTemplateId: '018f3b2e-8a9a-7c6d-9e0f-123456789abc',
-        styleTemplate: {
-          id: '018f3b2e-8a9a-7c6d-9e0f-123456789abc',
-          name: 'Service node',
-          targetModelStatus: 'ok',
-          createdAt: '2026-05-17T00:00:00+00:00',
-          updatedAt: '2026-05-17T00:00:00+00:00',
-          revision: 1,
-        },
-        createdAt: '2026-05-17T00:00:00+00:00',
-        updatedAt: '2026-05-17T00:00:00+00:00',
-      },
-      headers: new Headers(),
-      status: 201,
-    })
-    patchDefaultMock.mockResolvedValue({
-      data: {
-        id: '018f3b2e-8a9a-7c6d-9e0f-default000002',
-        modelRef: 'catalog.service',
-        modelStatus: 'ok',
-        styleTemplateId: '018f3b2e-8a9a-7c6d-9e0f-abcdefabcdef',
-        styleTemplate: {
-          id: '018f3b2e-8a9a-7c6d-9e0f-abcdefabcdef',
-          name: 'Service node',
-          targetModelStatus: 'ok',
-          createdAt: '2026-05-17T00:00:00+00:00',
-          updatedAt: '2026-05-17T00:00:00+00:00',
-          revision: 2,
-        },
-        createdAt: '2026-05-17T00:00:00+00:00',
-        updatedAt: '2026-05-17T00:00:00+00:00',
+        nameUnique: true,
       },
       headers: new Headers(),
       status: 200,
@@ -120,7 +83,6 @@ describe('builder schema model mutations', () => {
     await saveBuilderStyleTemplateDraft({
       draft,
       model,
-      setAsDefault: false,
     })
 
     expect(createTemplateMock).toHaveBeenCalledWith(
@@ -141,7 +103,6 @@ describe('builder schema model mutations', () => {
         persistedTemplateId: '018f3b2e-8a9a-7c6d-9e0f-abcdefabcdef',
       },
       model,
-      setAsDefault: false,
     })
 
     expect(patchTemplateMock).toHaveBeenCalledWith(

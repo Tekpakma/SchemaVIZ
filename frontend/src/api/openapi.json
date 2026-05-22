@@ -394,7 +394,7 @@ paths:
   /schema-viz/generation-template-quick-access/:
     get:
       operationId: schemaVizGenerationTemplateQuickAccessRetrieve
-      description: Returns the current user's most recently updated non-featured templates
+      description: Returns the current user's templates ordered by most recent update
         for quick access.
       summary: Get Own Recent Generation Template Quick Access
       tags:
@@ -2244,20 +2244,38 @@ components:
       properties:
         layoutAlgorithm:
           $ref: '#/components/schemas/LayoutAlgorithmEnum'
+        layoutDirection:
+          $ref: '#/components/schemas/LayoutDirectionEnum'
         swatches:
           type: array
           items:
             type: string
+        styleDrafts:
+          type: object
+          additionalProperties: {}
+          description: Per-step in-flight style drafts keyed by step id. Each value
+            holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions,
+            …) used to render live previews before the user saves them as StyleTemplate
+            rows.
     GenerationLayoutSettingsSchemaRequest:
       type: object
       properties:
         layoutAlgorithm:
           $ref: '#/components/schemas/LayoutAlgorithmEnum'
+        layoutDirection:
+          $ref: '#/components/schemas/LayoutDirectionEnum'
         swatches:
           type: array
           items:
             type: string
             minLength: 1
+        styleDrafts:
+          type: object
+          additionalProperties: {}
+          description: Per-step in-flight style drafts keyed by step id. Each value
+            holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions,
+            …) used to render live previews before the user saves them as StyleTemplate
+            rows.
     GenerationResult:
       type: object
       description: Complete output of a template execution.
@@ -2989,6 +3007,18 @@ components:
         * `Tree` - Tree
         * `Force` - Force
         * `Radial` - Radial
+    LayoutDirectionEnum:
+      enum:
+      - LR
+      - RL
+      - TB
+      - BT
+      type: string
+      description: |-
+        * `LR` - LR
+        * `RL` - RL
+        * `TB` - TB
+        * `BT` - BT
     MethodInfo:
       type: object
       properties:

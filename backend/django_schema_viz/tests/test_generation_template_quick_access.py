@@ -103,6 +103,27 @@ class GenerationTemplateFeaturedTests(APITestCase):
         self.assertTrue(response.json()["featured"]["enabled"])
         self.assertEqual(response.json()["featured"]["rank"], 1)
 
+    def test_create_preserves_layout_direction_setting(self):
+        self.client.force_authenticate(self.staff)
+
+        response = self.client.post(
+            GENERATION_TEMPLATES_URL,
+            build_generation_payload(
+                "Directional Template",
+                layoutSettings={
+                    "layoutAlgorithm": "Layered",
+                    "layoutDirection": "TB",
+                },
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.json()["draftVersion"]["layoutSettings"]["layoutDirection"],
+            "TB",
+        )
+
     def test_featured_template_must_be_global(self):
         self.client.force_authenticate(self.staff)
 
@@ -399,7 +420,7 @@ class GenerationTemplateQuickAccessViewTests(APITestCase):
             ["Ready Featured"],
         )
 
-    def test_returns_recent_non_featured_user_templates(self):
+    def test_returns_owned_templates_newest_first(self):
         self.client.force_authenticate(self.owner)
 
         response = self.client.get(OWN_RECENT_QUICK_ACCESS_URL)
@@ -408,7 +429,16 @@ class GenerationTemplateQuickAccessViewTests(APITestCase):
         own_recent_names = [
             entry["template"]["name"] for entry in response.json()["ownRecent"]
         ]
-        self.assertEqual(own_recent_names, ["Recent Own", "Private Template"])
+        self.assertEqual(
+            own_recent_names,
+            [
+                "Recent Own",
+                "Private Template",
+                "Error Featured",
+                "No Record Featured",
+                "Ready Featured",
+            ],
+        )
         self.assertEqual(response.json()["ownRecent"][0]["source"], "own")
 
     def test_hides_private_templates_from_featured_feed_of_other_users(self):

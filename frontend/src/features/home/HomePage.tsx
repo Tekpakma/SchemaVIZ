@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight, Pencil, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { START_AUTH_SESSION_QUERY } from '@/api/startAuthSession'
 import { redirectToLogin } from '@/api/sourceAuth'
@@ -22,28 +23,33 @@ import {
   shouldRedirectHomeToLogin,
 } from './homeAuthGate'
 import { PromotedRow } from './PromotedRow'
+import { TemplateDetailPanel } from './TemplateDetailPanel'
 import type {
   HomeTemplateFilter,
   HomeTemplateNavigationTarget,
   HomeTemplatePreview,
 } from './types'
 
-const FILTER_CHIPS: { id: HomeTemplateFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'ready', label: 'Ready' },
-  { id: 'needs_record', label: 'Needs record' },
-  { id: 'issues', label: 'Issues' },
-  { id: 'own', label: 'Owned' },
-  { id: 'featured', label: 'Featured' },
+const FILTER_CHIPS: { id: HomeTemplateFilter }[] = [
+  { id: 'all' },
+  { id: 'ready' },
+  { id: 'needs_record' },
+  { id: 'issues' },
+  { id: 'own' },
+  { id: 'featured' },
 ]
 
-function getQueryErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Could not load templates'
+function getQueryErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
 }
 
 export function HomePage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState<HomeTemplateFilter>('all')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null,
+  )
   const authSessionQuery = useQuery(START_AUTH_SESSION_QUERY)
   const hasResolvedAuthSession =
     authSessionQuery.isSuccess && !authSessionQuery.isFetching
@@ -87,6 +93,15 @@ export function HomePage() {
     [activeFilter, allTemplates],
   )
   const primaryTemplate = ownRecentTemplates[0] ?? featuredTemplates[0] ?? null
+  const selectedTemplate = useMemo(
+    () =>
+      selectedTemplateId
+        ? (allTemplates.find(
+            (template) => template.id === selectedTemplateId,
+          ) ?? null)
+        : null,
+    [allTemplates, selectedTemplateId],
+  )
   const readyCount = allTemplates.filter(
     (template) => template.status === 'ready',
   ).length
@@ -96,8 +111,19 @@ export function HomePage() {
   const isLoading = ownRecentQuery.isLoading || featuredQuery.isLoading
   const errorMessage =
     ownRecentQuery.isError || featuredQuery.isError
-      ? getQueryErrorMessage(ownRecentQuery.error ?? featuredQuery.error)
+      ? getQueryErrorMessage(
+          ownRecentQuery.error ?? featuredQuery.error,
+          t('home.error.loadTemplates'),
+        )
       : null
+
+  useEffect(() => {
+    if (!selectedTemplateId) return
+    if (allTemplates.some((template) => template.id === selectedTemplateId)) {
+      return
+    }
+    setSelectedTemplateId(null)
+  }, [allTemplates, selectedTemplateId])
 
   function navigateToTarget(target: HomeTemplateNavigationTarget) {
     if (target.type === 'generation-run') {
@@ -126,6 +152,28 @@ export function HomePage() {
     navigateToTarget(template.navigationTarget)
   }
 
+  function handleEditTemplate(template: HomeTemplatePreview) {
+    void navigate({
+      to: '/builder',
+      search: { templateId: template.id },
+    })
+  }
+
+  function handlePickTemplateRecord(
+    template: HomeTemplatePreview,
+    recordId: string,
+  ) {
+    if (!template.shareSlug) return
+    void navigate({
+      to: '/generate/$slug/$recordId',
+      params: { slug: template.shareSlug, recordId },
+    })
+  }
+
+  function handleSelectTemplate(template: HomeTemplatePreview) {
+    setSelectedTemplateId(template.id)
+  }
+
   function handleOpenBuilder() {
     void navigate({ to: '/builder' })
   }
@@ -133,173 +181,140 @@ export function HomePage() {
   if (authSessionQuery.isError) {
     return (
       <AuthGateStatus
-        label={getQueryErrorMessage(authSessionQuery.error)}
+        label={getQueryErrorMessage(
+          authSessionQuery.error,
+          t('home.error.loadTemplates'),
+        )}
         onRetry={() => void authSessionQuery.refetch()}
       />
     )
   }
 
   if (!hasResolvedAuthSession) {
-    return <AuthGateStatus label="Checking sign-in" />
+    return <AuthGateStatus label={t('home.auth.checkingSignIn')} />
   }
 
   if (!canLoadTemplates) {
-    return <AuthGateStatus label="Opening sign-in" />
+    return <AuthGateStatus label={t('home.auth.openingSignIn')} />
   }
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-background text-foreground">
-      <main className="mx-auto max-w-[1480px] px-6 pb-20 pt-7">
-        <section className="mb-2 border-b border-border pb-6 pt-2">
-          <div className="flex items-end justify-between gap-6">
-            <div className="flex flex-col gap-1.5">
-              <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                <span className="size-[7px] rounded-full bg-brand" />
-                Templates
-              </span>
-              <h1 className="text-[32px] font-semibold leading-tight tracking-tight">
-                Landscapes
-              </h1>
-            </div>
-            <div className="flex gap-2.5">
-              <Button
-                variant="outline"
-                className="rounded-[10px] border-border bg-background px-3.5 text-[13.5px] text-foreground hover:bg-accent"
-                onClick={handleOpenBuilder}
-              >
-                + New from scratch
-              </Button>
-              <Button
-                className="gap-2 rounded-[10px] bg-primary px-3.5 text-[13.5px] text-primary-foreground hover:bg-primary/90"
-                disabled={!primaryTemplate}
-                onClick={() =>
-                  primaryTemplate && handleOpenTemplate(primaryTemplate)
-                }
-              >
-                {primaryTemplate?.source === 'own'
-                  ? 'Open last opened'
-                  : 'Open featured'}
-                <ArrowRight className="size-3.5" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-[18px] flex items-center gap-7">
-            <StatBlock value={featuredTemplates.length} label="featured" />
-            <StatBlock value={ownRecentTemplates.length} label="recent owned" />
-            <StatBlock value={readyCount} label="ready previews" />
-            <StatBlock value={attentionCount} label="need attention" />
-            {/* TODO: uncomment when connection status indicator is needed */}
-          </div>
-        </section>
-
-        {errorMessage ? (
-          <ErrorBanner
-            message={errorMessage}
-            onRetry={() =>
-              void Promise.all([
-                ownRecentQuery.refetch(),
-                featuredQuery.refetch(),
-              ])
-            }
-          />
-        ) : null}
-
-        {isLoading && allTemplates.length === 0 ? (
-          <TemplateSectionSkeleton />
-        ) : (
-          <>
-            <PromotedRow
-              templates={featuredTemplates}
-              onOpen={handleOpenTemplate}
-            />
-
-            <section className="border-t border-border pb-2 pt-[22px]">
-              <div className="mb-3.5 flex items-start justify-between gap-6">
-                <h2 className="text-base font-semibold tracking-tight">
-                  Recent
-                </h2>
-                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                  {ownRecentTemplates.length} owned
+    <div className="flex h-full overflow-hidden bg-background text-foreground">
+      <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="mx-auto max-w-[1480px] px-6 pb-20 pt-7">
+          <section className="mb-2 border-b border-border pb-6 pt-2">
+            <div className="flex items-end justify-between gap-6">
+              <div className="flex flex-col gap-1.5">
+                <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <span className="size-[7px] rounded-full bg-brand" />
+                  {t('home.hero.kicker')}
                 </span>
+                <h1 className="text-[32px] font-semibold leading-tight tracking-tight">
+                  {t('home.hero.title')}
+                </h1>
               </div>
-              {ownRecentTemplates.length > 0 ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] gap-3">
-                  {ownRecentTemplates.map((template) => (
-                    <TemplateCard
-                      key={template.id}
-                      template={template}
-                      onClick={() => handleOpenTemplate(template)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptySection label="No recent templates yet" />
-              )}
-            </section>
-
-            <section className="border-t border-border pb-2 pt-[22px]">
-              <div className="mb-3.5 flex items-start justify-between gap-6">
-                <h2 className="text-base font-semibold tracking-tight">
-                  All templates
-                </h2>
-                <div className="flex gap-1.5">
-                  {FILTER_CHIPS.map((chip) => (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      className={cn(
-                        'rounded-full border border-transparent px-3 py-1 text-[12.5px]',
-                        activeFilter === chip.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground',
-                      )}
-                      onClick={() => setActiveFilter(chip.id)}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex gap-2.5">
+                <Button
+                  variant="outline"
+                  className="rounded-[10px] border-border bg-background px-3.5 text-[13.5px] text-foreground hover:bg-accent"
+                  onClick={handleOpenBuilder}
+                >
+                  {t('home.hero.newFromScratch')}
+                </Button>
+                <Button
+                  className="gap-2 rounded-[10px] bg-primary px-3.5 text-[13.5px] text-primary-foreground hover:bg-primary/90"
+                  disabled={!primaryTemplate}
+                  onClick={() =>
+                    primaryTemplate && handleSelectTemplate(primaryTemplate)
+                  }
+                >
+                  {primaryTemplate?.source === 'own'
+                    ? t('home.hero.reviewLastOpened')
+                    : t('home.hero.reviewFeatured')}
+                  <ArrowRight className="size-3.5" />
+                </Button>
               </div>
-              {filteredTemplates.length > 0 ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] gap-3">
-                  {filteredTemplates.map((template) => (
-                    <TemplateCard
-                      key={template.id}
-                      template={template}
-                      onClick={() => handleOpenTemplate(template)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptySection label="No templates match this filter" />
-              )}
-            </section>
-          </>
-        )}
-
-        <section className="mt-9 flex items-center justify-between gap-6 rounded-[14px] border border-border bg-card px-[22px] py-[18px]">
-          <div className="flex items-center gap-3.5">
-            <Pencil className="size-[18px] text-muted-foreground" />
-            <div>
-              <h2 className="text-[15px] font-semibold tracking-tight">
-                Recipe editor
-              </h2>
-              <p className="text-[13px] text-muted-foreground">
-                Author templates with layers, relations, style, and layout.
-              </p>
             </div>
-          </div>
-          <Button
-            variant="outline"
-            className="rounded-[10px] border-border bg-background px-3.5 text-[13.5px] text-foreground hover:bg-accent"
-            onClick={handleOpenBuilder}
-          >
-            Open editor
-            <ArrowRight className="size-3.5" />
-          </Button>
-        </section>
+
+            <div className="mt-[18px] flex items-center gap-7">
+              <StatBlock
+                value={featuredTemplates.length}
+                label={t('home.stats.featured')}
+              />
+              <StatBlock
+                value={ownRecentTemplates.length}
+                label={t('home.stats.recentOwned')}
+              />
+              <StatBlock
+                value={readyCount}
+                label={t('home.stats.readyPreviews')}
+              />
+              <StatBlock
+                value={attentionCount}
+                label={t('home.stats.needAttention')}
+              />
+              {/* TODO: uncomment when connection status indicator is needed */}
+            </div>
+          </section>
+
+          {errorMessage ? (
+            <ErrorBanner
+              message={errorMessage}
+              onRetry={() =>
+                void Promise.all([
+                  ownRecentQuery.refetch(),
+                  featuredQuery.refetch(),
+                ])
+              }
+            />
+          ) : null}
+
+          {isLoading && allTemplates.length === 0 ? (
+            <TemplateSectionSkeleton />
+          ) : (
+            <HomeTemplateSections
+              activeFilter={activeFilter}
+              featuredTemplates={featuredTemplates}
+              filteredTemplates={filteredTemplates}
+              ownRecentTemplates={ownRecentTemplates}
+              selectedTemplateId={selectedTemplateId}
+              onFilterChange={setActiveFilter}
+              onSelectTemplate={handleSelectTemplate}
+            />
+          )}
+
+          <section className="mt-9 flex items-center justify-between gap-6 rounded-[14px] border border-border bg-card px-[22px] py-[18px]">
+            <div className="flex items-center gap-3.5">
+              <Pencil className="size-[18px] text-muted-foreground" />
+              <div>
+                <h2 className="text-[15px] font-semibold tracking-tight">
+                  {t('home.editor.title')}
+                </h2>
+                <p className="text-[13px] text-muted-foreground">
+                  {t('home.editor.description')}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="rounded-[10px] border-border bg-background px-3.5 text-[13.5px] text-foreground hover:bg-accent"
+              onClick={handleOpenBuilder}
+            >
+              {t('home.editor.open')}
+              <ArrowRight className="size-3.5" />
+            </Button>
+          </section>
+        </div>
       </main>
+      {selectedTemplate ? (
+        <TemplateDetailPanel
+          template={selectedTemplate}
+          onClose={() => setSelectedTemplateId(null)}
+          onEdit={handleEditTemplate}
+          onOpen={handleOpenTemplate}
+          onPickRecord={handlePickTemplateRecord}
+        />
+      ) : null}
     </div>
   )
 }
@@ -311,6 +326,7 @@ function AuthGateStatus({
   label: string
   onRetry?: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="grid h-full place-items-center bg-background px-6 text-foreground">
       <div className="flex items-center gap-3 text-[13px] text-muted-foreground">
@@ -322,10 +338,116 @@ function AuthGateStatus({
             className="ml-2 h-8 rounded-[8px] border-border bg-background px-3 text-[12.5px] text-foreground hover:bg-accent"
             onClick={onRetry}
           >
-            Retry
+            {t('home.auth.retry')}
           </Button>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+function HomeTemplateSections({
+  activeFilter,
+  featuredTemplates,
+  filteredTemplates,
+  onFilterChange,
+  onSelectTemplate,
+  ownRecentTemplates,
+  selectedTemplateId,
+}: {
+  activeFilter: HomeTemplateFilter
+  featuredTemplates: HomeTemplatePreview[]
+  filteredTemplates: HomeTemplatePreview[]
+  onFilterChange: (filter: HomeTemplateFilter) => void
+  onSelectTemplate: (template: HomeTemplatePreview) => void
+  ownRecentTemplates: HomeTemplatePreview[]
+  selectedTemplateId: string | null
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <PromotedRow templates={featuredTemplates} onOpen={onSelectTemplate} />
+
+      <section className="border-t border-border pb-2 pt-[22px]">
+        <div className="mb-3.5 flex items-start justify-between gap-6">
+          <h2 className="text-base font-semibold tracking-tight">
+            {t('home.sections.recent')}
+          </h2>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {t('home.count.owned', { count: ownRecentTemplates.length })}
+          </span>
+        </div>
+        {ownRecentTemplates.length > 0 ? (
+          <TemplateCardGrid
+            templates={ownRecentTemplates}
+            selectedTemplateId={selectedTemplateId}
+            onSelectTemplate={onSelectTemplate}
+          />
+        ) : (
+          <EmptySection label={t('home.sections.emptyRecent')} />
+        )}
+      </section>
+
+      <section className="border-t border-border pb-2 pt-[22px]">
+        <div className="mb-3.5 flex items-start justify-between gap-6">
+          <h2 className="text-base font-semibold tracking-tight">
+            {t('home.sections.allTemplates')}
+          </h2>
+          <div className="flex gap-1.5">
+            {FILTER_CHIPS.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                className={cn(
+                  'rounded-full border border-transparent px-3 py-1 text-[12.5px]',
+                  activeFilter === chip.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground',
+                )}
+                onClick={() => onFilterChange(chip.id)}
+              >
+                {t(`home.filters.${chip.id}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {filteredTemplates.length > 0 ? (
+          <TemplateCardGrid
+            templates={filteredTemplates}
+            selectedTemplateId={selectedTemplateId}
+            onSelectTemplate={onSelectTemplate}
+          />
+        ) : (
+          <EmptySection label={t('home.sections.emptyFilter')} />
+        )}
+      </section>
+    </>
+  )
+}
+
+function TemplateCardGrid({
+  onSelectTemplate,
+  selectedTemplateId,
+  templates,
+}: {
+  onSelectTemplate: (template: HomeTemplatePreview) => void
+  selectedTemplateId: string | null
+  templates: HomeTemplatePreview[]
+}) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] gap-3">
+      {templates.map((template) => (
+        <TemplateCard
+          key={template.id}
+          template={template}
+          className={
+            selectedTemplateId === template.id
+              ? 'border-foreground/60'
+              : undefined
+          }
+          onClick={() => onSelectTemplate(template)}
+        />
+      ))}
     </div>
   )
 }
@@ -346,7 +468,7 @@ function ErrorBanner({
         onClick={onRetry}
       >
         <RefreshCw className="size-3.5" />
-        Retry
+        {t('home.auth.retry')}
       </Button>
     </section>
   )

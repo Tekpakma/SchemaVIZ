@@ -12,7 +12,6 @@ import type {
 } from '@/features/canvas/model/types'
 import { CANVAS_NODE_SHAPES } from '@/features/canvas/nodeShapes'
 import {
-  builderEditableNodeHtml,
   builderEditableTemplateNodeHtml,
 } from './builderPreviewHtml'
 import {
@@ -45,6 +44,7 @@ const LAYER_COLUMN_MAX_GAP = 280
 const EDGE_LABEL_APPROX_CHAR_WIDTH = 6
 const EDGE_LABEL_GAP_PADDING = 56
 const STATIC_EDGE_LABEL_Y_OFFSET = 14
+const LAYER_LABEL_RESERVED_TOP_SPACE = 56
 const LAYER_NODE_Y_HINT_SPACING = BUILDER_PREVIEW_NODE_HEIGHT + 48
 
 export type BuilderPreviewNode = {
@@ -78,6 +78,7 @@ export type BuilderPreviewColumn = {
   layerId: string
   label: string
   nodeCount: number
+  textContent?: unknown | null
 }
 
 export type BuilderPreviewCanvasLayer = {
@@ -85,6 +86,8 @@ export type BuilderPreviewCanvasLayer = {
   id: string
   label: string
   nodeIds: string[]
+  /** Lexical JSON for styled layer label. */
+  textContent?: unknown | null
 }
 
 export type BuilderPreviewCanvasGraph = {
@@ -124,6 +127,7 @@ export function getBuilderPreviewColumns(
     layerId: layer.id,
     label: layer.label,
     nodeCount: modelsByLayerId[layer.id]?.length ?? 0,
+    textContent: layer.textContent,
   }))
 }
 
@@ -373,7 +377,13 @@ function resolveGroupParents(
   return { childToGroupParent, groupLayoutByParentId, groupParentIds }
 }
 
-const MODEL_GROUP_PREFIX = 'builder-model-group:'
+export const MODEL_GROUP_PREFIX = 'builder-model-group:'
+
+export function getModelIdFromBuilderGroupNodeId(nodeId: string) {
+  return nodeId.startsWith(MODEL_GROUP_PREFIX)
+    ? nodeId.slice(MODEL_GROUP_PREFIX.length)
+    : null
+}
 
 function getCanvasLayers(
   columns: BuilderPreviewColumn[],
@@ -389,6 +399,7 @@ function getCanvasLayers(
         id: column.layerId,
         label: column.label,
         nodeIds: [],
+        textContent: column.textContent,
       },
     ]),
   )
@@ -526,21 +537,32 @@ export function getBuilderPreviewCanvasGraph(
   const modelGroupNodes: CanvasNode[] = R.pipe(
     previewNodes,
     R.filter((node) => groupParentIds.has(node.id)),
-    R.map((node) => ({
-      id: `${MODEL_GROUP_PREFIX}${node.id}`,
-      kind: 'group' as const,
-      shape: 'group' as const,
-      layoutMode: 'auto' as const,
-      x: node.layerColumnIndex * layerColumnSpacing,
-      y: node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
-      width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
-      height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
-      lexicalJson: '',
-      html: builderEditableNodeHtml(node.label, node.modelId, node.accent),
-      contentHeight: 0,
-      groupLayout: groupLayoutByParentId.get(node.id) ?? groupLayout,
-      version: 1,
-    })),
+    R.map((node) => {
+      const textContent = getNodeTextContent(node)
+
+      return {
+        id: `${MODEL_GROUP_PREFIX}${node.id}`,
+        kind: 'group' as const,
+        shape: 'group' as const,
+        layoutMode: 'auto' as const,
+        appLabel: node.appLabel,
+        modelName: node.modelName,
+        x: node.layerColumnIndex * layerColumnSpacing,
+        y:
+          LAYER_LABEL_RESERVED_TOP_SPACE +
+          node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
+        width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
+        height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
+        lexicalJson: stringifyTemplateTextContent(textContent),
+        html: builderEditableTemplateNodeHtml(
+          renderTemplateTextContent(textContent),
+          node.accent,
+        ),
+        contentHeight: 0,
+        groupLayout: groupLayoutByParentId.get(node.id) ?? groupLayout,
+        version: 1,
+      }
+    }),
   )
 
   // Only create box nodes for non-parent models. Group parents are
@@ -587,7 +609,8 @@ export function getBuilderPreviewCanvasGraph(
         x: groupParentNodeId ? 0 : node.layerColumnIndex * layerColumnSpacing,
         y: groupParentNodeId
           ? 0
-          : node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
+          : LAYER_LABEL_RESERVED_TOP_SPACE +
+            node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
         width,
         height,
         lexicalJson,

@@ -1,13 +1,7 @@
 import { useMemo, useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
-import {
-  Check,
-  ChevronsUpDown,
-  Loader2,
-  Play,
-  Search,
-} from 'lucide-react'
+import { Check, ChevronsUpDown, Loader2, Play, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -28,6 +22,7 @@ import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQu
 import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
 import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
+import { DeleteGenerationTemplateButton } from '@/features/builder/DeleteGenerationTemplateButton'
 
 export const Route = createFileRoute('/generate/$slug/')({
   ssr: false,
@@ -49,7 +44,6 @@ function getRecordPk(fields: Record<string, unknown>): string {
 function GenerateTemplatePage() {
   const { t } = useTranslation()
   const { slug } = Route.useParams()
-  const navigate = useNavigate()
 
   const { data: template } = useSuspenseQuery(
     SHARED_GENERATION_QUERIES.template(slug),
@@ -82,14 +76,6 @@ function GenerateTemplatePage() {
     displayName: string
   } | null>(null)
 
-  const handleGenerate = () => {
-    if (!selectedRecord) return
-    void navigate({
-      to: '/generate/$slug/$recordId',
-      params: { slug, recordId: selectedRecord.pk },
-    })
-  }
-
   return (
     <div className="flex h-dvh w-dvw flex-col bg-background">
       <header className="flex items-center gap-3 border-b border-border px-3 py-2">
@@ -99,6 +85,7 @@ function GenerateTemplatePage() {
             {template.name || t('builder.header.titlePlaceholder')}
           </h1>
         </div>
+        <DeleteGenerationTemplateButton template={template} />
       </header>
 
       <main className="flex flex-1 items-center justify-center p-6">
@@ -119,6 +106,7 @@ function GenerateTemplatePage() {
                   variant="outline"
                   role="combobox"
                   aria-expanded={open}
+                  aria-controls="generate-record-list"
                   className="min-w-0 flex-1 justify-between font-normal"
                 >
                   {selectedRecord ? (
@@ -135,10 +123,8 @@ function GenerateTemplatePage() {
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
                 <Command>
-                  <CommandInput
-                    placeholder={t('generate.searchRecords')}
-                  />
-                  <CommandList>
+                  <CommandInput placeholder={t('generate.searchRecords')} />
+                  <CommandList id="generate-record-list">
                     {recordsQuery.isLoading && (
                       <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
                         <Loader2 className="size-4 animate-spin" />
@@ -190,13 +176,22 @@ function GenerateTemplatePage() {
               </PopoverContent>
             </Popover>
 
-            <Button
-              disabled={!selectedRecord}
-              onClick={handleGenerate}
-            >
-              <Play className="size-4" />
-              {t('generate.run')}
-            </Button>
+            {selectedRecord ? (
+              <Button asChild>
+                <Link
+                  to="/generate/$slug/$recordId"
+                  params={{ slug, recordId: selectedRecord.pk }}
+                >
+                  <Play className="size-4" />
+                  {t('generate.run')}
+                </Link>
+              </Button>
+            ) : (
+              <Button disabled>
+                <Play className="size-4" />
+                {t('generate.run')}
+              </Button>
+            )}
           </div>
         </div>
       </main>

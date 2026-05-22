@@ -1,6 +1,11 @@
-import { Component, Suspense, useMemo } from 'react'
+import { Component, Suspense, useEffect, useMemo, useRef } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection'
+import { mergeRegister } from '@lexical/utils'
 import { useSuspenseQuery } from '@tanstack/react-query'
+import { CLICK_COMMAND, COMMAND_PRIORITY_LOW } from 'lexical'
+import { cn } from '@/lib/utils'
 import { useShowResolvedReferences } from '@/store/canvasStore'
 import { useOptionalLexicalOverlayRuntime } from '../LexicalOverlayRuntimeContext'
 import type { LexicalOverlayDataScope } from '../LexicalOverlayRuntimeContext'
@@ -20,12 +25,46 @@ function ChipShell({
   styles,
   children,
 }: ChipProps & { children: React.ReactNode }) {
+  const [editor] = useLexicalComposerContext()
+  const [isSelected, setSelected, clearSelection] =
+    useLexicalNodeSelection(nodeKey)
+  const chipRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    return mergeRegister(
+      editor.registerCommand(
+        CLICK_COMMAND,
+        (event: MouseEvent) => {
+          const target = event.target
+          if (
+            !(target instanceof globalThis.Node) ||
+            !chipRef.current?.contains(target)
+          ) {
+            return false
+          }
+
+          event.preventDefault()
+          if (!event.shiftKey) clearSelection()
+          setSelected(!isSelected)
+          return true
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    )
+  }, [clearSelection, editor, isSelected, setSelected])
+
   return (
     <span
+      ref={chipRef}
       data-data-reference={fieldName}
       data-node-key={nodeKey}
+      data-selected={isSelected ? 'true' : undefined}
       contentEditable={false}
-      className="inline-flex items-center rounded-sm bg-primary/10 px-1 py-0 align-baseline select-none text-sm font-mono"
+      className={cn(
+        'relative inline-flex items-center rounded-sm bg-primary/10 px-1 py-0 align-baseline select-none text-sm font-mono transition-colors duration-150',
+        isSelected &&
+          'bg-primary/15 after:pointer-events-none after:absolute after:-bottom-0.5 after:inset-x-0 after:h-0.5 after:rounded-full after:bg-primary',
+      )}
       style={styles}
     >
       {children}
@@ -85,7 +124,9 @@ function ResolvedChipContent({ fieldName }: { fieldName: string }) {
   // but no record — show the template form there instead of firing
   // a record fetch that the backend will reject with "id is required".
   if (!dataScope?.recordId) return <>{`{{${fieldName}}}`}</>
-  return <ResolvedChipContentInner dataScope={dataScope} fieldName={fieldName} />
+  return (
+    <ResolvedChipContentInner dataScope={dataScope} fieldName={fieldName} />
+  )
 }
 
 /**
@@ -103,11 +144,14 @@ class ChipErrorBoundary extends Component<
     return { hasError: true }
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.warn('[DataReferenceChip] resolution failed; showing template fallback', {
-      fieldName: this.props.fieldName,
-      error,
-      info,
-    })
+    console.warn(
+      '[DataReferenceChip] resolution failed; showing template fallback',
+      {
+        fieldName: this.props.fieldName,
+        error,
+        info,
+      },
+    )
   }
   render() {
     if (this.state.hasError) return <>{`{{${this.props.fieldName}}}`}</>

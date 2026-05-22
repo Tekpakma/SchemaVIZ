@@ -31,25 +31,40 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react'
+import type { CSSProperties, MouseEvent, MutableRefObject } from 'react'
 import {
+  $getSelection,
   $getRoot,
+  $isRangeSelection,
   BLUR_COMMAND,
   COMMAND_PRIORITY_EDITOR,
   COMMAND_PRIORITY_HIGH,
+  COMMAND_PRIORITY_LOW,
   FOCUS_COMMAND,
+  FORMAT_TEXT_COMMAND,
   INSERT_LINE_BREAK_COMMAND,
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
+  SELECTION_CHANGE_COMMAND,
 } from 'lexical'
+import type { LexicalEditor, TextFormatType } from 'lexical'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import {
+  $getSelectionStyleValueForProperty,
+  $patchStyleText,
+} from '@lexical/selection'
 import { mergeRegister } from '@lexical/utils'
+import { BoldIcon, ItalicIcon, PaletteIcon, UnderlineIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { layout } from 'render-tag'
+import { useTranslation } from 'react-i18next'
 
 import {
   useCanvasActions,
@@ -70,16 +85,120 @@ import {
   renderTagEditorStyle,
 } from '@/features/lexical/exportRenderTagHtml'
 import { DataReferenceNode } from '@/features/lexical/dataReference/DataReferenceNode'
+import { APPLY_INLINE_TEXT_STYLE_COMMAND } from '@/features/lexical/dataReference/commands'
 import { DataReferencePlugin } from '@/features/lexical/dataReference/DataReferencePlugin'
 import { DataReferenceAutocomplete } from '@/features/lexical/dataReference/DataReferenceAutocomplete'
 import { LexicalOverlayRuntimeProvider } from '@/features/lexical/LexicalOverlayRuntimeContext'
 import type { LexicalOverlayRuntime } from '@/features/lexical/LexicalOverlayRuntimeContext'
 import { hasDataScope } from '@/features/canvas/model/types'
 import { TEST_IDS } from '@/constants'
+import { cn } from '@/lib/utils'
 
 // Time window during which a transient BLUR (e.g. StrictMode-induced)
 // can be cancelled by a follow-up FOCUS before it commits.
 const BLUR_COMMIT_SETTLE_MS = 100
+const INLINE_TOOLBAR_OFFSET_PX = 38
+const DEFAULT_INLINE_TEXT_COLOR = '#111827'
+
+type InlineToolbarFormat = Extract<
+  TextFormatType,
+  'bold' | 'italic' | 'underline'
+>
+
+const INLINE_TOOLBAR_ITEMS = [
+  {
+    format: 'bold',
+    Icon: BoldIcon,
+    labelKey: 'builder.inlineToolbar.bold',
+  },
+  {
+    format: 'italic',
+    Icon: ItalicIcon,
+    labelKey: 'builder.inlineToolbar.italic',
+  },
+  {
+    format: 'underline',
+    Icon: UnderlineIcon,
+    labelKey: 'builder.inlineToolbar.underline',
+  },
+] as const satisfies ReadonlyArray<{
+  format: InlineToolbarFormat
+  Icon: LucideIcon
+  labelKey: string
+}>
+
+type InlineToolbarFormatState = Record<InlineToolbarFormat, boolean> & {
+  color: string
+}
+
+type InlineEditorNode = NonNullable<ReturnType<typeof useCanvasNodes>[string]>
+type CanvasActions = ReturnType<typeof useCanvasActions>
+type CanvasViewport = ReturnType<typeof useCanvasViewport>
+type ResolvedTheme = ReturnType<typeof useTheme>['resolvedTheme']
+
+const EMPTY_INLINE_TOOLBAR_FORMAT_STATE: InlineToolbarFormatState = {
+  bold: false,
+  color: DEFAULT_INLINE_TEXT_COLOR,
+  italic: false,
+  underline: false,
+}
+
+function normalizeCssColorToHex(color: string) {
+  const trimmed = color.trim()
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed
+  const shortHex = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(trimmed)
+  if (shortHex) {
+    return `#${shortHex[1]}${shortHex[1]}${shortHex[2]}${shortHex[2]}${shortHex[3]}${shortHex[3]}`
+  }
+  const rgb = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(trimmed)
+  if (rgb) {
+    return `#${[rgb[1], rgb[2], rgb[3]]
+      .map((channel) =>
+        Math.max(0, Math.min(255, Number(channel)))
+          .toString(16)
+          .padStart(2, '0'),
+      )
+      .join('')}`
+  }
+  return DEFAULT_INLINE_TEXT_COLOR
+}
+
+function readInlineToolbarFormatState(): InlineToolbarFormatState {
+  const selection = $getSelection()
+  if (!$isRangeSelection(selection)) {
+    return EMPTY_INLINE_TOOLBAR_FORMAT_STATE
+  }
+  const color = $getSelectionStyleValueForProperty(selection, 'color', '')
+  return {
+    bold: selection.hasFormat('bold'),
+    color: normalizeCssColorToHex(color || DEFAULT_INLINE_TEXT_COLOR),
+    italic: selection.hasFormat('italic'),
+    underline: selection.hasFormat('underline'),
+  }
+}
+
+function areInlineToolbarFormatStatesEqual(
+  a: InlineToolbarFormatState,
+  b: InlineToolbarFormatState,
+) {
+  return (
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.underline === b.underline &&
+    a.color === b.color
+  )
+}
+
+function preventEditorBlur(event: MouseEvent) {
+  event.preventDefault()
+}
+
+function insertTemplateToken() {
+  const selection = $getSelection()
+  if ($isRangeSelection(selection)) {
+    selection.insertText('{{')
+  }
+}
 
 const INITIAL_CONFIG = {
   namespace: 'builder-inline-editor',
@@ -110,6 +229,8 @@ export type BuilderInlineEditorCommit = {
   contentHeight: number
 }
 
+export type FlushInlineNodeEdit = () => boolean
+
 export type BuilderInlineEditorProps = {
   /**
    * Direct commit pipe to the recipe — called when the user finishes
@@ -118,17 +239,27 @@ export type BuilderInlineEditorProps = {
    * even if the canvas store is later torn down (e.g. on preview toggle).
    */
   onCommit?: (commit: BuilderInlineEditorCommit) => void
+  onRegisterFlush?: (flush: FlushInlineNodeEdit | null) => void
 }
 
-export function BuilderInlineEditor({ onCommit }: BuilderInlineEditorProps) {
+export function BuilderInlineEditor({
+  onCommit,
+  onRegisterFlush,
+}: BuilderInlineEditorProps) {
   return (
     <LexicalComposer initialConfig={INITIAL_CONFIG}>
-      <BuilderInlineEditorBody onCommit={onCommit} />
+      <BuilderInlineEditorBody
+        onCommit={onCommit}
+        onRegisterFlush={onRegisterFlush}
+      />
     </LexicalComposer>
   )
 }
 
-function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
+function BuilderInlineEditorBody({
+  onCommit,
+  onRegisterFlush,
+}: BuilderInlineEditorProps) {
   const [editor] = useLexicalComposerContext()
   const editingNodeId = useCanvasEditingNodeId()
   const nodes = useCanvasNodes()
@@ -140,13 +271,86 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
 
   const node = editingNodeId ? nodes[editingNodeId] : null
   const isEditing = !!node
+  const isGroup = node?.kind === 'group'
 
-  // Build a per-edit-session runtime for plugins that need to know
-  // which model/record they're editing (data-reference autocomplete).
-  // Even though the *editor* is persistent, the *runtime* changes per
-  // edit session — and that's fine: it's a React context, not Lexical
-  // editor state.
-  const runtime = useMemo<LexicalOverlayRuntime | null>(() => {
+  const runtime = useInlineEditorRuntime(node)
+  useLoadInlineEditorNode(editor, node)
+  const commit = useInlineEditorCommit({
+    commitNodeText,
+    editor,
+    node,
+    onCommitRef,
+  })
+  const commitAndExit = useCallback(() => {
+    commit()
+    console.log('[BuilderInlineEditor] commitAndExit → stopEditing')
+    stopEditing()
+  }, [commit, stopEditing])
+  const { cancelPendingBlur, scheduleBlurCommit } =
+    usePendingInlineEditorBlur(commitAndExit)
+  const flushInlineNodeEdit = useCallback(() => {
+    if (!node) return false
+    cancelPendingBlur()
+    const didCommit = commit()
+    if (didCommit) stopEditing()
+    return didCommit
+  }, [cancelPendingBlur, commit, node, stopEditing])
+  useRegisterInlineEditorFlush(onRegisterFlush, flushInlineNodeEdit)
+  useInlineEditorCommands({
+    cancelPendingBlur,
+    commitAndExit,
+    editor,
+    isEditing,
+    scheduleBlurCommit,
+  })
+  const { toolbarStyle, wrapperStyle } = useInlineEditorStyles({
+    node,
+    resolvedTheme,
+    viewport,
+  })
+
+  // The runtime provider wraps the ENTIRE editor body — including the
+  // contenteditable — because Lexical-rendered chips (DataReferenceChip)
+  // live inside the contenteditable and need access to the context.
+  // The value can be `null` when nothing is being edited; consumers
+  // (chips) use `useOptionalLexicalOverlayRuntime` and degrade gracefully.
+  return (
+    <LexicalOverlayRuntimeProvider value={runtime}>
+      {isEditing ? <InlineLexicalToolbar style={toolbarStyle} /> : null}
+      <div
+        className="absolute top-0 left-0"
+        data-testid={TEST_IDS.LEXICAL_OVERLAY}
+        style={wrapperStyle}
+      >
+        <style>{renderTagCss}</style>
+        <RichTextPlugin
+          contentEditable={
+            <ContentEditable
+              className="canvas-render-tag-root"
+              style={isGroup ? groupEditorStyle : renderTagEditorStyle}
+            />
+          }
+          placeholder={null}
+          ErrorBoundary={LexicalErrorBoundary}
+        />
+        <HistoryPlugin />
+        {/* `{{` typeahead — only mounted while a node is being edited so
+           that the autocomplete's useSuspenseQuery doesn't fire when idle. */}
+        {runtime ? (
+          <>
+            <DataReferencePlugin />
+            <Suspense fallback={null}>
+              <DataReferenceAutocomplete />
+            </Suspense>
+          </>
+        ) : null}
+      </div>
+    </LexicalOverlayRuntimeProvider>
+  )
+}
+
+function useInlineEditorRuntime(node: InlineEditorNode | null) {
+  return useMemo<LexicalOverlayRuntime | null>(() => {
     if (!node) return null
     const base = {
       nodeId: node.id,
@@ -165,15 +369,14 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
     }
     return base
   }, [node])
+}
 
-  // Track which node's content is currently loaded into the editor.
-  // We avoid re-parsing the same JSON repeatedly (StrictMode + every
-  // recipe update would otherwise stomp the user's in-progress edits).
+function useLoadInlineEditorNode(
+  editor: LexicalEditor,
+  node: InlineEditorNode | null,
+) {
   const loadedKeyRef = useRef<string>('')
 
-  // ------------------------------------------------------------------
-  // Load content & toggle edit mode when target node changes
-  // ------------------------------------------------------------------
   useLayoutEffect(() => {
     if (!node) {
       console.log('[BuilderInlineEditor] no target node — setEditable(false)')
@@ -184,7 +387,6 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
 
     const key = `${node.id}:${node.version}`
     if (loadedKeyRef.current === key) {
-      // Same content already loaded. Just make sure we're editable.
       editor.setEditable(true)
       return
     }
@@ -197,11 +399,7 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
     if (node.lexicalJson) {
       try {
         const state = editor.parseEditorState(node.lexicalJson)
-        // Skip setEditorState if the parsed state is empty — Lexical
-        // throws on attempts to set a completely empty root.
-        if (!state.isEmpty()) {
-          editor.setEditorState(state)
-        }
+        if (!state.isEmpty()) editor.setEditorState(state)
       } catch (error) {
         console.warn(
           '[BuilderInlineEditor] failed to parse lexicalJson, keeping current editor state',
@@ -209,7 +407,6 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
         )
       }
     } else {
-      // No saved content — clear the editor.
       editor.update(() => {
         const root = $getRoot()
         root.clear()
@@ -219,22 +416,32 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
     editor.setEditable(true)
     loadedKeyRef.current = key
 
-    // Focus on next frame so the contenteditable has settled visibly.
     requestAnimationFrame(() => {
       console.log('[BuilderInlineEditor] rAF focus')
       editor.focus()
     })
   }, [editor, node])
+}
 
-  // ------------------------------------------------------------------
-  // Commit helpers
-  // ------------------------------------------------------------------
-  const commit = useCallback(() => {
+function useInlineEditorCommit({
+  commitNodeText,
+  editor,
+  node,
+  onCommitRef,
+}: {
+  commitNodeText: CanvasActions['commitNodeText']
+  editor: LexicalEditor
+  node: InlineEditorNode | null
+  onCommitRef: MutableRefObject<
+    BuilderInlineEditorProps['onCommit'] | undefined
+  >
+}) {
+  return useCallback(() => {
     if (!node) {
       console.warn(
         '[BuilderInlineEditor] commit called but node is null — bail',
       )
-      return
+      return false
     }
     const editorState = editor.getEditorState()
     let lexicalJson = ''
@@ -243,9 +450,9 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
       lexicalJson = JSON.stringify(editorState.toJSON())
       html = exportRenderTagHtml(editor)
     })
-    const width = node.width || 1
     const contentHeight = Math.ceil(
-      layout({ html, width, accuracy: renderTagAccuracy }).height,
+      layout({ html, width: node.width || 1, accuracy: renderTagAccuracy })
+        .height,
     )
     console.log('[BuilderInlineEditor] commit', {
       nodeId: node.id,
@@ -253,13 +460,7 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
       htmlPreview: html.slice(0, 120),
       contentHeight,
     })
-    // (1) Update the canvas store so the Konva render reflects the
-    //     edit instantly while the recipe round-trip is in flight.
     commitNodeText({ id: node.id, lexicalJson, html, contentHeight })
-    // (2) Update the recipe DIRECTLY via the parent's handler. This is
-    //     the source of truth; if the canvas store is later torn down
-    //     (e.g. preview toggle remounts BuilderPreview), the recipe
-    //     still has the user's edits.
     if (onCommitRef.current) {
       onCommitRef.current({
         nodeId: node.id,
@@ -272,39 +473,68 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
         '[BuilderInlineEditor] no onCommit prop wired — edit only lives in the canvas store and will be lost on remount',
       )
     }
-  }, [editor, node, commitNodeText])
+    return true
+  }, [editor, node, commitNodeText, onCommitRef])
+}
 
-  const commitAndExit = useCallback(() => {
-    commit()
-    console.log('[BuilderInlineEditor] commitAndExit → stopEditing')
-    stopEditing()
-  }, [commit, stopEditing])
+function usePendingInlineEditorBlur(commitAndExit: () => void) {
+  const pendingBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ------------------------------------------------------------------
-  // Keyboard / blur handlers — only registered while editing
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    if (!isEditing) return
-
-    let pendingBlurTimer: ReturnType<typeof setTimeout> | null = null
-    const cancelPendingBlur = () => {
-      if (pendingBlurTimer !== null) {
-        clearTimeout(pendingBlurTimer)
-        pendingBlurTimer = null
-      }
+  const cancelPendingBlur = useCallback(() => {
+    if (pendingBlurTimerRef.current !== null) {
+      clearTimeout(pendingBlurTimerRef.current)
+      pendingBlurTimerRef.current = null
     }
+  }, [])
+
+  const scheduleBlurCommit = useCallback(() => {
+    cancelPendingBlur()
+    pendingBlurTimerRef.current = setTimeout(() => {
+      pendingBlurTimerRef.current = null
+      console.log('[BuilderInlineEditor] BLUR settled → commitAndExit')
+      commitAndExit()
+    }, BLUR_COMMIT_SETTLE_MS)
+  }, [cancelPendingBlur, commitAndExit])
+
+  useEffect(() => cancelPendingBlur, [cancelPendingBlur])
+
+  return { cancelPendingBlur, scheduleBlurCommit }
+}
+
+function useRegisterInlineEditorFlush(
+  onRegisterFlush: BuilderInlineEditorProps['onRegisterFlush'],
+  flushInlineNodeEdit: FlushInlineNodeEdit,
+) {
+  useEffect(() => {
+    onRegisterFlush?.(flushInlineNodeEdit)
+    return () => {
+      onRegisterFlush?.(null)
+    }
+  }, [flushInlineNodeEdit, onRegisterFlush])
+}
+
+function useInlineEditorCommands({
+  cancelPendingBlur,
+  commitAndExit,
+  editor,
+  isEditing,
+  scheduleBlurCommit,
+}: {
+  cancelPendingBlur: () => void
+  commitAndExit: () => void
+  editor: LexicalEditor
+  isEditing: boolean
+  scheduleBlurCommit: () => void
+}) {
+  useEffect(() => {
+    if (!isEditing) return cancelPendingBlur
 
     const unregister = mergeRegister(
       editor.registerCommand(
         BLUR_COMMAND,
         () => {
           console.log('[BuilderInlineEditor] BLUR_COMMAND fired')
-          cancelPendingBlur()
-          pendingBlurTimer = setTimeout(() => {
-            pendingBlurTimer = null
-            console.log('[BuilderInlineEditor] BLUR settled → commitAndExit')
-            commitAndExit()
-          }, BLUR_COMMIT_SETTLE_MS)
+          scheduleBlurCommit()
           return true
         },
         COMMAND_PRIORITY_EDITOR,
@@ -353,26 +583,44 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
       cancelPendingBlur()
       unregister()
     }
-  }, [editor, isEditing, commitAndExit])
+  }, [editor, isEditing, cancelPendingBlur, commitAndExit, scheduleBlurCommit])
+}
 
-  // ------------------------------------------------------------------
-  // Positioning & visibility
-  // ------------------------------------------------------------------
-  const isGroup = node?.kind === 'group'
-  const editorHeight = node
-    ? isGroup
+function useInlineEditorStyles({
+  node,
+  resolvedTheme,
+  viewport,
+}: {
+  node: InlineEditorNode | null
+  resolvedTheme: ResolvedTheme
+  viewport: CanvasViewport
+}) {
+  return useMemo(() => {
+    const toolbarStyle: CSSProperties = !node
+      ? { display: 'none' }
+      : {
+          position: 'absolute',
+          top: Math.max(
+            8,
+            viewport.y + node.y * viewport.scale - INLINE_TOOLBAR_OFFSET_PX,
+          ),
+          left: viewport.x + (node.x + node.width / 2) * viewport.scale,
+          transform: 'translateX(-50%)',
+          zIndex: 20,
+          pointerEvents: 'auto',
+        }
+
+    if (!node) {
+      return { toolbarStyle, wrapperStyle: { display: 'none' } }
+    }
+
+    const isGroup = node.kind === 'group'
+    const shapeDef = getCanvasNodeShapeDefinition(node)
+    const editorHeight = isGroup
       ? Math.max(node.contentHeight, 40)
       : node.height
-    : 0
-  const shapeDef = node ? getCanvasNodeShapeDefinition(node) : null
-  const surfaceStroke = CANVAS_NODE_BORDER_FALLBACKS[resolvedTheme]
-
-  const wrapperStyle: React.CSSProperties = useMemo(() => {
-    if (!node || !shapeDef) {
-      // Hidden when no target — but the editor stays mounted!
-      return { display: 'none' }
-    }
-    return {
+    const surfaceStroke = CANVAS_NODE_BORDER_FALLBACKS[resolvedTheme]
+    const wrapperStyle: CSSProperties = {
       position: 'absolute',
       top: 0,
       left: 0,
@@ -390,44 +638,141 @@ function BuilderInlineEditorBody({ onCommit }: BuilderInlineEditorProps) {
       boxSizing: 'border-box',
       overflow: 'visible',
     }
-  }, [node, shapeDef, editorHeight, isGroup, surfaceStroke, viewport])
 
-  // The runtime provider wraps the ENTIRE editor body — including the
-  // contenteditable — because Lexical-rendered chips (DataReferenceChip)
-  // live inside the contenteditable and need access to the context.
-  // The value can be `null` when nothing is being edited; consumers
-  // (chips) use `useOptionalLexicalOverlayRuntime` and degrade gracefully.
-  return (
-    <LexicalOverlayRuntimeProvider value={runtime}>
-      <div
-        className="absolute top-0 left-0"
-        data-testid={TEST_IDS.LEXICAL_OVERLAY}
-        style={wrapperStyle}
-      >
-        <style>{renderTagCss}</style>
-        <RichTextPlugin
-          contentEditable={
-            <ContentEditable
-              className="canvas-render-tag-root"
-              style={isGroup ? groupEditorStyle : renderTagEditorStyle}
-            />
+    return { toolbarStyle, wrapperStyle }
+  }, [node, resolvedTheme, viewport])
+}
+
+function InlineLexicalToolbar({ style }: { style: CSSProperties }) {
+  const [editor] = useLexicalComposerContext()
+  const { t } = useTranslation()
+  const [formatState, setFormatState] = useState(
+    EMPTY_INLINE_TOOLBAR_FORMAT_STATE,
+  )
+
+  const updateFormatState = useCallback(
+    (nextState: InlineToolbarFormatState) => {
+      setFormatState((currentState) =>
+        areInlineToolbarFormatStatesEqual(currentState, nextState)
+          ? currentState
+          : nextState,
+      )
+    },
+    [],
+  )
+
+  useEffect(() => {
+    editor.getEditorState().read(() => {
+      updateFormatState(readInlineToolbarFormatState())
+    })
+
+    return mergeRegister(
+      editor.registerUpdateListener(({ editorState }) => {
+        editorState.read(() => {
+          updateFormatState(readInlineToolbarFormatState())
+        })
+      }),
+      editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        () => {
+          updateFormatState(readInlineToolbarFormatState())
+          return false
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    )
+  }, [editor, updateFormatState])
+
+  const formatText = useCallback(
+    (format: InlineToolbarFormat) => {
+      editor.focus(() => {
+        editor.dispatchCommand(FORMAT_TEXT_COMMAND, format)
+      })
+    },
+    [editor],
+  )
+
+  const insertFieldToken = useCallback(() => {
+    editor.focus(() => {
+      editor.update(insertTemplateToken)
+    })
+  }, [editor])
+
+  const applyTextColor = useCallback(
+    (color: string) => {
+      editor.focus(() => {
+        editor.update(() => {
+          const selection = $getSelection()
+          if ($isRangeSelection(selection)) {
+            $patchStyleText(selection, { color })
           }
-          placeholder={null}
-          ErrorBoundary={LexicalErrorBoundary}
+        })
+        editor.dispatchCommand(APPLY_INLINE_TEXT_STYLE_COMMAND, { color })
+      })
+    },
+    [editor],
+  )
+
+  const controlClass =
+    'flex h-7 min-w-7 items-center justify-center rounded-[5px] px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+
+  return (
+    <div
+      role="toolbar"
+      aria-label={t('builder.inlineToolbar.label')}
+      className="absolute flex items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+      onMouseDown={preventEditorBlur}
+      style={style}
+    >
+      {INLINE_TOOLBAR_ITEMS.map(({ format, Icon, labelKey }) => {
+        const label = t(labelKey)
+        const isActive = formatState[format]
+        return (
+          <button
+            key={format}
+            type="button"
+            className={cn(
+              controlClass,
+              isActive && 'bg-accent text-foreground',
+            )}
+            aria-label={label}
+            aria-pressed={isActive}
+            title={label}
+            onClick={() => formatText(format)}
+          >
+            <Icon className="size-3.5" aria-hidden="true" />
+          </button>
+        )
+      })}
+      <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+      <label
+        className={cn(controlClass, 'relative cursor-pointer overflow-hidden')}
+        title={t('builder.inlineToolbar.textColor')}
+      >
+        <PaletteIcon className="size-3.5" aria-hidden="true" />
+        <span
+          className="absolute bottom-1 h-0.5 w-3 rounded-full"
+          style={{ backgroundColor: formatState.color }}
         />
-        <HistoryPlugin />
-        {/* `{{` typeahead — only mounted while a node is being edited so
-           that the autocomplete's useSuspenseQuery doesn't fire when idle. */}
-        {runtime ? (
-          <>
-            <DataReferencePlugin />
-            <Suspense fallback={null}>
-              <DataReferenceAutocomplete />
-            </Suspense>
-          </>
-        ) : null}
-      </div>
-    </LexicalOverlayRuntimeProvider>
+        <span className="sr-only">{t('builder.inlineToolbar.textColor')}</span>
+        <input
+          className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 p-0 opacity-0"
+          aria-label={t('builder.inlineToolbar.textColor')}
+          type="color"
+          value={formatState.color}
+          onChange={(event) => applyTextColor(event.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        className={cn(controlClass, 'font-mono text-[11px]')}
+        aria-label={t('builder.inlineToolbar.insertTemplate')}
+        title={t('builder.inlineToolbar.insertTemplate')}
+        onClick={insertFieldToken}
+      >
+        <span>{'{{'}</span>
+      </button>
+    </div>
   )
 }
 

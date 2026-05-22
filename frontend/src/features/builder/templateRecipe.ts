@@ -16,6 +16,7 @@ import type {
   RecipeData,
   RecipeFilter,
   RecipeLayer,
+  RecipeLayoutDirection,
   RecipeModel,
   RecipeStyleDraft,
   TraversalEdge,
@@ -90,8 +91,8 @@ export function createBlankRecipe(): RecipeData {
     layoutAlgorithm: 'Layered',
     layoutDirection: 'LR',
     shareSlug: '',
-    promoteOrg: '',
-    promoteVisibility: 'org-wide',
+    promoteTarget: '',
+    promoteVisibility: 'shared',
     promoteAudience: '',
   }
 }
@@ -146,12 +147,14 @@ function readLayoutSettings(layoutSettings: unknown) {
   if (!parsed.success) {
     return {
       layoutAlgorithm: 'Layered' as LayoutAlgorithm,
+      layoutDirection: 'LR' as RecipeLayoutDirection,
       swatches: [...DEFAULT_SWATCHES],
     }
   }
 
   return {
     layoutAlgorithm: parsed.data.layoutAlgorithm ?? 'Layered',
+    layoutDirection: parsed.data.layoutDirection ?? 'LR',
     swatches:
       parsed.data.swatches && parsed.data.swatches.length > 0
         ? parsed.data.swatches
@@ -261,7 +264,8 @@ function deserializeEdges(raw: unknown): TraversalEdge[] | null {
         id: e.id,
         from: typeof e.from === 'string' ? e.from : '',
         to: typeof e.to === 'string' ? e.to : '',
-        fromModelId: typeof e.fromModelId === 'string' ? e.fromModelId : undefined,
+        fromModelId:
+          typeof e.fromModelId === 'string' ? e.fromModelId : undefined,
         toModelId: typeof e.toModelId === 'string' ? e.toModelId : undefined,
         via: e.via,
         routeSteps: Array.isArray(e.routeSteps) ? e.routeSteps : undefined,
@@ -420,8 +424,9 @@ export function createRecipeFromTemplate(
     styleDrafts,
     swatches: layout.swatches,
     layoutAlgorithm: layout.layoutAlgorithm,
+    layoutDirection: layout.layoutDirection,
     shareSlug: template.shareSlug ?? '',
-    promoteVisibility: template.scope === 'global' ? 'org-wide' : 'private',
+    promoteVisibility: template.scope === 'global' ? 'shared' : 'private',
     promoteAudience: template.scope === 'global' ? 'All users' : '',
   }
 }
@@ -638,12 +643,19 @@ export function recipeToInlineDefinition(
     }
   }
 
+  const persistedDrafts = serializeStyleDrafts(recipe.styleDrafts)
+
   return {
     inlineDefinition: { rootStepId, stepsById },
     rootModel: startModel.modelId,
     layoutSettings: {
       layoutAlgorithm: recipe.layoutAlgorithm,
+      layoutDirection: recipe.layoutDirection,
       swatches: recipe.swatches,
+      // Include drafts so the backend engine can discover relation paths
+      // (``{{templates.name}}``) referenced by chips in unsaved style drafts
+      // and resolve them into ``node.fields`` server-side.
+      ...(persistedDrafts ? { styleDrafts: persistedDrafts } : {}),
     },
   }
 }
@@ -677,6 +689,6 @@ export function recipeToGenerationTemplateWriteRequest(
       ...source.layoutSettings,
       ...(persistedDrafts ? { styleDrafts: persistedDrafts } : {}),
       ...(recipe.edges.length > 0 ? { edges: recipe.edges } : {}),
-    } as typeof source.layoutSettings,
+    },
   }
 }

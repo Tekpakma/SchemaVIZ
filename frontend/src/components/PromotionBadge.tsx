@@ -1,9 +1,11 @@
+import { useTranslation } from 'react-i18next'
+
 import { cn } from '@/lib/utils'
 import type { PromotionLevel } from '@/features/home/types'
 
 const BADGE_CONFIG = {
   featured: {
-    label: 'Featured · org',
+    labelKey: 'home.badge.featured',
     icon: '★',
     className: 'bg-brand-muted text-brand',
   },
@@ -20,6 +22,7 @@ export function PromotionBadge({
   compact,
   className,
 }: PromotionBadgeProps) {
+  const { t } = useTranslation()
   if (promotion === 'system' || promotion === 'personal') return null
   const config = BADGE_CONFIG[promotion]
   return (
@@ -32,7 +35,7 @@ export function PromotionBadge({
       )}
     >
       <span className="text-[11px] leading-none">{config.icon}</span>
-      {!compact && config.label}
+      {!compact && t(config.labelKey)}
     </span>
   )
 }

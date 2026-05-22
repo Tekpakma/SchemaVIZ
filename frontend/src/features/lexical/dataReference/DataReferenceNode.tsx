@@ -10,7 +10,7 @@ import type {
 } from 'lexical'
 import { DecoratorNode } from 'lexical'
 import { DataReferenceChip } from './DataReferenceChip'
-import { normalizeStyleObject } from './styles'
+import { normalizeStyleObject, styleObjectToString } from './styles'
 
 /**
  * Inline style record stored on DataReferenceNodes.
@@ -106,6 +106,8 @@ export class DataReferenceNode extends DecoratorNode<React.ReactElement> {
     const element = document.createElement('span')
     element.textContent = this.getTextContent()
     element.setAttribute('data-lexical-data-reference', this.__path)
+    const style = styleObjectToString(this.__styles)
+    if (style) element.setAttribute('style', style)
     return { element }
   }
 
@@ -135,10 +137,7 @@ export class DataReferenceNode extends DecoratorNode<React.ReactElement> {
   static importJSON(
     serializedNode: SerializedDataReferenceNode,
   ): DataReferenceNode {
-    return $createDataReferenceNode(
-      serializedNode.path,
-      serializedNode.styles,
-    )
+    return $createDataReferenceNode(serializedNode.path, serializedNode.styles)
   }
 
   decorate(): React.ReactElement {
@@ -158,7 +157,6 @@ export class DataReferenceNode extends DecoratorNode<React.ReactElement> {
   isKeyboardSelectable(): boolean {
     return true
   }
-
 }
 
 function convertDataReferenceElement(

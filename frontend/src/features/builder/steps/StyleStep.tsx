@@ -8,7 +8,7 @@ import { CheckIcon, MousePointerClickIcon, SaveIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { ModelTemplateDefault, StyleTemplate } from '@/api/contracts'
+import type { StyleTemplate } from '@/api/contracts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -18,25 +18,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { CANVAS_NODE_SHAPES } from '@/features/canvas/nodeShapes'
 import { createTemplateTextContent } from '@/features/lexical/templateTextContent'
 import type { BuilderDocumentActions } from '../builderWorkbench'
+import { getModelIdFromBuilderGroupNodeId } from '../builderPreviewLayout'
+import { GroupingControls } from './GroupingControls'
 import {
   BUILDER_SCHEMA_QUERIES,
   saveBuilderStyleTemplateDraft,
 } from '../schemaModelQueries'
 import type { ShapeEntry } from '../schemaModelQueries'
-import type { RecipeLayer, RecipeModel, RecipeStyleDraft } from '../types'
+import type {
+  RecipeGroupRule,
+  RecipeLayer,
+  RecipeModel,
+  RecipeStyleDraft,
+  TraversalEdge,
+} from '../types'
 
 interface StyleStepProps {
   actions: Pick<
     BuilderDocumentActions,
+    | 'addGroupRule'
     | 'markStyleDraftSaved'
+    | 'removeGroupRule'
     | 'setModelStyleTemplate'
     | 'setStyleDraft'
     | 'setStyleDraftSaveState'
   >
+  edges: TraversalEdge[]
+  groupRules: RecipeGroupRule[]
   layers: RecipeLayer[]
   models: RecipeModel[]
   selectedCanvasNodeId?: string | null
@@ -97,18 +108,6 @@ function readTypeSpecificData(value: unknown): TypeSpecificData {
   }
 }
 
-function normalizeModelRef(value: string) {
-  return value.trim().toLowerCase()
-}
-
-function getDefaultsByModelRef(defaults: ModelTemplateDefault[] | undefined) {
-  const result = new Map<string, ModelTemplateDefault>()
-  for (const entry of defaults ?? []) {
-    result.set(normalizeModelRef(entry.modelRef), entry)
-  }
-  return result
-}
-
 function findTemplateById(
   templates: StyleTemplate[],
   styleTemplateId: string | null | undefined,
@@ -148,6 +147,83 @@ function createDraftFromTemplate(
     dirty: false,
     saveState: 'idle',
   }
+}
+
+export type StyleSelectionContext =
+  | { kind: 'group'; model: RecipeModel }
+  | { kind: 'model'; model: RecipeModel }
+  | { kind: 'none'; model: null }
+
+export function getStyleSelectionContext({
+  models,
+  selectedCanvasNodeId,
+}: {
+  models: RecipeModel[]
+  selectedCanvasNodeId?: string | null
+}): StyleSelectionContext {
+  if (!selectedCanvasNodeId) return { kind: 'none', model: null }
+
+  const groupModelId = getModelIdFromBuilderGroupNodeId(selectedCanvasNodeId)
+  if (groupModelId) {
+    const model = models.find((candidate) => candidate.id === groupModelId)
+    if (!model) return { kind: 'none', model: null }
+    return {
+      kind: 'group',
+      model,
+    }
+  }
+
+  const model = models.find(
+    (candidate) => candidate.id === selectedCanvasNodeId,
+  )
+  if (!model) return { kind: 'none', model: null }
+  return {
+    kind: 'model',
+    model,
+  }
+}
+
+export function getGroupingEdgesForStyleSelection({
+  edges,
+  selectionContext,
+}: {
+  edges: TraversalEdge[]
+  selectionContext: StyleSelectionContext
+}) {
+  if (selectionContext.kind === 'none') return edges
+
+  const modelId = selectionContext.model.id
+  if (selectionContext.kind === 'group') {
+    return edges.filter((edge) => (edge.fromModelId ?? edge.from) === modelId)
+  }
+
+  return edges.filter(
+    (edge) =>
+      (edge.fromModelId ?? edge.from) === modelId ||
+      (edge.toModelId ?? edge.to) === modelId,
+  )
+}
+
+export function resolveStyleDraftForModelInitialization({
+  existingDraft,
+  model,
+  templates,
+  templatesPending,
+}: {
+  existingDraft: RecipeStyleDraft | undefined
+  model: RecipeModel
+  templates: StyleTemplate[]
+  templatesPending: boolean
+}): RecipeStyleDraft | null {
+  if (existingDraft) return null
+
+  if (model.styleTemplateId) {
+    const template = findTemplateById(templates, model.styleTemplateId)
+    if (template) return createDraftFromTemplate(model, template)
+    if (templatesPending) return null
+  }
+
+  return createQuickDraft(model)
 }
 
 // ---------------------------------------------------------------------------
@@ -299,17 +375,14 @@ function ShapeAndColorControls({
 }
 
 // ---------------------------------------------------------------------------
-// Selected node panel: template + save + defaults
+// Selected node panel: template + save
 // ---------------------------------------------------------------------------
 
 function SelectedNodePanel({
   actions,
-  activeDefaultEntry,
   activeDraft,
   activeModel,
-  defaultModelIds,
   layers,
-  onDefaultChange,
   onDimensionChange,
   onSave,
   onShapeChange,
@@ -321,12 +394,9 @@ function SelectedNodePanel({
   templates,
 }: {
   actions: StyleStepProps['actions']
-  activeDefaultEntry: ModelTemplateDefault | null
   activeDraft: RecipeStyleDraft
   activeModel: RecipeModel
-  defaultModelIds: Set<string>
   layers: RecipeLayer[]
-  onDefaultChange: (checked: boolean) => void
   onDimensionChange: (key: 'width' | 'height', value: number) => void
   onSave: () => void
   onShapeChange: (shapeKey: string) => void
@@ -339,9 +409,6 @@ function SelectedNodePanel({
 }) {
   const { t } = useTranslation()
   const accent = getModelAccent(activeModel, layers, swatches)
-  const setAsDefault =
-    defaultModelIds.has(activeModel.id) ||
-    activeDefaultEntry?.styleTemplateId === activeModel.styleTemplateId
 
   const dims = activeDraft.dimensions as
     | { width?: number; height?: number }
@@ -361,15 +428,15 @@ function SelectedNodePanel({
   return (
     <div className="grid gap-3 rounded-lg border border-border bg-card p-3">
       {/* Selected node indicator */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <span
           className="size-3.5 rounded border border-border"
           style={{ backgroundColor: accent }}
         />
-        <span className="text-[13px] font-semibold">
+        <span className="min-w-0 truncate text-[13px] font-semibold">
           {getModelLabel(activeModel)}
         </span>
-        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+        <span className="ml-auto min-w-0 max-w-[12rem] truncate font-mono text-[10px] text-muted-foreground">
           {activeModel.modelId}
         </span>
       </div>
@@ -422,52 +489,44 @@ function SelectedNodePanel({
         </Select>
       </label>
 
-      {/* Save + default */}
-      <div className="flex items-center justify-between gap-2">
-        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          {t('builder.style.setDefault')}
-          <Switch
-            size="sm"
-            checked={setAsDefault}
-            onCheckedChange={onDefaultChange}
-          />
-        </label>
-        <div className="flex items-center gap-2">
-          {activeDraft.saveState === 'saved' ? (
-            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-              <CheckIcon className="size-3" />
-              {t('builder.style.saved')}
-            </span>
-          ) : null}
-          <Button
-            type="button"
-            size="xs"
-            disabled={saveMutation.isPending || !activeDraft.name.trim()}
-            onClick={onSave}
-          >
-            <SaveIcon className="size-3" />
-            {saveMutation.isPending
-              ? t('builder.style.saving')
-              : t('builder.style.saveTemplate')}
-          </Button>
-        </div>
-      </div>
-
       {/* Template name */}
-      <Input
-        className="h-7 text-[12px]"
-        placeholder={t('builder.style.templateName')}
-        value={activeDraft.name}
-        onChange={(event) => {
-          actions.setStyleDraft(activeModel.id, {
-            ...activeDraft,
-            name: event.target.value,
-            dirty: true,
-            saveState: 'idle',
-            error: undefined,
-          })
-        }}
-      />
+      <label className="grid gap-1 text-[11px] text-muted-foreground">
+        {t('builder.style.nodeTemplateName')}
+        <Input
+          className="h-7 text-[12px]"
+          placeholder={t('builder.style.templateName')}
+          value={activeDraft.name}
+          onChange={(event) => {
+            actions.setStyleDraft(activeModel.id, {
+              ...activeDraft,
+              name: event.target.value,
+              dirty: true,
+              saveState: 'idle',
+              error: undefined,
+            })
+          }}
+        />
+      </label>
+
+      <div className="flex items-center justify-end gap-2">
+        {activeDraft.saveState === 'saved' ? (
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <CheckIcon className="size-3" />
+            {t('builder.style.saved')}
+          </span>
+        ) : null}
+        <Button
+          type="button"
+          size="xs"
+          disabled={saveMutation.isPending || !activeDraft.name.trim()}
+          onClick={onSave}
+        >
+          <SaveIcon className="size-3" />
+          {saveMutation.isPending
+            ? t('builder.style.saving')
+            : t('builder.style.saveTemplate')}
+        </Button>
+      </div>
 
       {activeDraft.error ? (
         <p className="text-[11px] text-destructive">{activeDraft.error}</p>
@@ -482,6 +541,8 @@ function SelectedNodePanel({
 
 export function StyleStep({
   actions,
+  edges,
+  groupRules,
   layers,
   models,
   selectedCanvasNodeId,
@@ -490,19 +551,24 @@ export function StyleStep({
 }: StyleStepProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [defaultModelIds, setDefaultModelIds] = useState<Set<string>>(
-    () => new Set(),
+
+  // The active model is driven by canvas selection. Promoted group nodes map
+  // back to their source model so the same style draft persists group labels.
+  const selectionContext = useMemo(
+    () => getStyleSelectionContext({ models, selectedCanvasNodeId }),
+    [selectedCanvasNodeId, models],
   )
+  const activeModel = selectionContext.model
+  const visibleGroupingEdges = useMemo(
+    () =>
+      getGroupingEdgesForStyleSelection({
+        edges,
+        selectionContext,
+      }),
+    [edges, selectionContext],
+  )
+  const showGroupingControls = visibleGroupingEdges.length > 0
 
-  // The active model is driven by canvas selection
-  const activeModel = useMemo(() => {
-    if (selectedCanvasNodeId) {
-      return models.find((m) => m.id === selectedCanvasNodeId) ?? null
-    }
-    return null
-  }, [selectedCanvasNodeId, models])
-
-  const defaultsQuery = useQuery(BUILDER_SCHEMA_QUERIES.modelTemplateDefaults())
   const shapesQuery = useQuery(BUILDER_SCHEMA_QUERIES.shapes())
   const shapes = shapesQuery.data ?? []
   const templateQueries = useQueries({
@@ -511,10 +577,6 @@ export function StyleStep({
     ),
   })
 
-  const defaultsByModelRef = useMemo(
-    () => getDefaultsByModelRef(defaultsQuery.data),
-    [defaultsQuery.data],
-  )
   const templatesByModelId = useMemo(() => {
     const result = new Map<string, StyleTemplate[]>()
     for (const [index, model] of models.entries()) {
@@ -529,40 +591,39 @@ export function StyleStep({
   const activeDraft = activeModel
     ? (styleDrafts[activeModel.id] ?? createQuickDraft(activeModel))
     : null
-  const activeDefaultEntry = activeModel
-    ? (defaultsByModelRef.get(normalizeModelRef(activeModel.modelId)) ?? null)
-    : null
-
   // Ensure all models have a style draft initialized
   useEffect(() => {
-    const missing = models.filter((m) => !styleDrafts[m.id])
-    if (missing.length > 0) {
+    const missingIds: string[] = []
+    for (const [index, model] of models.entries()) {
+      const draft = resolveStyleDraftForModelInitialization({
+        existingDraft: styleDrafts[model.id],
+        model,
+        templates: templatesByModelId.get(model.id) ?? [],
+        templatesPending: templateQueries[index]?.isPending ?? false,
+      })
+      if (!draft) continue
+      missingIds.push(model.id)
+      actions.setStyleDraft(model.id, draft)
+    }
+
+    if (missingIds.length > 0) {
       console.log('[StyleStep.initDrafts] creating default drafts', {
-        missingIds: missing.map((m) => m.id),
+        missingIds,
       })
     }
-    for (const model of missing) {
-      actions.setStyleDraft(model.id, createQuickDraft(model))
-    }
-  }, [models, styleDrafts, actions])
+  }, [models, styleDrafts, actions, templateQueries, templatesByModelId])
 
   const saveMutation = useMutation({
     mutationFn: async ({
-      defaultEntry,
       draft,
       model,
-      shouldSetAsDefault,
     }: {
-      defaultEntry: ModelTemplateDefault | null
       draft: RecipeStyleDraft
       model: RecipeModel
-      shouldSetAsDefault: boolean
     }) =>
       saveBuilderStyleTemplateDraft({
-        defaultEntry,
         draft,
         model,
-        setAsDefault: shouldSetAsDefault,
       }),
     onError: (error, variables) => {
       actions.setStyleDraftSaveState(
@@ -598,19 +659,6 @@ export function StyleStep({
       })
     },
   })
-
-  function setDefaultForActiveModel(checked: boolean) {
-    if (!activeModel) return
-    setDefaultModelIds((current) => {
-      const next = new Set(current)
-      if (checked) {
-        next.add(activeModel.id)
-      } else {
-        next.delete(activeModel.id)
-      }
-      return next
-    })
-  }
 
   function selectTemplate(value: string) {
     if (!activeModel) return
@@ -683,15 +731,10 @@ export function StyleStep({
 
   function handleSave() {
     if (!activeModel || !activeDraft || saveMutation.isPending) return
-    const setAsDefault =
-      defaultModelIds.has(activeModel.id) ||
-      activeDefaultEntry?.styleTemplateId === activeModel.styleTemplateId
     actions.setStyleDraftSaveState(activeModel.id, 'saving')
     saveMutation.mutate({
-      defaultEntry: activeDefaultEntry,
       draft: activeDraft,
       model: activeModel,
-      shouldSetAsDefault: setAsDefault,
     })
   }
 
@@ -718,28 +761,46 @@ export function StyleStep({
 
       {/* Selected node panel — shows when a node is selected on canvas */}
       {activeModel && activeDraft ? (
-        <SelectedNodePanel
-          actions={actions}
-          activeDefaultEntry={activeDefaultEntry}
-          activeDraft={activeDraft}
-          activeModel={activeModel}
-          defaultModelIds={defaultModelIds}
-          layers={layers}
-          onDefaultChange={setDefaultForActiveModel}
-          onDimensionChange={handleDimensionChange}
-          onSave={handleSave}
-          onShapeChange={handleShapeChange}
-          onTemplateChange={selectTemplate}
-          onTypeSpecificChange={handleTypeSpecificChange}
-          saveMutation={saveMutation}
-          shapes={shapes}
-          swatches={swatches}
-          templates={activeTemplates}
-        />
+        <>
+          <SelectedNodePanel
+            actions={actions}
+            activeDraft={activeDraft}
+            activeModel={activeModel}
+            layers={layers}
+            onDimensionChange={handleDimensionChange}
+            onSave={handleSave}
+            onShapeChange={handleShapeChange}
+            onTemplateChange={selectTemplate}
+            onTypeSpecificChange={handleTypeSpecificChange}
+            saveMutation={saveMutation}
+            shapes={shapes}
+            swatches={swatches}
+            templates={activeTemplates}
+          />
+
+          {showGroupingControls ? (
+            <GroupingControls
+              actions={actions}
+              edges={visibleGroupingEdges}
+              groupRules={groupRules}
+              models={models}
+            />
+          ) : null}
+        </>
       ) : (
-        <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[12px] text-muted-foreground">
-          {t('builder.style.selectNodeHint')}
-        </div>
+        <>
+          {showGroupingControls ? (
+            <GroupingControls
+              actions={actions}
+              edges={visibleGroupingEdges}
+              groupRules={groupRules}
+              models={models}
+            />
+          ) : null}
+          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[12px] text-muted-foreground">
+            {t('builder.style.selectNodeHint')}
+          </div>
+        </>
       )}
 
       {templateQueries.some((query) => query.isError) ? (

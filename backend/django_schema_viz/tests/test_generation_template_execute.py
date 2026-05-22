@@ -286,6 +286,116 @@ class GenerationTemplateExecuteViewTests(APITestCase):
         self.assertEqual(len(body["styleTemplates"]), 1)
         self.assertEqual(body["styleTemplates"][0]["id"], str(self.style_template.id))
 
+    def test_inline_run_resolves_style_draft_relation_paths_with_generated_step_ids(self):
+        self.client.force_authenticate(self.other_user)
+        root_step_id = "model-aeefc762"
+        provider_step_id = "model-1fe2d651"
+        network_hop_id = "edge-model-aeefc762--model-1fe2d651-r0:hop-1"
+        region_hop_id = "edge-model-aeefc762--model-1fe2d651-r0:hop-2"
+        definition = {
+            "rootStepId": root_step_id,
+            "stepsById": {
+                root_step_id: {
+                    "id": root_step_id,
+                    "parentId": None,
+                    "childIds": [network_hop_id],
+                    "relationship": None,
+                    "resolvedModelId": "infrastructure.businessgroup",
+                    "visibility": "visible",
+                    "groupMode": "group",
+                    "styleTemplateId": None,
+                    "label": "business group",
+                    "filter": None,
+                },
+                provider_step_id: {
+                    "id": provider_step_id,
+                    "parentId": region_hop_id,
+                    "childIds": [],
+                    "relationship": "provider",
+                    "resolvedModelId": "infrastructure.CloudProvider",
+                    "visibility": "visible",
+                    "groupMode": "none",
+                    "styleTemplateId": None,
+                    "label": "cloud provider",
+                    "filter": None,
+                },
+                network_hop_id: {
+                    "id": network_hop_id,
+                    "parentId": root_step_id,
+                    "childIds": [region_hop_id],
+                    "relationship": "networks",
+                    "resolvedModelId": "infrastructure.Network",
+                    "visibility": "hidden",
+                    "groupMode": "none",
+                    "styleTemplateId": None,
+                    "label": None,
+                    "filter": None,
+                },
+                region_hop_id: {
+                    "id": region_hop_id,
+                    "parentId": network_hop_id,
+                    "childIds": [provider_step_id],
+                    "relationship": "region",
+                    "resolvedModelId": "infrastructure.Region",
+                    "visibility": "hidden",
+                    "groupMode": "none",
+                    "styleTemplateId": None,
+                    "label": None,
+                    "filter": None,
+                },
+            },
+        }
+
+        response = self.client.post(
+            GENERATION_RUNS_URL,
+            {
+                "mode": "live",
+                "recordId": str(self.core_group.pk),
+                "source": {
+                    "inlineDefinition": definition,
+                    "rootModel": "infrastructure.businessgroup",
+                    "layoutSettings": {
+                        "styleDrafts": {
+                            provider_step_id: {
+                                "textContent": {
+                                    "root": {
+                                        "children": [
+                                            {
+                                                "children": [
+                                                    {
+                                                        "path": "templates.name",
+                                                        "styles": {},
+                                                        "type": "data-reference",
+                                                        "version": 1,
+                                                    }
+                                                ],
+                                                "type": "paragraph",
+                                                "version": 1,
+                                            }
+                                        ],
+                                        "type": "root",
+                                        "version": 1,
+                                    }
+                                }
+                            }
+                        }
+                    },
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.json())
+        provider_node = next(
+            node
+            for node in response.json()["result"]["nodes"]
+            if provider_step_id in node.get("stepUiIds", [])
+        )
+        self.assertEqual(
+            [item["name"] for item in provider_node["fields"]["templates"]],
+            [self.server_template.name],
+        )
+
     def test_execute_filters_reverse_relations_and_prunes_unmatched_children(self):
         self.client.force_authenticate(self.other_user)
         region_step = build_step(

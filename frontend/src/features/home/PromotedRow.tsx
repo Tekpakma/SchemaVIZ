@@ -1,4 +1,5 @@
 import { ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { PromotionBadge } from '@/components/PromotionBadge'
 import { TemplatePreviewCanvas } from './TemplatePreviewCanvas'
@@ -10,6 +11,7 @@ interface PromotedRowProps {
 }
 
 export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
+  const { t } = useTranslation()
   const promoted = templates.filter(
     (template) => template.source === 'featured',
   )
@@ -24,14 +26,14 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
         <div>
           <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
             <span className="size-[7px] rounded-full bg-brand" />
-            Promoted templates
+            {t('home.promoted.kicker')}
           </span>
           <h2 className="mt-1.5 text-xl font-semibold tracking-tight">
-            Templates your org uses
+            {t('home.promoted.title')}
           </h2>
         </div>
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-          {promoted.length} featured
+          {t('home.count.featured', { count: promoted.length })}
         </span>
       </div>
 
@@ -58,19 +60,23 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span>
-                By{' '}
+                {t('home.detail.author')}{' '}
                 <span className="font-semibold text-foreground">
                   {featured.author}
                 </span>
               </span>
               <span className="text-border">·</span>
-              <span>{featured.nodeCount} nodes</span>
+              <span>
+                {t('home.count.nodes', { count: featured.nodeCount })}
+              </span>
               <span className="text-border">·</span>
-              <span>{featured.edgeCount} edges</span>
+              <span>
+                {t('home.count.edges', { count: featured.edgeCount })}
+              </span>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11.5px] text-muted-foreground">
-                {featured.statusLabel}
+                {t(`home.status.${featured.status}`)}
               </span>
               {featured.sampleRecordDisplayName ? (
                 <span className="inline-flex max-w-[220px] items-center rounded-full bg-brand-muted px-2 py-0.5 text-[11.5px] text-brand">
@@ -104,9 +110,11 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
                   {template.title}
                 </h4>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>by {template.author}</span>
+                  <span>
+                    {t('home.detail.author')} {template.author}
+                  </span>
                   <span className="text-border">·</span>
-                  <span>{template.statusLabel}</span>
+                  <span>{t(`home.status.${template.status}`)}</span>
                 </div>
               </div>
               <ArrowRight className="size-3 text-muted-foreground transition-colors group-hover/item:text-brand" />

@@ -29,8 +29,8 @@ function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
     layoutAlgorithm: 'Layered',
     layoutDirection: 'LR',
     shareSlug: '',
-    promoteOrg: '',
-    promoteVisibility: 'org-wide',
+    promoteTarget: '',
+    promoteVisibility: 'shared',
     promoteAudience: '',
     ...overrides,
   }
@@ -274,5 +274,90 @@ describe('generation preview graph', () => {
         gapX: 16,
       },
     })
+  })
+
+  it('renders live generated group labels from recipe style drafts', () => {
+    const recipe = createRecipe({
+      models: [
+        {
+          id: 'business-group',
+          appLabel: 'infra',
+          appVerboseName: 'Infrastructure',
+          modelName: 'businessgroup',
+          modelId: 'infra.businessgroup',
+          displayName: 'Business group',
+          layerId: 'service',
+        },
+      ],
+      styleDrafts: {
+        'business-group': {
+          sourceTemplateId: null,
+          persistedTemplateId: null,
+          name: 'Business group label',
+          textContent: {
+            root: {
+              children: [
+                {
+                  children: [
+                    {
+                      detail: 0,
+                      format: 0,
+                      mode: 'normal',
+                      style: '',
+                      text: 'Group ',
+                      type: 'text',
+                      version: 1,
+                    },
+                    {
+                      path: 'name',
+                      styles: {},
+                      type: 'data-reference',
+                      version: 1,
+                    },
+                  ],
+                  type: 'paragraph',
+                  version: 1,
+                },
+              ],
+              type: 'root',
+              version: 1,
+            },
+          },
+          visualStyles: {},
+          dimensions: {},
+          typeSpecificData: {},
+          dirty: true,
+          saveState: 'idle',
+        },
+      },
+    })
+    const response = createGenerationResponse()
+    response.result.nodes = [
+      {
+        id: 'business-group:1@root:group',
+        appLabel: 'infra',
+        modelName: 'businessgroup',
+        recordPk: '1',
+        label: 'Business group',
+        displayName: 'Business group',
+        fields: { name: 'T-Systems' },
+        styleTemplateId: null,
+        parentId: null,
+        isGroup: true,
+        stepUiIds: ['business-group'],
+      },
+    ]
+
+    const graph = getGenerationPreviewCanvasGraph(response, recipe)
+
+    expect(graph.nodes[0]).toMatchObject({
+      appLabel: 'infra',
+      kind: 'group',
+      modelName: 'businessgroup',
+      recordId: '1',
+    })
+    expect(graph.nodes[0]?.html).toContain('Group')
+    expect(graph.nodes[0]?.html).toContain('T-Systems')
+    expect(graph.nodes[0]?.lexicalJson).toContain('data-reference')
   })
 })

@@ -334,6 +334,59 @@ describe('canvasStore graph layout actions', () => {
     })
   })
 
+  it('applies parent group changes when reconciling with preserved geometry', () => {
+    store.getState().actions.applyGraphLayout({
+      nodeFrames: [
+        {
+          id: 'b',
+          x: 240,
+          y: 120,
+          width: 100,
+          height: 80,
+        },
+      ],
+      edgeRoutes: [],
+    })
+
+    store.getState().actions.reconcileGraph({
+      nodes: [
+        {
+          id: 'group-a',
+          kind: 'group',
+          shape: 'group',
+          layoutMode: 'auto',
+          x: 0,
+          y: 0,
+          width: 220,
+          height: 116,
+          lexicalJson: '',
+          html: '',
+          contentHeight: 0,
+          groupLayout: { mode: 'auto-pack' },
+          version: 1,
+        },
+        {
+          ...nodes[1]!,
+          parentGroupId: 'group-a',
+          x: 0,
+          y: 0,
+        },
+      ],
+      edges: [],
+    })
+
+    const snapshot = getCanvasLayoutSnapshot()
+
+    expect(snapshot.nodesById.b).toMatchObject({
+      parentGroupId: 'group-a',
+      x: 0,
+      y: 0,
+    })
+    expect(snapshot.childIdsByGroupId).toEqual({
+      'group-a': ['b'],
+    })
+  })
+
   it('preserves existing edge routes when preserving node geometry', () => {
     store.getState().actions.applyGraphLayout({
       nodeFrames: [

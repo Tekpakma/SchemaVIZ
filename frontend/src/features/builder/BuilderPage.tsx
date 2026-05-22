@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
 import { createTemplateTextContent } from '@/features/lexical/templateTextContent'
+import { getBuilderRecipeSnapshot } from '@/store/builderStore'
 import type { WorkbenchTabId } from '@/store/workbenchStore'
 import { BuilderHeader } from './components/BuilderHeader'
 import { BuilderInspector } from './components/BuilderInspector'
@@ -12,6 +13,7 @@ import type {
   BuilderPreviewCommit,
   BuilderPreviewResize,
 } from './BuilderPreview'
+import type { FlushInlineNodeEdit } from './BuilderInlineEditor'
 import { BuilderStepsSidebar } from './components/BuilderStepsSidebar'
 import { PublishRecipeDialog } from './modals/PublishRecipeDialog'
 import type { PublishPayload } from './modals/PublishRecipeDialog'
@@ -19,16 +21,26 @@ import {
   markBuilderTemplateSaved,
   useBuilderDocumentView,
 } from './builderWorkbench'
+import { getModelIdFromBuilderGroupNodeId } from './builderPreviewLayout'
 import {
   publishGenerationTemplate,
   saveGenerationTemplateDraft,
 } from './generationTemplateMutations'
 import { GENERATION_TEMPLATE_QUERIES } from './generationTemplateQueries'
-import type { RecipeModel, RecipeStyleDraft } from './types'
+import type { RecipeData, RecipeModel, RecipeStyleDraft } from './types'
 
 type BuilderDocumentView = NonNullable<
   ReturnType<typeof useBuilderDocumentView>
 >
+
+type SaveBuilderTemplateInput = {
+  recipe: RecipeData
+  shareSlug?: string | null
+}
+
+type PublishBuilderTemplateInput = PublishPayload & {
+  recipe: RecipeData
+}
 
 function getModelLabel(model: RecipeModel) {
   return model.alias || model.displayName
@@ -79,15 +91,14 @@ function BuilderPageContent({
   const queryClient = useQueryClient()
   const [publishOpen, setPublishOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
-  const [savedTemplate, setSavedTemplate] =
-    useState<GenerationTemplateRead | null>(template)
+  const [savedTemplate, setSavedTemplate] = useState<{
+    tabId: WorkbenchTabId
+    template: GenerationTemplateRead
+  } | null>(null)
   const [selectedCanvasNodeId, setSelectedCanvasNodeId] = useState<
     string | null
   >(null)
-
-  useEffect(() => {
-    setSavedTemplate(template)
-  }, [template])
+  const flushInlineNodeEditRef = useRef<FlushInlineNodeEdit | null>(null)
 
   const {
     actions,
@@ -98,12 +109,25 @@ function BuilderPageContent({
     steps,
     tabId,
   } = builder
-  const currentTemplate = savedTemplate ?? template
+  const currentTemplate =
+    savedTemplate?.tabId === tabId ? savedTemplate.template : template
   const currentTemplateId = currentTemplate?.id ?? null
+
+  const handleRegisterFlushInlineEdit = useCallback(
+    (flush: FlushInlineNodeEdit | null) => {
+      flushInlineNodeEditRef.current = flush
+    },
+    [],
+  )
+
+  const getRecipeAfterPendingNodeEdit = useCallback(() => {
+    flushInlineNodeEditRef.current?.()
+    return getBuilderRecipeSnapshot(tabId)?.recipe ?? recipe
+  }, [recipe, tabId])
 
   const handleSavedTemplate = useCallback(
     async (nextTemplate: GenerationTemplateRead) => {
-      setSavedTemplate(nextTemplate)
+      setSavedTemplate({ tabId, template: nextTemplate })
       markBuilderTemplateSaved(tabId, nextTemplate)
       // Sync recipe title if the backend changed it (e.g. name auto-increment)
       if (nextTemplate.name && nextTemplate.name !== recipe.title) {
@@ -126,32 +150,38 @@ function BuilderPageContent({
 
   const saveMutation = useMutation({
     meta: { successMessage: 'Template saved' },
-    mutationFn: (shareSlug?: string | null) =>
+    mutationFn: ({ recipe: nextRecipe, shareSlug }: SaveBuilderTemplateInput) =>
       saveGenerationTemplateDraft({
-        recipe,
+        recipe: nextRecipe,
         shareSlug,
         template: currentTemplate,
         templateId: currentTemplateId,
       }),
     onSuccess: async ({ template: nextTemplate }) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['home', 'quick-access'],
+      })
       await handleSavedTemplate(nextTemplate)
     },
   })
 
   const publishMutation = useMutation({
     meta: { successMessage: 'Template published' },
-    mutationFn: async (payload: PublishPayload) => {
+    mutationFn: async (payload: PublishBuilderTemplateInput) => {
       const saved = await saveGenerationTemplateDraft({
-        recipe,
+        recipe: payload.recipe,
         shareSlug: payload.shareSlug,
         scope: payload.scope,
         template: currentTemplate,
         templateId: currentTemplateId,
       })
-      await handleSavedTemplate(saved.template)
-      const published = await publishGenerationTemplate(saved.template.id)
-      await handleSavedTemplate(published)
-      return published
+      return publishGenerationTemplate(saved.template.id)
+    },
+    onSuccess: async (nextTemplate) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['home', 'quick-access'],
+      })
+      await handleSavedTemplate(nextTemplate)
     },
   })
 
@@ -179,7 +209,8 @@ function BuilderPageContent({
         lexicalJsonPreview: commit.lexicalJson.slice(0, 120),
         htmlPreview: commit.html.slice(0, 120),
       })
-      const modelId = commit.nodeId
+      const modelId =
+        getModelIdFromBuilderGroupNodeId(commit.nodeId) ?? commit.nodeId
       const existingDraft = styleDraftsRef.current[modelId]
       const model = modelsRef.current.find(
         (candidate) => candidate.id === modelId,
@@ -278,8 +309,16 @@ function BuilderPageContent({
         saveError={saveError}
         saving={saveMutation.isPending}
         title={recipe.title}
-        onPublish={() => setPublishOpen(true)}
-        onSave={() => saveMutation.mutate(null)}
+        onPublish={() => {
+          flushInlineNodeEditRef.current?.()
+          setPublishOpen(true)
+        }}
+        onSave={() =>
+          saveMutation.mutate({
+            recipe: getRecipeAfterPendingNodeEdit(),
+            shareSlug: null,
+          })
+        }
         onShare={() => setExportOpen(true)}
         onTitleChange={actions.setTitle}
       />
@@ -301,6 +340,9 @@ function BuilderPageContent({
           onExportOpenChange={setExportOpen}
           onNodeResize={handleNodeResize}
           onNodeSelect={setSelectedCanvasNodeId}
+          onRegisterFlushInlineEdit={handleRegisterFlushInlineEdit}
+          onRenameLayer={actions.renameLayer}
+          onSetLayerTextContent={actions.setLayerTextContent}
           recipe={recipe}
         />
         <BuilderInspector
@@ -320,7 +362,12 @@ function BuilderPageContent({
         recipe={recipe}
         template={currentTemplate}
         onOpenChange={setPublishOpen}
-        onPublish={(payload) => publishMutation.mutate(payload)}
+        onPublish={(payload) =>
+          publishMutation.mutate({
+            ...payload,
+            recipe: getRecipeAfterPendingNodeEdit(),
+          })
+        }
       />
     </div>
   )

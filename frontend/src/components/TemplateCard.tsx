@@ -1,4 +1,5 @@
 import { ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/utils'
 import { TemplatePreviewCanvas } from '@/features/home/TemplatePreviewCanvas'
@@ -18,6 +19,8 @@ export function TemplateCard({
   onClick,
   className,
 }: TemplateCardProps) {
+  const { t } = useTranslation()
+
   return (
     <button
       type="button"
@@ -51,10 +54,10 @@ export function TemplateCard({
           <span className="text-foreground">{template.author}</span>
           <span className="text-border">·</span>
           <span className="font-mono text-[11px]">
-            {template.nodeCount} nodes
+            {t('home.count.nodes', { count: template.nodeCount })}
           </span>
           <span className="font-mono text-[11px]">
-            {template.edgeCount} edges
+            {t('home.count.edges', { count: template.edgeCount })}
           </span>
           <PromotionBadge promotion={template.promotion} compact />
         </div>
@@ -74,7 +77,7 @@ export function TemplateCard({
         {large && template.sampleRecordDisplayName && (
           <div className="mt-2">
             <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
-              SAMPLE RECORD
+              {t('home.card.sampleRecord')}
             </span>
             <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full bg-brand-muted px-2 py-0.5 text-[11.5px] text-brand">
               <span className="size-[5px] rounded-full bg-brand" />
@@ -85,9 +88,9 @@ export function TemplateCard({
           </div>
         )}
         <div className="mt-1 inline-flex items-center gap-1.5 self-start text-[12px] font-medium text-brand">
-          {large ? 'View landscape' : 'Open'}
+          {large ? t('home.card.reviewLandscape') : t('home.card.details')}
           <span className="ml-1 text-xs text-muted-foreground">
-            · {template.statusLabel}
+            · {t(`home.status.${template.status}`)}
           </span>
           <ArrowRight className="size-3" />
         </div>

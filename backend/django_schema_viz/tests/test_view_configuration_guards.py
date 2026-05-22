@@ -162,6 +162,48 @@ class ViewConfigurationGuardsTests(SimpleTestCase):
         )
         self.assertIn("stepsById", parsed["source"]["inline_definition"])
 
+    def test_schema_viz_parser_preserves_style_draft_step_ids(self):
+        parser = SchemaVizCamelCaseJSONParser()
+        payload = {
+            "source": {
+                "layoutSettings": {
+                    "styleDrafts": {
+                        "model-1fe2d651": {
+                            "textContent": {
+                                "root": {
+                                    "children": [
+                                        {
+                                            "children": [
+                                                {
+                                                    "path": "templates.name",
+                                                    "type": "data-reference",
+                                                }
+                                            ],
+                                            "textFormat": 0,
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        parsed = parser.parse(
+            BytesIO(json.dumps(payload).encode("utf-8")),
+            parser_context={"encoding": "utf-8"},
+        )
+
+        style_drafts = parsed["source"]["layout_settings"]["style_drafts"]
+        self.assertIn("model-1fe2d651", style_drafts)
+        self.assertNotIn("model-1fe2d_651", style_drafts)
+        self.assertIn("textContent", style_drafts["model-1fe2d651"])
+        self.assertIn(
+            "textFormat",
+            style_drafts["model-1fe2d651"]["textContent"]["root"]["children"][0],
+        )
+
     def test_schema_viz_parser_preserves_dynamic_fields_dict_keys(self):
         parser = SchemaVizCamelCaseJSONParser()
         payload = {

@@ -57,6 +57,20 @@ function getShareUrl(shareSlug: string | null | undefined) {
 
 type SlugStatus = 'idle' | 'checking' | 'available' | 'taken'
 
+type PublishDialogState = {
+  copied: boolean
+  isGlobal: boolean
+  shareSlug: string
+  slugStatus: SlugStatus
+}
+
+function isSharedTemplate(
+  templateScope: GenerationTemplateRead['scope'] | undefined,
+  promoteVisibility: RecipeData['promoteVisibility'],
+) {
+  return templateScope === 'global' || promoteVisibility === 'shared'
+}
+
 export function PublishRecipeDialog({
   onOpenChange,
   onPublish,
@@ -67,12 +81,13 @@ export function PublishRecipeDialog({
   template,
 }: PublishRecipeDialogProps) {
   const { t } = useTranslation()
-  const [copied, setCopied] = useState(false)
-  const [shareSlug, setShareSlug] = useState('')
-  const [slugStatus, setSlugStatus] = useState<SlugStatus>('idle')
-  const [isGlobal, setIsGlobal] = useState(
-    () => template?.scope === 'global' || recipe.promoteVisibility === 'org-wide',
-  )
+  const [dialogState, setDialogState] = useState<PublishDialogState>(() => ({
+    copied: false,
+    isGlobal: isSharedTemplate(template?.scope, recipe.promoteVisibility),
+    shareSlug: '',
+    slugStatus: 'idle',
+  }))
+  const { copied, isGlobal, shareSlug, slugStatus } = dialogState
   const VisibilityIcon = isGlobal ? Globe2 : Lock
   const templateTitle =
     recipe.title.trim() || t('builder.header.titlePlaceholder')
@@ -88,23 +103,23 @@ export function PublishRecipeDialog({
 
   useEffect(() => {
     if (open) {
-      setCopied(false)
-      setShareSlug(suggestedShareSlug)
-      setSlugStatus('idle')
-      setIsGlobal(
-        template?.scope === 'global' || recipe.promoteVisibility === 'org-wide',
-      )
+      setDialogState({
+        copied: false,
+        isGlobal: isSharedTemplate(template?.scope, recipe.promoteVisibility),
+        shareSlug: suggestedShareSlug,
+        slugStatus: 'idle',
+      })
     }
-  }, [open, suggestedShareSlug, template?.scope, recipe.promoteVisibility])
+  }, [open, recipe.promoteVisibility, suggestedShareSlug, template?.scope])
 
   const checkSlugUniqueness = useCallback(
     async (slug: string) => {
       const trimmed = slug.trim()
       if (!trimmed) {
-        setSlugStatus('idle')
+        setDialogState((current) => ({ ...current, slugStatus: 'idle' }))
         return
       }
-      setSlugStatus('checking')
+      setDialogState((current) => ({ ...current, slugStatus: 'checking' }))
       try {
         const result = await schemaVizTemplateUniquenessCreate({
           templateKind: 'generation',
@@ -114,14 +129,17 @@ export function PublishRecipeDialog({
           ...(template?.id ? { templateId: template.id } : {}),
         })
         if (result.status === 200) {
-          setSlugStatus(
-            result.data.exportNameUnique === false ? 'taken' : 'available',
-          )
+          const nextStatus =
+            result.data.exportNameUnique === false ? 'taken' : 'available'
+          setDialogState((current) => ({
+            ...current,
+            slugStatus: nextStatus,
+          }))
         } else {
-          setSlugStatus('idle')
+          setDialogState((current) => ({ ...current, slugStatus: 'idle' }))
         }
       } catch {
-        setSlugStatus('idle')
+        setDialogState((current) => ({ ...current, slugStatus: 'idle' }))
       }
     },
     [isGlobal, recipe.title, template?.id, template?.name],
@@ -134,7 +152,7 @@ export function PublishRecipeDialog({
   const handleCopy = async () => {
     if (!shareUrl) return
     await navigator.clipboard.writeText(shareUrl)
-    setCopied(true)
+    setDialogState((current) => ({ ...current, copied: true }))
   }
 
   const handlePublish = () => {
@@ -173,8 +191,11 @@ export function PublishRecipeDialog({
                 <Input
                   value={shareSlug}
                   onChange={(event) => {
-                    setShareSlug(event.target.value)
-                    setSlugStatus('idle')
+                    setDialogState((current) => ({
+                      ...current,
+                      shareSlug: event.target.value,
+                      slugStatus: 'idle',
+                    }))
                   }}
                   onBlur={handleSlugBlur}
                   placeholder={t('builder.publish.shareSlugPlaceholder')}
@@ -219,16 +240,23 @@ export function PublishRecipeDialog({
               </div>
               <Switch
                 checked={isGlobal}
-                onCheckedChange={setIsGlobal}
+                onCheckedChange={(nextIsGlobal) =>
+                  setDialogState((current) => ({
+                    ...current,
+                    isGlobal: nextIsGlobal,
+                  }))
+                }
               />
             </div>
 
-            {recipe.promoteOrg && (
+            {recipe.promoteTarget && (
               <div className="flex items-start gap-3">
                 <Users className="mt-0.5 size-4 text-muted-foreground" />
                 <div className="min-w-0">
                   <div className="text-[13px] text-foreground">
-                    {t('builder.publish.orgLabel', { org: recipe.promoteOrg })}
+                    {t('builder.publish.targetLabel', {
+                      target: recipe.promoteTarget,
+                    })}
                   </div>
                   {recipe.promoteAudience && (
                     <div className="text-[12px] text-muted-foreground">

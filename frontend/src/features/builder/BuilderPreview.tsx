@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useServerFn } from '@tanstack/react-start'
 import { Text as KonvaText } from 'react-konva'
@@ -30,7 +30,10 @@ import {
 } from './builderPreviewLayout'
 import type { BuilderPreviewCanvasLayer } from './builderPreviewLayout'
 import { BuilderInlineEditor } from './BuilderInlineEditor'
+import type { FlushInlineNodeEdit } from './BuilderInlineEditor'
 import { getGenerationPreviewCanvasGraph } from './generationPreviewGraph'
+import { LayerLabelsOverlay } from './LayerLabelsOverlay'
+import type { LayerLabelCommit } from './LayerLabelsOverlay'
 import type { GenerationRunResponse } from './generationPreviewQuery'
 import type { RecipeData } from './types'
 
@@ -60,14 +63,93 @@ function getLayerBounds(
   return { maxX, minX, minY }
 }
 
+// ---------------------------------------------------------------------------
+// Extract dominant style from Lexical textContent JSON for Konva rendering
+// ---------------------------------------------------------------------------
+
+type LexicalLabelStyle = {
+  color?: string
+  isBold: boolean
+  isItalic: boolean
+  isUnderline: boolean
+}
+
+const DEFAULT_LABEL_STYLE: LexicalLabelStyle = {
+  isBold: false,
+  isItalic: false,
+  isUnderline: false,
+}
+
+/**
+ * Walks the Lexical JSON to find the first text node and extracts
+ * its format flags + inline CSS color. This gives us a "dominant style"
+ * to apply to the Konva label — a best-effort visual match without
+ * full HTML rendering.
+ *
+ * Lexical text format is a bitmask: 1=bold, 2=italic, 8=underline
+ */
+function extractLabelStyleFromTextContent(
+  textContent: unknown,
+): LexicalLabelStyle {
+  if (!textContent || typeof textContent !== 'object')
+    return DEFAULT_LABEL_STYLE
+
+  try {
+    const root = (textContent as Record<string, unknown>).root as
+      | Record<string, unknown>
+      | undefined
+    if (!root) return DEFAULT_LABEL_STYLE
+
+    // Walk children to find the first text node
+    const children = root.children as unknown[] | undefined
+    if (!Array.isArray(children)) return DEFAULT_LABEL_STYLE
+
+    for (const paragraph of children) {
+      if (!paragraph || typeof paragraph !== 'object') continue
+      const paraChildren = (paragraph as Record<string, unknown>)
+        .children as unknown[]
+      if (!Array.isArray(paraChildren)) continue
+
+      for (const node of paraChildren) {
+        if (!node || typeof node !== 'object') continue
+        const n = node as Record<string, unknown>
+        if (n.type !== 'text') continue
+
+        const format = typeof n.format === 'number' ? n.format : 0
+        const style = typeof n.style === 'string' ? n.style : ''
+
+        // Extract color from inline style string, e.g. "color: #ff0000"
+        let color: string | undefined
+        const colorMatch = /color:\s*([^;]+)/i.exec(style)
+        if (colorMatch) {
+          color = colorMatch[1]!.trim()
+        }
+
+        return {
+          color,
+          isBold: (format & 1) !== 0,
+          isItalic: (format & 2) !== 0,
+          isUnderline: (format & 8) !== 0,
+        }
+      }
+    }
+  } catch {
+    // Graceful fallback
+  }
+
+  return DEFAULT_LABEL_STYLE
+}
+
 function BuilderPreviewLayerScaffold({
+  editingLayerLabelId,
   layers,
 }: {
+  editingLayerLabelId?: string | null
   layers: BuilderPreviewCanvasLayer[]
 }) {
   const nodes = useCanvasNodes()
   const { resolvedTheme } = useTheme()
-  const labelFill =
+  const defaultLabelFill =
     resolvedTheme === 'dark'
       ? 'rgba(244, 244, 245, 0.46)'
       : 'rgba(113, 113, 122, 0.64)'
@@ -75,6 +157,7 @@ function BuilderPreviewLayerScaffold({
   return (
     <>
       {layers.map((layer) => {
+        if (editingLayerLabelId === layer.id) return null
         const bounds = getLayerBounds(layer, nodes)
         if (!bounds) return null
 
@@ -85,17 +168,32 @@ function BuilderPreviewLayerScaffold({
         const x = bounds.minX + (bounds.maxX - bounds.minX - columnWidth) / 2
         const y = Math.max(4, bounds.minY - LAYER_LABEL_TOP_GAP)
 
+        // Apply styles from textContent if the layer has been styled;
+        // otherwise fall back to the default bold monospace look.
+        const hasCustomStyle = !!layer.textContent
+        const style = hasCustomStyle
+          ? extractLabelStyleFromTextContent(layer.textContent)
+          : DEFAULT_LABEL_STYLE
+        const fill = style.color || defaultLabelFill
+        const fontStyle = hasCustomStyle
+          ? [style.isBold ? 'bold' : '', style.isItalic ? 'italic' : '']
+              .filter(Boolean)
+              .join(' ') || 'normal'
+          : 'bold'
+        const textDecoration = style.isUnderline ? 'underline' : undefined
+
         return (
           <KonvaText
             key={layer.id}
             align="center"
-            fill={labelFill}
+            fill={fill}
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
             fontSize={11}
-            fontStyle="bold"
+            fontStyle={fontStyle}
             letterSpacing={3}
             listening={false}
             text={layer.label}
+            textDecoration={textDecoration}
             width={columnWidth}
             x={x}
             y={y}
@@ -414,10 +512,14 @@ function BuilderPreviewCanvas({
   interactionMode,
   layers,
   nodeCount,
+  onCapture,
   onCommitNodeText,
   onExportOpenChange,
   onNodeResize,
   onNodeSelect,
+  onRegisterFlushInlineEdit,
+  onRenameLayer,
+  onSetLayerTextContent,
 }: {
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; key: string }
   layoutAlgorithm: RecipeData['layoutAlgorithm']
@@ -427,10 +529,14 @@ function BuilderPreviewCanvas({
   interactionMode: 'edit' | 'viewport' | 'static'
   layers: BuilderPreviewCanvasLayer[]
   nodeCount: number
+  onCapture?: (dataUrl: string) => void
   onCommitNodeText?: (commit: BuilderPreviewCommit) => void
   onExportOpenChange?: (open: boolean) => void
   onNodeResize?: (resize: BuilderPreviewResize) => void
   onNodeSelect?: (nodeId: string | null) => void
+  onRegisterFlushInlineEdit?: (flush: FlushInlineNodeEdit | null) => void
+  onRenameLayer?: (layerId: string, label: string) => void
+  onSetLayerTextContent?: (layerId: string, textContent: unknown) => void
 }) {
   const fitWorld = useMemo(() => getGraphFitWorld(graph.nodes), [graph.nodes])
   const layoutSignature = `${graph.key}:${layoutAlgorithm}:${layoutDirection}:${nodeCount}`
@@ -443,6 +549,30 @@ function BuilderPreviewCanvas({
   useEffect(() => {
     if (!autoLayout) setSettledLayoutSignature(null)
   }, [autoLayout])
+
+  // ── Layer label editing ──────────────────────────────────────────
+  const [editingLayerLabelId, setEditingLayerLabelId] = useState<string | null>(
+    null,
+  )
+
+  const handleCommitLayerLabel = useCallback(
+    (commit: LayerLabelCommit) => {
+      setEditingLayerLabelId(null)
+      onRenameLayer?.(commit.layerId, commit.label)
+      onSetLayerTextContent?.(commit.layerId, commit.textContent)
+    },
+    [onRenameLayer, onSetLayerTextContent],
+  )
+
+  const layerLabelsOverlay =
+    onRenameLayer && layers.length > 0 ? (
+      <LayerLabelsOverlay
+        editingId={editingLayerLabelId}
+        layers={layers}
+        onCommitEdit={handleCommitLayerLabel}
+        onStartEdit={setEditingLayerLabelId}
+      />
+    ) : null
 
   return (
     <CanvasHelperLinesProvider>
@@ -467,14 +597,24 @@ function BuilderPreviewCanvas({
       <CanvasSurface
         backgroundLayer={
           layers.length > 0 ? (
-            <BuilderPreviewLayerScaffold layers={layers} />
+            <BuilderPreviewLayerScaffold
+              editingLayerLabelId={editingLayerLabelId}
+              layers={layers}
+            />
           ) : undefined
         }
+        canvasOverlay={layerLabelsOverlay}
         exportOpen={exportOpen}
         fitWorld={fitWorld}
-        inlineEditor={<BuilderInlineEditor onCommit={onCommitNodeText} />}
+        inlineEditor={
+          <BuilderInlineEditor
+            onCommit={onCommitNodeText}
+            onRegisterFlush={onRegisterFlushInlineEdit}
+          />
+        }
         interactionMode={interactionMode}
         isContentPending={isAutoLayoutPending}
+        onCapture={onCapture}
         onExportOpenChange={onExportOpenChange}
         seedDefaultNode={false}
         showChrome
@@ -497,10 +637,14 @@ export function BuilderPreview({
   exportOpen,
   generationResponse,
   interactionMode = 'viewport',
+  onCapture,
   onCommitNodeText,
   onExportOpenChange,
   onNodeResize,
   onNodeSelect,
+  onRegisterFlushInlineEdit,
+  onRenameLayer,
+  onSetLayerTextContent,
   recipe,
   showEdges = true,
 }: {
@@ -509,10 +653,15 @@ export function BuilderPreview({
   exportOpen?: boolean
   generationResponse?: GenerationRunResponse
   interactionMode?: 'edit' | 'viewport' | 'static'
+  /** Called once with a PNG data-URL after the canvas first renders. */
+  onCapture?: (dataUrl: string) => void
   onCommitNodeText?: (commit: BuilderPreviewCommit) => void
   onExportOpenChange?: (open: boolean) => void
   onNodeResize?: (resize: BuilderPreviewResize) => void
   onNodeSelect?: (nodeId: string | null) => void
+  onRegisterFlushInlineEdit?: (flush: FlushInlineNodeEdit | null) => void
+  onRenameLayer?: (layerId: string, label: string) => void
+  onSetLayerTextContent?: (layerId: string, textContent: unknown) => void
   recipe: RecipeData
   showEdges?: boolean
 }) {
@@ -562,10 +711,14 @@ export function BuilderPreview({
           layoutDirection={recipe.layoutDirection}
           layers={graph.layers}
           nodeCount={graph.nodes.length}
+          onCapture={onCapture}
           onCommitNodeText={onCommitNodeText}
           onExportOpenChange={onExportOpenChange}
           onNodeResize={onNodeResize}
           onNodeSelect={onNodeSelect}
+          onRegisterFlushInlineEdit={onRegisterFlushInlineEdit}
+          onRenameLayer={onRenameLayer}
+          onSetLayerTextContent={onSetLayerTextContent}
         />
       </CanvasStoreProvider>
     </div>

@@ -16,10 +16,14 @@ vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGenerationTemplateQuickAccessRetrieve: vi.fn(),
 }))
 
-const featuredListMock = vi.mocked(
-  schemaVizGenerationTemplateQuickAccessFeaturedList,
-)
-const ownRecentMock = vi.mocked(schemaVizGenerationTemplateQuickAccessRetrieve)
+const featuredListMock =
+  schemaVizGenerationTemplateQuickAccessFeaturedList as unknown as ReturnType<
+    typeof vi.fn
+  >
+const ownRecentMock =
+  schemaVizGenerationTemplateQuickAccessRetrieve as unknown as ReturnType<
+    typeof vi.fn
+  >
 
 function createQuickAccessEntry() {
   return GenerationTemplateQuickAccessEntry.parse({
@@ -100,7 +104,7 @@ describe('home quick-access queries', () => {
       data: { detail: 'Permission denied' },
       headers: new Headers(),
       status: 403,
-    } as never)
+    })
 
     const query = HOME_QUICK_ACCESS_QUERIES.ownRecent()
 

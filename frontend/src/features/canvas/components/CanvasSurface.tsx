@@ -50,6 +50,12 @@ type CanvasSurfaceFitWorld = {
 
 type CanvasSurfaceProps = {
   backgroundLayer?: React.ReactNode
+  /**
+   * HTML overlay rendered above the canvas stage regardless of
+   * interaction mode. Use for positioned elements that need to react
+   * to the viewport transform (e.g. layer label click targets).
+   */
+  canvasOverlay?: React.ReactNode
   exportOpen?: boolean
   fitWorld?: CanvasSurfaceFitWorld
   /**
@@ -61,6 +67,13 @@ type CanvasSurfaceProps = {
   inlineEditor?: React.ReactNode
   interactionMode?: 'edit' | 'viewport' | 'static'
   isContentPending?: boolean
+  /**
+   * Called once after the stage first becomes visible (layout settled,
+   * viewport fitted). Receives a PNG data-URL of the rendered canvas.
+   * Used by the home-screen preview cache to avoid re-rendering the
+   * full Konva stage on revisit.
+   */
+  onCapture?: (dataUrl: string) => void
   onExportOpenChange?: (open: boolean) => void
   readOnly?: boolean
   seedDefaultNode?: boolean
@@ -116,11 +129,13 @@ function useFitWorldViewport(
 
 export function CanvasSurface({
   backgroundLayer,
+  canvasOverlay,
   exportOpen = false,
   fitWorld,
   inlineEditor,
   interactionMode,
   isContentPending = false,
+  onCapture,
   onExportOpenChange,
   readOnly = false,
   seedDefaultNode = true,
@@ -378,6 +393,32 @@ export function CanvasSurface({
   const isStageMasked =
     isContentPending || isLayoutPending || isResizing || isViewportSettling
 
+  // ── Preview image capture ──────────────────────────────────────────
+  // When the stage first becomes visible (layout + viewport settled),
+  // capture a PNG snapshot and hand it to the caller for caching.
+  const onCaptureRef = useRef(onCapture)
+  onCaptureRef.current = onCapture
+  const capturedRef = useRef(false)
+
+  useEffect(() => {
+    if (isStageMasked || capturedRef.current || !onCaptureRef.current) return
+    const stage = konvaStageRef.current
+    if (!stage) return
+    capturedRef.current = true
+    // Two rAFs: first for Konva to flush any pending draws, second
+    // to guarantee the composite is complete before reading pixels.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          const dataUrl = stage.toDataURL({ pixelRatio: 1 })
+          onCaptureRef.current?.(dataUrl)
+        } catch {
+          // Silently ignore tainted-canvas or other capture errors.
+        }
+      })
+    })
+  }, [isStageMasked])
+
   return (
     <div
       className={cn(
@@ -473,6 +514,7 @@ export function CanvasSurface({
               ) : null}
             </Stage>
           ) : null}
+          {canvasOverlay}
           {showChrome && canUseViewport ? (
             <>
               <CanvasViewportPanel

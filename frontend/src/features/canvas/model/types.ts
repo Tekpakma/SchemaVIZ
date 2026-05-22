@@ -31,9 +31,36 @@ export type CanvasNodeLayoutMode = 'auto' | 'manual'
 
 export type CanvasRoutingAuthorityMode = 'auto' | 'manual'
 
+/**
+ * Inner-layout strategy for grouped child nodes. Each strategy maps to a
+ * real ELK algorithm run inside the group via `SEPARATE_CHILDREN`:
+ *
+ * - `auto`     — detect from group contents (no internal edges → `pack`,
+ *                otherwise → `flow`). Recommended default.
+ * - `pack`     — `elk.rectpacking`, aspect-ratio-aware compact grid for
+ *                children without internal edges.
+ * - `flow`     — `elk.layered`, pipeline/chain of children with edges.
+ * - `tree`     — `elk.mrtree`, one parent fanning to leaves.
+ * - `cluster`  — `elk.force`, organic cluster of loosely-related children.
+ * - `hub`      — `elk.radial`, central child surrounded by spokes.
+ */
+export type CanvasGroupLayoutStrategy =
+  | 'auto'
+  | 'pack'
+  | 'flow'
+  | 'tree'
+  | 'cluster'
+  | 'hub'
+
+/**
+ * @deprecated retained only for reading legacy persisted recipes.
+ * Use `strategy` instead. Both legacy values map to `strategy: 'auto'`.
+ */
 export type CanvasGroupLayoutMode = 'auto-pack' | 'freeform'
 
 export type CanvasGroupLayoutPolicy = {
+  strategy?: CanvasGroupLayoutStrategy
+  /** @deprecated migrated to `strategy` on read; no longer authored. */
   mode?: CanvasGroupLayoutMode
   aspectRatio?: number
   gapX?: number
@@ -101,6 +128,9 @@ export type CanvasGroupNode = CanvasNodeBase & {
   kind: 'group'
   shape: 'group'
   groupLayout?: CanvasGroupLayoutPolicy
+  appLabel?: string
+  modelName?: string
+  recordId?: string
 }
 
 /** Read-only schema model display. */
@@ -147,11 +177,18 @@ export function isContainerNodeKind(kind: CanvasNodeKind): boolean {
 /** Kinds that carry a data scope (appLabel / modelName). */
 export function hasDataScope(
   node: CanvasNode,
-): node is CanvasEditableNode | CanvasDatabaseNode | CanvasPlaceholderNode {
+): node is
+  | CanvasEditableNode
+  | CanvasDatabaseNode
+  | CanvasPlaceholderNode
+  | (CanvasGroupNode & { appLabel: string; modelName: string }) {
   return (
     node.kind === 'editable' ||
     node.kind === 'database' ||
-    node.kind === 'placeholder'
+    node.kind === 'placeholder' ||
+    (node.kind === 'group' &&
+      typeof node.appLabel === 'string' &&
+      typeof node.modelName === 'string')
   )
 }
 

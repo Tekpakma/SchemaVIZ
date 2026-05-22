@@ -10,6 +10,7 @@ import type {
   RecipeData,
   RecipeFilter,
   RecipeLayer,
+  RecipeLayoutDirection,
   RecipeModel,
   TraversalEdge,
 } from '@/features/builder/types'
@@ -127,6 +128,12 @@ function getLayoutAlgorithm(version: TemplateVersion | null): LayoutAlgorithm {
   return candidate && LAYOUT_ALGORITHMS.has(candidate) ? candidate : 'Layered'
 }
 
+function getLayoutDirection(
+  version: TemplateVersion | null,
+): RecipeLayoutDirection {
+  return version?.layoutSettings.layoutDirection ?? 'LR'
+}
+
 function getSwatches(version: TemplateVersion | null) {
   const swatches = version?.layoutSettings.swatches
   return swatches && swatches.length > 0 ? swatches : DEFAULT_SWATCHES
@@ -213,14 +220,14 @@ function createPreviewRecipeFromTemplate(
     edges,
     filters,
     groupRules: [],
-    groupLayout: { mode: 'auto-pack' },
+    groupLayout: { strategy: 'auto' },
     styleDrafts: {},
     swatches: getSwatches(version),
     layoutAlgorithm: getLayoutAlgorithm(version),
-    layoutDirection: 'LR',
+    layoutDirection: getLayoutDirection(version),
     shareSlug: template.shareSlug ?? '',
-    promoteOrg: '',
-    promoteVisibility: template.scope === 'global' ? 'org-wide' : 'private',
+    promoteTarget: '',
+    promoteVisibility: template.scope === 'global' ? 'shared' : 'private',
     promoteAudience: template.scope === 'global' ? 'All users' : '',
   }
 }
@@ -245,7 +252,7 @@ function getTemplateAuthor(template: GenerationTemplateRead, source: string) {
 }
 
 function getSourceLabel(entry: GenerationTemplateQuickAccessEntryOutput) {
-  return entry.source === 'own' ? 'Recent' : 'Featured'
+  return entry.source === 'own' ? 'Owned' : 'Featured'
 }
 
 function getStatusLabel(entry: GenerationTemplateQuickAccessEntryOutput) {

@@ -50,6 +50,7 @@ export * from './groupTemplate.zod';
 export * from './groupTemplateRequest.zod';
 export * from './kindEnum.zod';
 export * from './layoutAlgorithmEnum.zod';
+export * from './layoutDirectionEnum.zod';
 export * from './methodInfo.zod';
 export * from './mode524Enum.zod';
 export * from './modelDetailBadRequest.zod';

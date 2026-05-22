@@ -276,6 +276,7 @@ def build_generation_template_sample_payload(request, template: GenerationTempla
             root_model=version.root_model,
             definition=version.definition,
             user=request.user,
+            layout_settings=version.layout_settings,
         ).execute(record_pk=str(sample_record.pk))
     except Exception:
         return {
@@ -367,15 +368,15 @@ class GenerationTemplateOwnRecentQuickAccessView(SchemaVizViewMixin, APIView):
 
     @extend_schema(
         summary="Get Own Recent Generation Template Quick Access",
-        description="Returns the current user's most recently updated non-featured templates for quick access.",
+        description="Returns the current user's templates ordered by most recent update for quick access.",
         responses={200: GenerationTemplateOwnRecentQuickAccessSerializer},
         tags=["Generation Templates"],
     )
     def get(self, request):
         queryset = (
             GenerationTemplate.objects.accessible_by_user(request.user)
-            .filter(owner=request.user, is_global=False, is_featured=False)
-            .order_by("-updated_at")[:3]
+            .filter(owner=request.user)
+            .order_by("-updated_at")
         )
         payload = {
             "own_recent": [
@@ -2321,6 +2322,7 @@ class GenerationRunView(SchemaVizViewMixin, APIView):
                 root_model=root_model,
                 definition=definition,
                 user=request.user,
+                layout_settings=layout_settings,
             )
             if payload["mode"] == "structure" and payload.get("record_id") is None:
                 generation_result = engine.preview_structure()
@@ -2418,6 +2420,7 @@ class SharedGenerationRunView(SchemaVizViewMixin, APIView):
                 root_model=version.root_model,
                 definition=version.definition,
                 user=request.user,
+                layout_settings=version.layout_settings,
             ).execute(record_pk=record_id)
         except GenerationStepValidationError as exc:
             return Response(

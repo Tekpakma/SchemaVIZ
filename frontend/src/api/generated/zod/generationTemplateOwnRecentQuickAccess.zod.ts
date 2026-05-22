@@ -101,7 +101,9 @@ export const GenerationTemplateOwnRecentQuickAccess = zod.object({
   "rootModel": zod.string(),
   "layoutSettings": zod.object({
   "layoutAlgorithm": zod.enum(['Layered', 'Tree', 'Force', 'Radial']).optional().describe('\* `Layered` - Layered\n\* `Tree` - Tree\n\* `Force` - Force\n\* `Radial` - Radial'),
-  "swatches": zod.array(zod.string()).optional()
+  "layoutDirection": zod.enum(['LR', 'RL', 'TB', 'BT']).optional().describe('\* `LR` - LR\n\* `RL` - RL\n\* `TB` - TB\n\* `BT` - BT'),
+  "swatches": zod.array(zod.string()).optional(),
+  "styleDrafts": zod.record(zod.string(), zod.unknown()).optional().describe('Per-step in-flight style drafts keyed by step id. Each value holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions, …) used to render live previews before the user saves them as StyleTemplate rows.')
 }),
   "createdBy": zod.object({
   "id": zod.number(),
@@ -131,7 +133,9 @@ export const GenerationTemplateOwnRecentQuickAccess = zod.object({
   "rootModel": zod.string(),
   "layoutSettings": zod.object({
   "layoutAlgorithm": zod.enum(['Layered', 'Tree', 'Force', 'Radial']).optional().describe('\* `Layered` - Layered\n\* `Tree` - Tree\n\* `Force` - Force\n\* `Radial` - Radial'),
-  "swatches": zod.array(zod.string()).optional()
+  "layoutDirection": zod.enum(['LR', 'RL', 'TB', 'BT']).optional().describe('\* `LR` - LR\n\* `RL` - RL\n\* `TB` - TB\n\* `BT` - BT'),
+  "swatches": zod.array(zod.string()).optional(),
+  "styleDrafts": zod.record(zod.string(), zod.unknown()).optional().describe('Per-step in-flight style drafts keyed by step id. Each value holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions, …) used to render live previews before the user saves them as StyleTemplate rows.')
 }),
   "createdBy": zod.object({
   "id": zod.number(),
@@ -178,7 +182,9 @@ export const GenerationTemplateOwnRecentQuickAccess = zod.object({
   "rootModel": zod.string(),
   "layoutSettings": zod.object({
   "layoutAlgorithm": zod.enum(['Layered', 'Tree', 'Force', 'Radial']).optional().describe('\* `Layered` - Layered\n\* `Tree` - Tree\n\* `Force` - Force\n\* `Radial` - Radial'),
-  "swatches": zod.array(zod.string()).optional()
+  "layoutDirection": zod.enum(['LR', 'RL', 'TB', 'BT']).optional().describe('\* `LR` - LR\n\* `RL` - RL\n\* `TB` - TB\n\* `BT` - BT'),
+  "swatches": zod.array(zod.string()).optional(),
+  "styleDrafts": zod.record(zod.string(), zod.unknown()).optional().describe('Per-step in-flight style drafts keyed by step id. Each value holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions, …) used to render live previews before the user saves them as StyleTemplate rows.')
 }),
   "publishedAt": zod.iso.datetime({"offset":true}).nullable(),
   "shareSlug": zod.string().nullable()
@@ -248,7 +254,9 @@ export const GenerationTemplateOwnRecentQuickAccess = zod.object({
   "rootModel": zod.string(),
   "layoutSettings": zod.object({
   "layoutAlgorithm": zod.enum(['Layered', 'Tree', 'Force', 'Radial']).optional().describe('\* `Layered` - Layered\n\* `Tree` - Tree\n\* `Force` - Force\n\* `Radial` - Radial'),
-  "swatches": zod.array(zod.string()).optional()
+  "layoutDirection": zod.enum(['LR', 'RL', 'TB', 'BT']).optional().describe('\* `LR` - LR\n\* `RL` - RL\n\* `TB` - TB\n\* `BT` - BT'),
+  "swatches": zod.array(zod.string()).optional(),
+  "styleDrafts": zod.record(zod.string(), zod.unknown()).optional().describe('Per-step in-flight style drafts keyed by step id. Each value holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions, …) used to render live previews before the user saves them as StyleTemplate rows.')
 }),
   "createdBy": zod.object({
   "id": zod.number(),
@@ -278,7 +286,9 @@ export const GenerationTemplateOwnRecentQuickAccess = zod.object({
   "rootModel": zod.string(),
   "layoutSettings": zod.object({
   "layoutAlgorithm": zod.enum(['Layered', 'Tree', 'Force', 'Radial']).optional().describe('\* `Layered` - Layered\n\* `Tree` - Tree\n\* `Force` - Force\n\* `Radial` - Radial'),
-  "swatches": zod.array(zod.string()).optional()
+  "layoutDirection": zod.enum(['LR', 'RL', 'TB', 'BT']).optional().describe('\* `LR` - LR\n\* `RL` - RL\n\* `TB` - TB\n\* `BT` - BT'),
+  "swatches": zod.array(zod.string()).optional(),
+  "styleDrafts": zod.record(zod.string(), zod.unknown()).optional().describe('Per-step in-flight style drafts keyed by step id. Each value holds the unsaved RecipeStyleDraft (textContent, visualStyles, dimensions, …) used to render live previews before the user saves them as StyleTemplate rows.')
 }),
   "createdBy": zod.object({
   "id": zod.number(),

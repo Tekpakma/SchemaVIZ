@@ -18,7 +18,11 @@ import type {
   GenerationRunResponse,
   GenerationRunResult,
 } from './generationPreviewQuery'
-import { renderTemplateTextContent } from '@/features/lexical/templateTextContent'
+import {
+  createTemplateTextContent,
+  renderTemplateTextContent,
+  stringifyTemplateTextContent,
+} from '@/features/lexical/templateTextContent'
 import {
   builderEditableNodeHtml,
   builderEditableTemplateNodeHtml,
@@ -179,6 +183,30 @@ function getNodeStyleContent({
   }
 }
 
+function getGroupLabelContent({
+  draft,
+  label,
+  node,
+  recipeAccent,
+}: {
+  draft: RecipeStyleDraft | null
+  label: string
+  node: GeneratedPreviewNode
+  recipeAccent: string | undefined
+}) {
+  const textContent = draft?.textContent ?? createTemplateTextContent(label)
+
+  return {
+    html: draft?.textContent
+      ? builderEditableTemplateNodeHtml(
+          renderTemplateTextContent(textContent, node.fields),
+          recipeAccent,
+        )
+      : builderPreviewGroupLabelHtml(label, recipeAccent),
+    lexicalJson: stringifyTemplateTextContent(textContent),
+  }
+}
+
 function getSizedNodeFrame(dimensions: NodeDimensions) {
   return {
     height:
@@ -255,6 +283,7 @@ function getGenerationPreviewLayers(
         id: column.layerId,
         label: column.label,
         nodeIds: [],
+        textContent: column.textContent,
       },
     ]),
   )
@@ -330,20 +359,35 @@ export function getGenerationPreviewCanvasGraph(
       const x = groupIndex * LAYER_GROUP_X_HINT_SPACING
       groupXByNodeId.set(node.id, x)
       groupIndex++
+      const recipeModel = getRecipeModelForGeneratedNode(recipe, node)
+      const recipeDraft = getRecipeDraftForGeneratedNode(
+        recipe,
+        node,
+        recipeModel,
+      )
+      const recipeAccent = getRecipeAccent(recipe, recipeModel)
+      const label = node.displayName || node.label || ''
+      const labelContent = getGroupLabelContent({
+        draft: recipeDraft,
+        label,
+        node,
+        recipeAccent,
+      })
 
       groupNodes.push({
         id: node.id,
         kind: 'group',
         shape: 'group',
         layoutMode: 'auto',
+        appLabel: node.appLabel,
+        modelName: node.modelName,
+        ...(node.recordPk ? { recordId: String(node.recordPk) } : {}),
         x,
         y: 0,
         width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
         height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
-        lexicalJson: '',
-        html: builderPreviewGroupLabelHtml(
-          node.displayName || node.label || '',
-        ),
+        lexicalJson: labelContent.lexicalJson,
+        html: labelContent.html,
         contentHeight: GENERATION_GROUP_LABEL_HEIGHT,
         groupLayout: getRecipeGroupLayoutForGeneratedGroup(recipe, node),
         version: 1,

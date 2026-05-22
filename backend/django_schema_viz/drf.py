@@ -37,6 +37,8 @@ SCHEMA_VIZ_JSON_UNDERSCOREIZE = {
         "react_flow_state",
         "definition",
         "inline_definition",
+        "styleDrafts",
+        "style_drafts",
     ),
     "ignore_keys": None,
 }

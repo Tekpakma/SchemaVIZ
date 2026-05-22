@@ -47,6 +47,7 @@ export const GENERATION_PREVIEW_QUERIES = {
         source?.rootModel ?? '',
         recordId ?? '',
         JSON.stringify(source?.inlineDefinition ?? {}),
+        JSON.stringify(source?.layoutSettings ?? {}),
       ],
       queryFn: async () => {
         if (!source || !recordId) {

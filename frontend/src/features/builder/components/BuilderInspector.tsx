@@ -26,8 +26,8 @@ export function BuilderInspector({
   const { t } = useTranslation()
 
   return (
-    <aside className="flex w-[480px] shrink-0 flex-col border-l border-border bg-background">
-      <div className="border-b border-border px-5 py-4">
+    <aside className="flex h-full min-h-0 w-[480px] shrink-0 flex-col overflow-hidden border-l border-border bg-background">
+      <div className="shrink-0 border-b border-border px-5 py-4">
         <div className="mb-1 text-[12px] text-muted-foreground">
           {t('builder.inspector.stepProgress', {
             current: activeStepIndex + 1,
@@ -42,7 +42,7 @@ export function BuilderInspector({
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
         <StepDetail
           actions={actions}
           kind={activeStep.kind}
@@ -51,7 +51,7 @@ export function BuilderInspector({
         />
       </div>
 
-      <footer className="flex items-center justify-between border-t border-border px-5 py-3">
+      <footer className="z-10 flex shrink-0 items-center justify-between border-t border-border bg-background px-5 py-3">
         <Button
           variant="ghost"
           size="sm"

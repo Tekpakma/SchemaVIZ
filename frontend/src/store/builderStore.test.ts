@@ -540,7 +540,7 @@ describe('builderStore workbench documents', () => {
       layoutAlgorithm: 'Tree',
       layoutDirection: 'LR',
       shareSlug: '',
-      promoteOrg: '',
+      promoteTarget: '',
       promoteVisibility: 'private',
       promoteAudience: '',
     })
@@ -583,7 +583,7 @@ describe('builderStore workbench documents', () => {
       layoutAlgorithm: 'Tree',
       layoutDirection: 'LR',
       shareSlug: '',
-      promoteOrg: '',
+      promoteTarget: '',
       promoteVisibility: 'private',
       promoteAudience: '',
     })
@@ -680,7 +680,7 @@ describe('builderStore workbench documents', () => {
       layoutAlgorithm: 'Tree',
       layoutDirection: 'LR',
       shareSlug: '',
-      promoteOrg: '',
+      promoteTarget: '',
       promoteVisibility: 'private',
       promoteAudience: '',
     })
@@ -698,8 +698,8 @@ describe('builderStore workbench documents', () => {
       layoutAlgorithm: 'Force',
       layoutDirection: 'LR',
       shareSlug: '',
-      promoteOrg: '',
-      promoteVisibility: 'org-wide',
+      promoteTarget: '',
+      promoteVisibility: 'shared',
       promoteAudience: '',
     })
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  getModelIdFromBuilderGroupNodeId,
   getBuilderPreviewCanvasGraph,
   getBuilderPreviewColumns,
   getBuilderPreviewEdges,
@@ -23,8 +24,8 @@ function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
     layoutAlgorithm: 'Layered',
     layoutDirection: 'LR',
     shareSlug: '',
-    promoteOrg: '',
-    promoteVisibility: 'org-wide',
+    promoteTarget: '',
+    promoteVisibility: 'shared',
     promoteAudience: '',
     ...overrides,
   }
@@ -295,12 +296,12 @@ describe('builder preview layout', () => {
         id: 'edge-service-data',
         kind: 'default',
         label: 'persists',
-        labelPoint: { x: 284, y: 46 },
+        labelPoint: { x: 284, y: 102 },
         routePoints: [
-          { x: 220, y: 60 },
-          { x: 284, y: 60 },
-          { x: 284, y: 60 },
-          { x: 348, y: 60 },
+          { x: 220, y: 116 },
+          { x: 284, y: 116 },
+          { x: 284, y: 116 },
+          { x: 348, y: 116 },
         ],
       },
     ])
@@ -341,10 +342,10 @@ describe('builder preview layout', () => {
       { id: 'l4', nodeIds: ['provider'] },
     ])
     expect(graph.nodes).toMatchObject([
-      { id: 'business', x: 0 },
-      { id: 'network', x: 348 },
-      { id: 'region', x: 696 },
-      { id: 'provider', x: 1044 },
+      { id: 'business', x: 0, y: 56 },
+      { id: 'network', x: 348, y: 56 },
+      { id: 'region', x: 696, y: 56 },
+      { id: 'provider', x: 1044, y: 56 },
     ])
   })
 
@@ -385,12 +386,12 @@ describe('builder preview layout', () => {
     const provider = graph.nodes.find((node) => node.id === 'provider')
     expect(provider?.x).toBeGreaterThan(348)
     expect(graph.edges[0]?.routePoints).toMatchObject([
-      { x: 220, y: 60 },
-      { y: 60 },
-      { y: 60 },
-      { x: provider?.x, y: 60 },
+      { x: 220, y: 116 },
+      { y: 116 },
+      { y: 116 },
+      { x: provider?.x, y: 116 },
     ])
-    expect(graph.edges[0]?.labelPoint).toMatchObject({ y: 46 })
+    expect(graph.edges[0]?.labelPoint).toMatchObject({ y: 102 })
   })
 
   it('suppresses grouped parent-child edges in the static preview graph', () => {
@@ -449,6 +450,64 @@ describe('builder preview layout', () => {
       },
     ])
     expect(graph.edges).toEqual([])
+  })
+
+  it('renders promoted group parents from editable template text content', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [{ id: 'provider-layer', label: 'L1' }],
+        models: [
+          createModel({
+            id: 'provider',
+            appLabel: 'infra',
+            modelName: 'provider',
+            displayName: 'Cloud provider',
+            layerId: 'provider-layer',
+          }),
+          createModel({
+            id: 'region',
+            displayName: 'Region',
+            layerId: 'provider-layer',
+          }),
+        ],
+        groupRules: [
+          {
+            id: 'group-region',
+            parentModelId: 'provider',
+            childModelId: 'region',
+            via: 'regions',
+            mode: 'group',
+          },
+        ],
+        styleDrafts: {
+          provider: {
+            sourceTemplateId: null,
+            persistedTemplateId: null,
+            name: 'Provider group',
+            textContent: createTextContent('Provider {{name}}'),
+            visualStyles: {},
+            dimensions: {},
+            typeSpecificData: {},
+            dirty: true,
+            saveState: 'idle',
+          },
+        },
+      }),
+    )
+
+    const groupNode = graph.nodes.find(
+      (node) => node.id === 'builder-model-group:provider',
+    )
+
+    expect(groupNode).toMatchObject({
+      appLabel: 'infra',
+      id: 'builder-model-group:provider',
+      kind: 'group',
+      modelName: 'provider',
+    })
+    expect(groupNode?.html).toContain('Provider')
+    expect(groupNode?.lexicalJson).toContain('Provider')
+    expect(getModelIdFromBuilderGroupNodeId(groupNode!.id)).toBe('provider')
   })
 
   it('uses the recipe group layout when a group rule has no override', () => {

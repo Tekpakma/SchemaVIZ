@@ -82,6 +82,11 @@ type BuilderActions = {
   addLayer: (tabId: WorkbenchTabId, layer: RecipeLayer) => void
   removeLayer: (tabId: WorkbenchTabId, id: string) => void
   renameLayer: (tabId: WorkbenchTabId, id: string, label: string) => void
+  setLayerTextContent: (
+    tabId: WorkbenchTabId,
+    id: string,
+    textContent: unknown,
+  ) => void
   reorderLayers: (tabId: WorkbenchTabId, layers: RecipeLayer[]) => void
   addModel: (tabId: WorkbenchTabId, model: RecipeModel) => void
   removeModel: (tabId: WorkbenchTabId, id: string) => void
@@ -159,8 +164,8 @@ function createInitialRecipe(): RecipeData {
     layoutAlgorithm: 'Layered',
     layoutDirection: 'LR',
     shareSlug: '',
-    promoteOrg: '',
-    promoteVisibility: 'org-wide',
+    promoteTarget: '',
+    promoteVisibility: 'shared',
     promoteAudience: '',
   }
 }
@@ -443,6 +448,17 @@ const useBuilderStore = create<BuilderState>()(
             },
             false,
             'builder/renameLayer',
+          ),
+
+        setLayerTextContent: (tabId, id, textContent) =>
+          set(
+            (state) => {
+              const document = ensureBuilderDocument(state, tabId)
+              const layer = document.recipe.layers.find((l) => l.id === id)
+              if (layer) layer.textContent = textContent
+            },
+            false,
+            'builder/setLayerTextContent',
           ),
 
         reorderLayers: (tabId, layers) =>

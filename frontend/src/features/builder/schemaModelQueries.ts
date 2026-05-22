@@ -2,9 +2,6 @@ import { queryOptions } from '@tanstack/react-query'
 import * as R from 'remeda'
 
 import {
-  schemaVizModelTemplateDefaultsCreate,
-  schemaVizModelTemplateDefaultsList,
-  schemaVizModelTemplateDefaultsPartialUpdate,
   schemaVizModelsList,
   schemaVizQueryMetadataCreate,
   schemaVizRouteList,
@@ -14,15 +11,13 @@ import {
   schemaVizTemplatesPartialUpdate,
   schemaVizTemplateUniquenessCreate,
 } from '@/api/generated/schema-viz'
-import type { ModelTemplateDefault, StyleTemplate } from '@/api/contracts'
+import type { StyleTemplate } from '@/api/contracts'
 import type { RecipeModel, RecipeStyleDraft } from './types'
 import { toModelId } from '@/features/lexical/dataReference/modelUtils'
 
 type SaveStyleTemplateDraftInput = {
-  defaultEntry?: ModelTemplateDefault | null
   draft: RecipeStyleDraft
   model: RecipeModel
-  setAsDefault: boolean
 }
 
 function toTemplatePayload(draft: RecipeStyleDraft, model: RecipeModel) {
@@ -83,10 +78,8 @@ async function resolveUniqueStyleTemplateName(
 }
 
 export async function saveBuilderStyleTemplateDraft({
-  defaultEntry,
   draft,
   model,
-  setAsDefault,
 }: SaveStyleTemplateDraftInput): Promise<StyleTemplate> {
   const payload = toTemplatePayload(draft, model)
 
@@ -99,24 +92,7 @@ export async function saveBuilderStyleTemplateDraft({
   const templateResponse = draft.persistedTemplateId
     ? await schemaVizTemplatesPartialUpdate(draft.persistedTemplateId, payload)
     : await schemaVizTemplatesCreate(payload)
-  const template = templateResponse.data
-
-  if (setAsDefault && template.id) {
-    const modelRef = toModelId(model.appLabel, model.modelName)
-    if (defaultEntry?.id) {
-      await schemaVizModelTemplateDefaultsPartialUpdate(defaultEntry.id, {
-        modelRef,
-        styleTemplateId: template.id,
-      })
-    } else {
-      await schemaVizModelTemplateDefaultsCreate({
-        modelRef,
-        styleTemplateId: template.id,
-      })
-    }
-  }
-
-  return template
+  return templateResponse.data
 }
 
 export const BUILDER_SCHEMA_QUERIES = {
@@ -185,9 +161,7 @@ export const BUILDER_SCHEMA_QUERIES = {
         })
 
         if (response.status !== 200) {
-          throw new Error(
-            `Failed to fetch QLab metadata: ${response.status}`,
-          )
+          throw new Error(`Failed to fetch QLab metadata: ${response.status}`)
         }
 
         return response.data
@@ -216,26 +190,9 @@ export const BUILDER_SCHEMA_QUERIES = {
       staleTime: 1000 * 60 * 10,
     }),
 
-  modelTemplateDefaults: () =>
-    queryOptions({
-      queryKey: [
-        ...BUILDER_SCHEMA_QUERIES._base.queryKey,
-        'model-template-defaults',
-      ] as const,
-      queryFn: async () => {
-        const response = await schemaVizModelTemplateDefaultsList()
-
-        return response.data
-      },
-      staleTime: 1000 * 60 * 10,
-    }),
-
   shapes: () =>
     queryOptions({
-      queryKey: [
-        ...BUILDER_SCHEMA_QUERIES._base.queryKey,
-        'shapes',
-      ] as const,
+      queryKey: [...BUILDER_SCHEMA_QUERIES._base.queryKey, 'shapes'] as const,
       queryFn: async () => {
         const response = await schemaVizShapesRetrieve()
         const data = response.data as unknown as ShapesApiResponse

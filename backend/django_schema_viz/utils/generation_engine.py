@@ -28,7 +28,12 @@ from .generation_types import (  # noqa: F401 — re-exported for existing impor
     GenerationResult,
     GenerationResultSerializer,
 )
+from .lexical_paths import collect_data_reference_paths, has_relation_segment
 from .qlab_access import is_model_accessible_for_user
+from .relation_resolution import (
+    build_prefetch_plan,
+    resolve_relation_paths,
+)
 
 
 class GenerationEngine:
@@ -40,9 +45,17 @@ class GenerationEngine:
         result = engine.execute(record_pk="42")
     """
 
-    def __init__(self, *, root_model: str, definition: dict, user=None):
+    def __init__(
+        self,
+        *,
+        root_model: str,
+        definition: dict,
+        user=None,
+        layout_settings: dict | None = None,
+    ):
         self.root_model = root_model
         self.definition = definition
+        self.layout_settings = layout_settings or {}
         self.user = user
         self.root_step_id = str(definition["rootStepId"])
         self.steps_by_id = get_definition_steps_by_id(definition)
@@ -50,10 +63,23 @@ class GenerationEngine:
         self._seen_edge_keys: set[tuple[str, str, str]] = set()
         self._nodes_by_id: dict[str, GeneratedNode] = {}
         self._step_filter_cache: dict[tuple[str, str], object] = {}
+        # Relation paths referenced by step text content (lexical state),
+        # grouped by the model the path is resolved against. Drives both
+        # prefetch planning and per-record resolution. Populated lazily on
+        # first use because building it touches the StyleTemplate /
+        # GroupTemplate tables, and structure-preview runs don't need it.
+        self._referenced_paths_by_model: dict[str, set[str]] | None = None
 
     @classmethod
     def from_template(cls, template, *, user=None):
-        return cls(root_model=template.root_model, definition=template.steps, user=user)
+        version = template.published_version or template.draft_version
+        layout_settings = getattr(version, "layout_settings", None) if version else None
+        return cls(
+            root_model=template.root_model,
+            definition=template.steps,
+            user=user,
+            layout_settings=layout_settings,
+        )
 
     def execute(self, record_pk: str) -> GenerationResult:
         """Execute the template starting from the given record PK."""
@@ -68,7 +94,9 @@ class GenerationEngine:
         model = apps.get_model(app_label, model_name)
 
         try:
-            root_record = model.objects.get(pk=record_pk)
+            root_record = self._build_queryset_with_prefetch(
+                model, self.root_model
+            ).get(pk=record_pk)
         except model.DoesNotExist:
             raise ValueError(
                 f"Record with pk={record_pk} not found for {self.root_model}"
@@ -195,6 +223,19 @@ class GenerationEngine:
             # Serialize the record
             serializer_class = DynamicModelSerializer.for_model(model)
             fields_data = dict(serializer_class(record).data)
+            # Resolve any relation paths (``templates.name`` style) referenced
+            # in this step's lexical content so the frontend renderer can walk
+            # the nested data without a follow-up round trip.
+            model_id = build_model_ref(model)
+            relation_paths = self._relation_paths_for_model(model_id)
+            if relation_paths:
+                resolved = resolve_relation_paths(
+                    record,
+                    relation_paths,
+                    user=self.user,
+                    accessibility_check=is_model_accessible_for_user,
+                )
+                fields_data.update(resolved)
             style_template_id = step.get(
                 "style_template_id", step.get("styleTemplateId")
             )
@@ -317,6 +358,11 @@ class GenerationEngine:
         if related_model is None or related_queryset is None:
             return
 
+        # Apply select_related / prefetch_related once per traversal hop so
+        # downstream relation-path resolution doesn't trigger N+1 queries.
+        related_model_ref = build_model_ref(related_model)
+        related_queryset = self._apply_prefetch(related_queryset, related_model_ref)
+
         q_object = self._get_step_filter_q(child_step, related_model)
         if q_object is not None:
             related_queryset = related_queryset.filter(q_object)
@@ -339,6 +385,150 @@ class GenerationEngine:
         validated = build_step_filter(model, step)
         self._step_filter_cache[cache_key] = validated.q_object
         return validated.q_object
+
+    # ------------------------------------------------------------------
+    # Relation-path discovery & prefetch (lexical-driven)
+    # ------------------------------------------------------------------
+
+    def _relation_paths_for_model(self, model_ref: str) -> set[str]:
+        """Paths containing a dot that are referenced for the given model."""
+        if self._referenced_paths_by_model is None:
+            self._referenced_paths_by_model = self._collect_referenced_paths()
+        paths = self._referenced_paths_by_model.get(model_ref, set())
+        return {p for p in paths if has_relation_segment(p)}
+
+    def _build_queryset_with_prefetch(
+        self, model: type[models.Model], model_ref: str
+    ) -> models.QuerySet:
+        """Root-record queryset with select/prefetch applied."""
+        return self._apply_prefetch(model._default_manager.all(), model_ref)
+
+    def _apply_prefetch(
+        self, queryset: models.QuerySet, model_ref: str
+    ) -> models.QuerySet:
+        paths = self._relation_paths_for_model(model_ref)
+        if not paths:
+            return queryset
+        select_related, prefetch_related = build_prefetch_plan(queryset.model, paths)
+        if select_related:
+            queryset = queryset.select_related(*select_related)
+        if prefetch_related:
+            queryset = queryset.prefetch_related(*prefetch_related)
+        return queryset
+
+    def _collect_referenced_paths(self) -> dict[str, set[str]]:
+        """
+        Walk every step's lexical content once and group discovered
+        ``data-reference`` paths by the model they're resolved against.
+
+        Three sources are inspected, in priority order:
+
+          1. ``layout_settings.styleDrafts[stepId].textContent`` — in-flight
+             draft edits from the builder. These supersede the saved template
+             so live preview reflects the current chip state.
+          2. ``StyleTemplate.text_content`` — referenced via ``styleTemplateId``.
+             Bulk-fetched in one query.
+          3. ``GroupTemplate.text_content`` — referenced via ``groupTemplateId``.
+             Bulk-fetched in one query.
+
+        Steps with a draft override skip the StyleTemplate fetch entirely.
+        """
+        # Lazy imports — avoid a circular import via apps registry warm-up.
+        from ..models import GroupTemplate, StyleTemplate
+
+        style_drafts_by_step = self._read_style_drafts()
+
+        style_ids: set[str] = set()
+        group_ids: set[str] = set()
+        steps_by_style: dict[str, list[dict]] = {}
+        steps_by_group: dict[str, list[dict]] = {}
+        steps_with_draft_states: list[tuple[dict, object]] = []
+
+        for step_id, step in self.steps_by_id.items():
+            if not isinstance(step, dict):
+                continue
+
+            draft_state = style_drafts_by_step.get(step_id)
+            if draft_state is not None:
+                steps_with_draft_states.append((step, draft_state))
+            else:
+                style_id = step.get("style_template_id") or step.get("styleTemplateId")
+                if isinstance(style_id, str) and style_id:
+                    style_ids.add(style_id)
+                    steps_by_style.setdefault(style_id, []).append(step)
+
+            group_id = step.get("group_template_id") or step.get("groupTemplateId")
+            if isinstance(group_id, str) and group_id:
+                group_ids.add(group_id)
+                steps_by_group.setdefault(group_id, []).append(step)
+
+        style_states: dict[str, object] = {}
+        if style_ids:
+            for row in StyleTemplate.objects.filter(id__in=style_ids).only(
+                "id", "text_content"
+            ):
+                style_states[str(row.id)] = row.text_content
+        group_states: dict[str, object] = {}
+        if group_ids:
+            for row in GroupTemplate.objects.filter(id__in=group_ids).only(
+                "id", "text_content"
+            ):
+                group_states[str(row.id)] = row.text_content
+
+        paths_by_model: dict[str, set[str]] = {}
+
+        def _attach(step: dict, state: object) -> None:
+            model_ref = step.get("resolvedModelId") or step.get("resolved_model_id")
+            if not isinstance(model_ref, str) or not model_ref:
+                return
+            paths = collect_data_reference_paths(state)
+            if not paths:
+                return
+            paths_by_model.setdefault(model_ref, set()).update(paths)
+
+        for step, draft_state in steps_with_draft_states:
+            _attach(step, draft_state)
+
+        for style_id, steps in steps_by_style.items():
+            state = style_states.get(style_id)
+            if state is None:
+                continue
+            for step in steps:
+                _attach(step, state)
+
+        for group_id, steps in steps_by_group.items():
+            state = group_states.get(group_id)
+            if state is None:
+                continue
+            for step in steps:
+                _attach(step, state)
+
+        return paths_by_model
+
+    def _read_style_drafts(self) -> dict[str, object]:
+        """
+        Extract ``{step_id: text_content}`` from ``layout_settings.styleDrafts``.
+
+        Accepts both camelCase (``styleDrafts``/``textContent``) and snake_case
+        (``style_drafts``/``text_content``) since the request may travel
+        through CamelCaseJSONParser or arrive raw from a stored template
+        version.
+        """
+        layout = self.layout_settings or {}
+        drafts = layout.get("styleDrafts") or layout.get("style_drafts")
+        if not isinstance(drafts, dict):
+            return {}
+        result: dict[str, object] = {}
+        for step_id, draft in drafts.items():
+            if not isinstance(draft, dict):
+                continue
+            text_content = draft.get("textContent")
+            if text_content is None:
+                text_content = draft.get("text_content")
+            if text_content is None:
+                continue
+            result[str(step_id)] = text_content
+        return result
 
     def _process_structure_step(
         self,

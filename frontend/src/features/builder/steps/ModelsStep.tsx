@@ -8,7 +8,6 @@ import {
   GripVertical,
   InfoIcon,
   LayersIcon,
-  PencilIcon,
   PlusIcon,
   X,
 } from 'lucide-react'
@@ -32,7 +31,6 @@ interface ModelsStepProps {
     | 'addModel'
     | 'removeLayer'
     | 'removeModel'
-    | 'renameLayer'
     | 'reorderModels'
     | 'setModelLayer'
   >
@@ -247,63 +245,6 @@ function SortableModelRow({
   )
 }
 
-function EditableLayerTitle({
-  label,
-  onRename,
-}: {
-  label: string
-  onRename: (label: string) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(label)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const commit = useCallback(() => {
-    const trimmed = draft.trim()
-    if (trimmed && trimmed !== label) {
-      onRename(trimmed)
-    } else {
-      setDraft(label)
-    }
-    setEditing(false)
-  }, [draft, label, onRename])
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        autoFocus
-        type="text"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit()
-          if (e.key === 'Escape') {
-            setDraft(label)
-            setEditing(false)
-          }
-        }}
-        className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0 text-[13.5px] font-semibold outline-none ring-1 ring-brand/40 focus:ring-2 focus:ring-brand"
-      />
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        setDraft(label)
-        setEditing(true)
-      }}
-      className="group/rename flex min-w-0 flex-1 items-center gap-1 truncate text-left"
-    >
-      <span className="truncate text-[13.5px] font-semibold">{label}</span>
-      <PencilIcon className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/rename:opacity-100" />
-    </button>
-  )
-}
-
 function LayerGroup({
   hasSchemaModels,
   index,
@@ -313,7 +254,6 @@ function LayerGroup({
   onAddModel,
   onRemoveLayer,
   onRemoveModel,
-  onRenameLayer,
 }: {
   hasSchemaModels: boolean
   index: number
@@ -323,7 +263,6 @@ function LayerGroup({
   onAddModel: (layerId: string) => void
   onRemoveLayer: (layerId: string) => void
   onRemoveModel: (modelId: string) => void
-  onRenameLayer: (layerId: string, label: string) => void
 }) {
   const { t } = useTranslation()
   const isStartLayer = index === 0
@@ -349,10 +288,9 @@ function LayerGroup({
         >
           {isStartLayer ? t('builder.models.startBadge') : `L${index + 1}`}
         </span>
-        <EditableLayerTitle
-          label={layer.label}
-          onRename={(label) => onRenameLayer(layer.id, label)}
-        />
+        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+          {layer.label}
+        </span>
         <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
           {t('builder.models.groupModelCount', { count: models.length })}
         </span>
@@ -436,7 +374,7 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
   const { t } = useTranslation()
   const modelsQuery = useQuery(BUILDER_SCHEMA_QUERIES.models())
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
-  const [targetLayerId, setTargetLayerId] = useState<string | null>(null)
+  const targetLayerIdRef = useRef<string | null>(null)
 
   const modelsByLayerId = useMemo(
     () => getModelsByLayerId(layers, models),
@@ -458,28 +396,14 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
     (layerId?: string) => {
       if (!hasSchemaModels) return
 
-      let nextTargetLayerId = layerId
-      if (!nextTargetLayerId) {
-        // Default "Add Model" button: always create a new layer so each
-        // model gets its own layer by default. The per-layer "+" buttons
-        // pass a specific layerId and skip this branch.
-        if (startLayer && startLayerModels.length === 0) {
-          nextTargetLayerId = startLayer.id
-        } else {
-          const layer = createRecipeLayer(getNextLayerLabel(layers))
-          actions.addLayer(layer)
-          nextTargetLayerId = layer.id
-        }
-      }
-
-      if (nextTargetLayerId === startLayer?.id && startLayerModels.length > 0) {
+      if (layerId === startLayer?.id && startLayerModels.length > 0) {
         return
       }
 
-      setTargetLayerId(nextTargetLayerId)
+      targetLayerIdRef.current = layerId ?? null
       setModelPickerOpen(true)
     },
-    [actions, hasSchemaModels, layers, startLayer, startLayerModels.length],
+    [hasSchemaModels, startLayer, startLayerModels.length],
   )
 
   const handleAddLayer = useCallback(() => {
@@ -488,18 +412,27 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
 
   const handlePickModel = useCallback(
     (schemaModel: ModelInfoShort) => {
-      const layerId = targetLayerId ?? layers[0]?.id
+      let layerId = targetLayerIdRef.current
+      if (!layerId) {
+        if (startLayer && startLayerModels.length === 0) {
+          layerId = startLayer.id
+        } else {
+          const layer = createRecipeLayer(getNextLayerLabel(layers))
+          actions.addLayer(layer)
+          layerId = layer.id
+        }
+      }
       if (!layerId) return
       if (layerId === startLayer?.id && startLayerModels.length > 0) return
 
       actions.addModel(toRecipeModel(schemaModel, layerId))
     },
-    [actions, layers, startLayer?.id, startLayerModels.length, targetLayerId],
+    [actions, layers, startLayer, startLayerModels.length],
   )
 
   const handleModelPickerOpenChange = useCallback((open: boolean) => {
     setModelPickerOpen(open)
-    if (!open) setTargetLayerId(null)
+    if (!open) targetLayerIdRef.current = null
   }, [])
 
   const handleDragEnd: ComponentProps<typeof DragDropProvider>['onDragEnd'] =
@@ -559,7 +492,6 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
               onAddModel={openModelPickerForLayer}
               onRemoveLayer={actions.removeLayer}
               onRemoveModel={actions.removeModel}
-              onRenameLayer={actions.renameLayer}
             />
           ))}
         </div>

@@ -21,6 +21,8 @@ export type RecipeLayoutDirection = CanvasFlowDirection
 export interface RecipeLayer {
   id: string
   label: string
+  /** Lexical JSON state for styled layer labels (step 4). */
+  textContent?: unknown | null
 }
 
 export interface RecipeModel {
@@ -85,7 +87,7 @@ export interface RecipeGroupRule {
 }
 
 export const DEFAULT_RECIPE_GROUP_LAYOUT = {
-  mode: 'auto-pack',
+  strategy: 'auto',
 } satisfies CanvasGroupLayoutPolicy
 
 export interface RecipeFilter {
@@ -121,7 +123,7 @@ export interface RecipeData {
   layoutAlgorithm: LayoutAlgorithm
   layoutDirection: RecipeLayoutDirection
   shareSlug: string
-  promoteOrg: string
+  promoteTarget: string
   promoteVisibility: string
   promoteAudience: string
 }

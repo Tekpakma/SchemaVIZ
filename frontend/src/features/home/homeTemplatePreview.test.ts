@@ -27,6 +27,7 @@ function createTemplate(overrides: Record<string, unknown> = {}) {
       rootModel: 'infrastructure.CloudProvider',
       layoutSettings: {
         layoutAlgorithm: 'Layered',
+        layoutDirection: 'TB',
         swatches: ['#C4006A'],
       },
       createdBy: {
@@ -154,6 +155,7 @@ describe('home template preview adapter', () => {
       },
     })
     expect(preview.generationResponse?.result.nodes).toHaveLength(2)
+    expect(preview.recipe.layoutDirection).toBe('TB')
   })
 
   it('falls back to record selection when a shared template has no sample record', () => {

@@ -3,12 +3,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
 import { DownloadIcon, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { BuilderPreview } from '@/features/builder/BuilderPreview'
 import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQueries'
 import { createRecipeFromTemplate } from '@/features/builder/templateRecipe'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
+import { DeleteGenerationTemplateButton } from '@/features/builder/DeleteGenerationTemplateButton'
 
 const searchSchema = z.object({
   embed: z.coerce.number().optional().default(0),
@@ -37,6 +39,7 @@ function GenerateViewPending() {
 }
 
 function GenerateViewPage() {
+  const { t } = useTranslation()
   const { slug, recordId } = Route.useParams()
   const { embed } = Route.useSearch()
   const isEmbed = embed === 1
@@ -69,9 +72,10 @@ function GenerateViewPage() {
         <BrandLogo />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[13px] font-semibold text-foreground">
-            {template.name || 'Untitled'}
+            {template.name || t('builder.header.titlePlaceholder')}
           </h1>
         </div>
+        <DeleteGenerationTemplateButton template={template} />
         <Button
           variant="ghost"
           size="sm"
@@ -79,7 +83,7 @@ function GenerateViewPage() {
           onClick={() => setExportOpen(true)}
         >
           <DownloadIcon className="size-3.5" />
-          Teilen
+          {t('builder.header.share')}
         </Button>
       </header>
       <main className="relative min-h-0 flex-1">
