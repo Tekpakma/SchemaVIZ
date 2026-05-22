@@ -30,12 +30,6 @@ const LAYOUT_ALGORITHMS = new Set<LayoutAlgorithm>([
   'Radial',
   'Tree',
 ])
-const ACCENTS: Record<TemplateHue, string> = {
-  green: 'var(--chart-2)',
-  pink: 'var(--brand)',
-  plum: 'var(--chart-5)',
-}
-
 type TemplateVersion = NonNullable<GenerationTemplateRead['draftVersion']>
 type RawDefinitionStep = TemplateVersion['definition']['stepsById'][string]
 
@@ -324,7 +318,6 @@ export function createHomeTemplatePreview(
   const hue = getTemplateHue(template.id)
 
   return {
-    accent: ACCENTS[hue],
     author: getTemplateAuthor(template, entry.source),
     description: template.description?.trim() || FALLBACK_DESCRIPTION,
     edgeCount: counts.edgeCount ?? recipe.edges.length,

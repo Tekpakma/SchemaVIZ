@@ -157,10 +157,6 @@ export function TemplateDetailPanel({
         {/* Identity */}
         <div className="px-4 pt-4">
           <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-            <span
-              className="size-[7px] rounded-full"
-              style={{ background: template.accent }}
-            />
             <span>{t(`home.source.${template.source}`)}</span>
             <span className="text-border">·</span>
             <span>{t(`home.status.${template.status}`)}</span>

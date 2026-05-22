@@ -36,7 +36,6 @@ export type HomeTemplateNavigationTarget =
     }
 
 export interface HomeTemplatePreview {
-  accent: string
   author: string
   description: string
   edgeCount: number

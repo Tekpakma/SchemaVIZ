@@ -47,10 +47,6 @@ export function TemplateCard({
         )}
       >
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            className="size-[7px] rounded-full"
-            style={{ background: template.accent }}
-          />
           <span className="text-foreground">{template.author}</span>
           <span className="text-border">·</span>
           <span className="font-mono text-[11px]">
