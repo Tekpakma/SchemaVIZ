@@ -17,6 +17,7 @@ import { ThemeProvider } from '@/features/theme/useTheme'
 import { getThemePreference } from '@/features/theme/themeServerFns'
 import { CanvasStoreProvider } from '@/store/canvasStore'
 import appCss from '../styles.css?url'
+import faviconUrl from '@/branding/favicon.svg?url'
 import type { QueryClient } from '@tanstack/react-query'
 
 export const Route = createRootRouteWithContext<{
@@ -56,6 +57,29 @@ export const Route = createRootRouteWithContext<{
       {
         rel: 'stylesheet',
         href: appCss,
+      },
+      // Force the SchemaVIZ favicon across the app. The explicit ``icon``
+      // link supersedes the browser's automatic ``/favicon.ico`` fetch in
+      // every modern browser; ``shortcut icon`` covers legacy IE/Edge and
+      // ``apple-touch-icon`` covers iOS home-screen installs.
+      {
+        rel: 'icon',
+        type: 'image/svg+xml',
+        href: faviconUrl,
+      },
+      {
+        rel: 'shortcut icon',
+        type: 'image/svg+xml',
+        href: faviconUrl,
+      },
+      {
+        rel: 'apple-touch-icon',
+        href: faviconUrl,
+      },
+      {
+        rel: 'mask-icon',
+        href: faviconUrl,
+        color: '#18181B',
       },
     ],
   }),
