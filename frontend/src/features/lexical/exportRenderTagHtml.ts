@@ -76,6 +76,18 @@ export const renderTagCss = `
 .canvas-editor-underline {
   text-decoration-line: underline;
 }
+
+.canvas-data-reference-placeholder {
+  color: #71717a;
+  font-style: italic;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.canvas-data-reference-placeholder[data-reference-state='missing'] {
+  color: #92400e;
+}
 `
 
 export function wrapRenderTagHtml(html: string) {

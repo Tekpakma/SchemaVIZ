@@ -45,7 +45,7 @@ function getCacheKey(
 
 function unresolveDataReferences(html: string): string {
   return html.replace(
-    /<span data-lexical-data-reference="([^"]+)">[^<]*<\/span>/g,
+    /<span\b(?=[^>]*data-lexical-data-reference="([^"]+)")[^>]*>[^<]*<\/span>/g,
     (_match, path: string) =>
       `<span data-lexical-data-reference="${path}">{{${path}}}</span>`,
   )

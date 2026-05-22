@@ -82,9 +82,9 @@ function renderTemplateText(
   while (match) {
     const rawPath = match[1]?.trim() ?? ''
     result += escapeHtml(text.slice(lastIndex, match.index))
-    result += escapeHtml(
-      rawPath ? getFieldDisplayValue(rawPath, recordFields) : match[0],
-    )
+    result += rawPath
+      ? renderDataReferenceTextHtml(rawPath, recordFields)
+      : escapeHtml(match[0])
     lastIndex = match.index + match[0].length
     match = TEMPLATE_TEXT_PATTERN.exec(text)
   }
@@ -106,6 +106,11 @@ function renderTextNode(
 const COLLECTION_MAX_ITEMS = 5
 const COLLECTION_SEPARATOR = ', '
 const UNRESOLVED = Symbol('unresolved')
+type FieldDisplayState = 'resolved' | 'empty' | 'missing' | 'literal'
+type FieldDisplayValue = {
+  state: FieldDisplayState
+  text: string
+}
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value)
@@ -177,21 +182,49 @@ function formatCollection(values: unknown[]): string {
   return `${shown} (+${scalars.length - COLLECTION_MAX_ITEMS} more)`
 }
 
+function humanizePathSubject(path: string) {
+  const [firstSegment] = path.split('.').filter(Boolean)
+  return (firstSegment || path)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .trim()
+    .toLowerCase()
+}
+
 function getFieldDisplayValue(
   path: string,
   recordFields: Record<string, unknown> | undefined,
-) {
-  if (!recordFields) return `{{${path}}}`
+): FieldDisplayValue {
+  if (!recordFields) return { state: 'literal', text: `{{${path}}}` }
   const segments = path.split('.').filter(Boolean)
-  if (segments.length === 0) return `{{${path}}}`
+  if (segments.length === 0) return { state: 'literal', text: `{{${path}}}` }
 
   const value = walkPath(segments, recordFields)
-  if (value === UNRESOLVED || value == null) return `{{${path}}}`
+  if (value === UNRESOLVED || value == null) {
+    return { state: 'missing', text: `Missing: ${path}` }
+  }
   if (Array.isArray(value)) {
     const formatted = formatCollection(value)
-    return formatted || `{{${path}}}`
+    return formatted
+      ? { state: 'resolved', text: formatted }
+      : { state: 'empty', text: `No ${humanizePathSubject(path)}` }
   }
-  return formatScalar(value)
+  return { state: 'resolved', text: formatScalar(value) }
+}
+
+function getPlaceholderAttributes(state: FieldDisplayState) {
+  if (state !== 'empty' && state !== 'missing') return ''
+  return ` class="canvas-data-reference-placeholder" data-reference-state="${state}"`
+}
+
+function renderDataReferenceTextHtml(
+  path: string,
+  recordFields: Record<string, unknown> | undefined,
+) {
+  const display = getFieldDisplayValue(path, recordFields)
+  return `<span data-lexical-data-reference="${escapeHtml(path)}"${getPlaceholderAttributes(
+    display.state,
+  )}>${escapeHtml(display.text)}</span>`
 }
 
 function renderDataReferenceNode(
@@ -204,11 +237,12 @@ function renderDataReferenceNode(
   const style = sanitizeStyleAttribute(
     node.styles ? styleObjectToString(node.styles) : undefined,
   )
-  const content = escapeHtml(getFieldDisplayValue(path, recordFields))
+  const display = getFieldDisplayValue(path, recordFields)
+  const content = escapeHtml(display.text)
 
-  return `<span data-lexical-data-reference="${escapeHtml(path)}"${
-    style ? ` style="${style}"` : ''
-  }>${content}</span>`
+  return `<span data-lexical-data-reference="${escapeHtml(path)}"${getPlaceholderAttributes(
+    display.state,
+  )}${style ? ` style="${style}"` : ''}>${content}</span>`
 }
 
 function renderChildren(

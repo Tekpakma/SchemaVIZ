@@ -61,7 +61,8 @@ describe('template text content rendering', () => {
       },
     )
 
-    expect(html).toContain('Provider AWS')
+    expect(html).toContain('Provider')
+    expect(html).toContain('AWS')
     expect(html).not.toContain('{{name}}')
   })
 
@@ -125,21 +126,41 @@ describe('template text content rendering', () => {
     expect(html).toContain('t0, t1, t2, t3, t4 (+4 more)')
   })
 
-  it('renders the literal token when a relation segment is missing', () => {
+  it('renders a missing-reference marker when a relation segment is missing', () => {
     const html = renderTemplateTextContent(lexWithRef('templates.name'), {
       // No 'templates' key — relation never resolved.
       name: 'AWS',
     })
 
-    expect(html).toContain('{{templates.name}}')
+    expect(html).toContain('Missing: templates.name')
+    expect(html).toContain('data-reference-state="missing"')
+    expect(html).not.toContain('{{templates.name}}')
   })
 
-  it('renders the literal token when the collection is empty', () => {
+  it('renders an empty-reference marker when the collection is empty', () => {
     const html = renderTemplateTextContent(lexWithRef('templates.name'), {
       templates: [],
     })
 
-    expect(html).toContain('{{templates.name}}')
+    expect(html).toContain('No templates')
+    expect(html).toContain('data-reference-state="empty"')
+    expect(html).not.toContain('{{templates.name}}')
+  })
+
+  it('renders missing and empty markers for raw text placeholders', () => {
+    const missing = renderTemplateTextContent(
+      createTemplateTextContent('{{templates.name}}'),
+      { name: 'AWS' },
+    )
+    const empty = renderTemplateTextContent(
+      createTemplateTextContent('{{templates.name}}'),
+      { templates: [] },
+    )
+
+    expect(missing).toContain('Missing: templates.name')
+    expect(missing).toContain('data-reference-state="missing"')
+    expect(empty).toContain('No templates')
+    expect(empty).toContain('data-reference-state="empty"')
   })
 
   it('falls back to the FK id when the related object is not nested', () => {
