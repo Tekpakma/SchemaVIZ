@@ -20,6 +20,43 @@ const config = defineConfig({
       // elkjs/lib/elk-worker.min.js is loaded via require.resolve() at runtime
       // for the Web Worker. Full-trace copies the package into .output/node_modules/.
       traceDeps: ['elkjs*'],
+      // Cache headers tuned so a stale HTML doc (e.g. an open tab from before a
+      // deploy) can still resolve its hashed CSS/JS out of the browser cache
+      // instead of hitting the new build's missing-old-hash 404.
+      //
+      //  * /assets/**   — Vite-emitted, content-hashed, safe to cache forever.
+      //  * /*.svg|ico|png|webmanifest|json — public/ static, short cache so
+      //    branding/manifest tweaks roll out without a hard refresh.
+      //  * /**          — SSR HTML; revalidate every nav so users always pick
+      //    up the latest asset hashes after a deploy.
+      routeRules: {
+        '/assets/**': {
+          headers: {
+            'cache-control': 'public, max-age=31536000, immutable',
+          },
+        },
+        '/favicon.svg': {
+          headers: { 'cache-control': 'public, max-age=86400' },
+        },
+        '/favicon.ico': {
+          headers: { 'cache-control': 'public, max-age=86400' },
+        },
+        '/logo192.png': {
+          headers: { 'cache-control': 'public, max-age=86400' },
+        },
+        '/logo512.png': {
+          headers: { 'cache-control': 'public, max-age=86400' },
+        },
+        '/manifest.json': {
+          headers: { 'cache-control': 'public, max-age=86400' },
+        },
+        '/robots.txt': {
+          headers: { 'cache-control': 'public, max-age=86400' },
+        },
+        '/**': {
+          headers: { 'cache-control': 'no-cache' },
+        },
+      },
     }),
     viteReact(),
     svgr(),
