@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
 import json
+from xml.etree import ElementTree as ET
 
 from django_schema_viz.models import Drawing
 from django_schema_viz.export.drawio import export_drawing_to_drawio
@@ -461,6 +462,93 @@ class DrawingExportViewTests(APITestCase):
         self.assertIn('x="50"', xml)
         self.assertIn('y="175"', xml)
         self.assertIn('x="350"', xml)
+
+    def test_drawio_export_applies_page_background(self):
+        xml = export_drawing_to_drawio(
+            react_flow_state={
+                "nodes": [
+                    {
+                        "id": "node-1",
+                        "type": "discover",
+                        "position": {"x": 0, "y": 0},
+                        "width": 200,
+                        "height": 100,
+                        "data": {"label": "Node A"},
+                    }
+                ],
+                "edges": [],
+                "viewport": {"x": 0, "y": 0},
+            },
+            lexical_state={},
+            background="#18181b",
+        )
+
+        self.assertIn('background="#18181b"', xml)
+
+    def test_drawio_export_omits_transparent_page_background(self):
+        xml = export_drawing_to_drawio(
+            react_flow_state={
+                "nodes": [
+                    {
+                        "id": "node-1",
+                        "type": "discover",
+                        "position": {"x": 0, "y": 0},
+                        "width": 200,
+                        "height": 100,
+                        "data": {"label": "Node A"},
+                    }
+                ],
+                "edges": [],
+                "viewport": {"x": 0, "y": 0},
+            },
+            lexical_state={},
+            background="transparent",
+        )
+
+        self.assertNotIn("background=", xml)
+
+    def test_drawio_export_keeps_group_child_geometry_relative(self):
+        xml = export_drawing_to_drawio(
+            react_flow_state={
+                "nodes": [
+                    {
+                        "id": "group-1",
+                        "type": "group",
+                        "position": {"x": 400, "y": 80},
+                        "positionAbsolute": {"x": 400, "y": 80},
+                        "width": 320,
+                        "height": 220,
+                        "data": {"label": "Group"},
+                    },
+                    {
+                        "id": "child-1",
+                        "type": "discover",
+                        "parentId": "group-1",
+                        "parentNode": "group-1",
+                        "position": {"x": 60, "y": 70},
+                        "positionAbsolute": {"x": 460, "y": 150},
+                        "width": 180,
+                        "height": 90,
+                        "data": {"label": "Child"},
+                    },
+                ],
+                "edges": [],
+                "viewport": {"x": 0, "y": 0},
+            },
+            lexical_state={},
+        )
+
+        root = ET.fromstring(xml)
+        group_cell = root.find(".//mxCell[@value='Group']")
+        child_cell = root.find(".//mxCell[@value='Child']")
+        self.assertIsNotNone(group_cell)
+        self.assertIsNotNone(child_cell)
+        self.assertEqual(child_cell.get("parent"), group_cell.get("id"))
+
+        child_geometry = child_cell.find("mxGeometry")
+        self.assertIsNotNone(child_geometry)
+        self.assertEqual(child_geometry.get("x"), "60")
+        self.assertEqual(child_geometry.get("y"), "70")
 
     # ------------------------------------------------------------------
     # Shape rendering tests
@@ -1274,6 +1362,22 @@ class StatelessExportViewTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/xml")
         self.assertIn(".drawio", response["Content-Disposition"])
+
+    def test_stateless_drawio_export_uses_requested_background(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.post(
+            self.EXPORT_URL,
+            data={
+                "reactFlowState": self.SIMPLE_REACT_FLOW_STATE,
+                "exportFormat": "drawio",
+                "background": "#18181b",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn('background="#18181b"', content)
 
     def test_stateless_export_custom_file_name(self):
         self.client.force_authenticate(self.user)

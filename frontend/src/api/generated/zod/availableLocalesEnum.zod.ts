@@ -7,7 +7,7 @@
  */
 import * as zod from 'zod';
 
-export const AvailableLocalesEnum = zod.enum(['de', 'en']).describe('\* `de` - de\n\* `en` - en')
+export const AvailableLocalesEnum = zod.enum(['en', 'de']).describe('\* `en` - en\n\* `de` - de')
 
 export type AvailableLocalesEnum = zod.input<typeof AvailableLocalesEnum>;
 export type AvailableLocalesEnumOutput = zod.output<typeof AvailableLocalesEnum>;

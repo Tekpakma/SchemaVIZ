@@ -61,6 +61,12 @@ import { renderTagCss } from '@/features/lexical/exportRenderTagHtml'
 import type { CanvasNode } from '@/features/canvas/model/types'
 import { cn } from '@/lib/utils'
 import { createTemplateTextContent } from '@/features/lexical/templateTextContent'
+import { TextSizeDropdown } from '@/features/lexical/TextSizeDropdown'
+import {
+  applyTextSize,
+  readSelectionTextSize,
+  type TextSizePreset,
+} from '@/features/lexical/textSizePresets'
 import type { BuilderPreviewCanvasLayer } from './builderPreviewLayout'
 
 // ---------------------------------------------------------------------------
@@ -107,12 +113,14 @@ type InlineToolbarFormat = Extract<
 
 type InlineToolbarFormatState = Record<InlineToolbarFormat, boolean> & {
   color: string
+  textSize: TextSizePreset
 }
 
 const EMPTY_FORMAT_STATE: InlineToolbarFormatState = {
   bold: false,
   color: DEFAULT_INLINE_TEXT_COLOR,
   italic: false,
+  textSize: 'normal',
   underline: false,
 }
 
@@ -144,6 +152,7 @@ function readFormatState(): InlineToolbarFormatState {
     bold: selection.hasFormat('bold'),
     color: normalizeCssColorToHex(color || DEFAULT_INLINE_TEXT_COLOR),
     italic: selection.hasFormat('italic'),
+    textSize: readSelectionTextSize(),
     underline: selection.hasFormat('underline'),
   }
 }
@@ -235,6 +244,12 @@ function LayerLabelToolbar({ style }: { style: CSSProperties }) {
           </button>
         )
       })}
+      <TextSizeDropdown
+        activePreset={formatState.textSize}
+        controlClass={controlClass}
+        iconClass="size-3"
+        onSelect={(preset) => applyTextSize(editor, preset)}
+      />
       <span className="mx-0.5 h-3.5 w-px bg-border" aria-hidden="true" />
       <label
         className={cn(controlClass, 'relative cursor-pointer overflow-hidden')}

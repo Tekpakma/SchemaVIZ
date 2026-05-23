@@ -57,6 +57,7 @@ type CanvasSurfaceProps = {
    */
   canvasOverlay?: React.ReactNode
   exportOpen?: boolean
+  exportFilterNotice?: string
   fitWorld?: CanvasSurfaceFitWorld
   /**
    * Optional override for the inline rich-text editor. When undefined,
@@ -131,6 +132,7 @@ export function CanvasSurface({
   backgroundLayer,
   canvasOverlay,
   exportOpen = false,
+  exportFilterNotice,
   fitWorld,
   inlineEditor,
   interactionMode,
@@ -534,6 +536,7 @@ export function CanvasSurface({
               />
               {onExportOpenChange ? (
                 <CanvasExportDialog
+                  filterNotice={exportFilterNotice}
                   open={exportOpen}
                   onOpenChange={onExportOpenChange}
                   stageRef={konvaStageRef}

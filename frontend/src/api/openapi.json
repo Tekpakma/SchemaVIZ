@@ -179,7 +179,7 @@ paths:
         schema:
           type: string
           default: '#ffffff'
-        description: 'SVG background: hex color (#rrggbb) or ''transparent''. Defaults
+        description: 'Export background: hex color (#rrggbb) or ''transparent''. Defaults
           to #ffffff.'
       - in: query
         name: exportFormat
@@ -1957,12 +1957,12 @@ components:
       - apps
     AvailableLocalesEnum:
       enum:
-      - de
       - en
+      - de
       type: string
       description: |-
-        * `de` - de
         * `en` - en
+        * `de` - de
     BackendVersionResponse:
       type: object
       properties:
@@ -2239,6 +2239,40 @@ components:
           nullable: true
         filter:
           nullable: true
+    GenerationFilterImpact:
+      type: object
+      description: Filter diagnostics for a generation run.
+      properties:
+        stepId:
+          type: string
+        parentStepId:
+          type: string
+          nullable: true
+        relationship:
+          type: string
+        parentModel:
+          type: string
+        parentRecordPk:
+          type: string
+        parentDisplayName:
+          type: string
+        targetModel:
+          type: string
+        targetLabel:
+          type: string
+          nullable: true
+        message:
+          type: string
+      required:
+      - message
+      - parentDisplayName
+      - parentModel
+      - parentRecordPk
+      - parentStepId
+      - relationship
+      - stepId
+      - targetLabel
+      - targetModel
     GenerationLayoutSettingsSchema:
       type: object
       properties:
@@ -2309,6 +2343,10 @@ components:
           $ref: '#/components/schemas/Mode524Enum'
         result:
           $ref: '#/components/schemas/GenerationResult'
+        filterImpact:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenerationFilterImpact'
         sourceVersion:
           $ref: '#/components/schemas/GenerationRunSourceVersion'
         styleTemplates:
@@ -4142,7 +4180,7 @@ components:
           type: string
           minLength: 1
           default: '#ffffff'
-          description: 'SVG background color: hex (#rrggbb) or ''transparent''.'
+          description: 'Export background color: hex (#rrggbb) or ''transparent''.'
           maxLength: 20
       required:
       - reactFlowState

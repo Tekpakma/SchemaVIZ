@@ -87,6 +87,17 @@ export const GenerationRunResponse = zod.object({
   "relationship": zod.string()
 })).optional()
 }).describe('Complete output of a template execution.'),
+  "filterImpact": zod.array(zod.object({
+  "stepId": zod.string(),
+  "parentStepId": zod.string().nullable(),
+  "relationship": zod.string(),
+  "parentModel": zod.string(),
+  "parentRecordPk": zod.string(),
+  "parentDisplayName": zod.string(),
+  "targetModel": zod.string(),
+  "targetLabel": zod.string().nullable(),
+  "message": zod.string()
+}).describe('Filter diagnostics for a generation run.')).optional(),
   "sourceVersion": zod.object({
   "kind": zod.enum(['inline', 'template']).describe('\* `inline` - Inline\n\* `template` - Template'),
   "selection": zod.string(),

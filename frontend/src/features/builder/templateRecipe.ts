@@ -286,6 +286,54 @@ function readEdgesFromLayoutSettings(
 }
 
 // ---------------------------------------------------------------------------
+// Layer labels persistence — layer names (and rich-text textContent) don't
+// survive the definition round-trip, so we stash them in layoutSettings.
+// ---------------------------------------------------------------------------
+
+type PersistedLayer = {
+  id: string
+  label: string
+  textContent?: unknown | null
+}
+
+function serializeLayers(
+  layers: RecipeLayer[],
+): PersistedLayer[] | undefined {
+  const hasCustomLabel = layers.some(
+    (layer, i) => layer.label !== `L${i + 1}` || layer.textContent,
+  )
+  if (!hasCustomLabel) return undefined
+
+  return layers.map((layer) => ({
+    id: layer.id,
+    label: layer.label,
+    ...(layer.textContent ? { textContent: layer.textContent } : {}),
+  }))
+}
+
+function readLayersFromLayoutSettings(
+  layoutSettings: unknown,
+): Map<string, PersistedLayer> | null {
+  if (!layoutSettings || typeof layoutSettings !== 'object') return null
+  const settings = layoutSettings as Record<string, unknown>
+  const raw = settings.layers
+  if (!Array.isArray(raw)) return null
+
+  const result = new Map<string, PersistedLayer>()
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const e = entry as Record<string, unknown>
+    if (typeof e.id !== 'string' || typeof e.label !== 'string') continue
+    result.set(e.id, {
+      id: e.id,
+      label: e.label,
+      textContent: e.textContent ?? null,
+    })
+  }
+  return result.size > 0 ? result : null
+}
+
+// ---------------------------------------------------------------------------
 
 function stringifyFilter(filter: unknown): string | null {
   if (filter == null) return null
@@ -412,6 +460,17 @@ export function createRecipeFromTemplate(
   const layout = readLayoutSettings(version?.layoutSettings)
   const styleDrafts = readStyleDraftsFromLayoutSettings(version?.layoutSettings)
   const persistedEdges = readEdgesFromLayoutSettings(version?.layoutSettings)
+  const persistedLayers = readLayersFromLayoutSettings(version?.layoutSettings)
+
+  if (persistedLayers) {
+    for (const layer of normalizedLayers) {
+      const saved = persistedLayers.get(layer.id)
+      if (saved) {
+        layer.label = saved.label
+        layer.textContent = saved.textContent
+      }
+    }
+  }
 
   return {
     ...createBlankRecipe(),
@@ -644,6 +703,7 @@ export function recipeToInlineDefinition(
   }
 
   const persistedDrafts = serializeStyleDrafts(recipe.styleDrafts)
+  const persistedLayers = serializeLayers(recipe.layers)
 
   return {
     inlineDefinition: { rootStepId, stepsById },
@@ -652,10 +712,8 @@ export function recipeToInlineDefinition(
       layoutAlgorithm: recipe.layoutAlgorithm,
       layoutDirection: recipe.layoutDirection,
       swatches: recipe.swatches,
-      // Include drafts so the backend engine can discover relation paths
-      // (``{{templates.name}}``) referenced by chips in unsaved style drafts
-      // and resolve them into ``node.fields`` server-side.
       ...(persistedDrafts ? { styleDrafts: persistedDrafts } : {}),
+      ...(persistedLayers ? { layers: persistedLayers } : {}),
     },
   }
 }
@@ -676,6 +734,7 @@ export function recipeToGenerationTemplateWriteRequest(
   const shareSlug = selectedShareSlug.trim()
 
   const persistedDrafts = serializeStyleDrafts(recipe.styleDrafts)
+  const persistedLayers = serializeLayers(recipe.layers)
 
   return {
     name: recipe.title.trim() || 'Untitled template',
@@ -688,6 +747,7 @@ export function recipeToGenerationTemplateWriteRequest(
     layoutSettings: {
       ...source.layoutSettings,
       ...(persistedDrafts ? { styleDrafts: persistedDrafts } : {}),
+      ...(persistedLayers ? { layers: persistedLayers } : {}),
       ...(recipe.edges.length > 0 ? { edges: recipe.edges } : {}),
     },
   }

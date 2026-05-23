@@ -444,6 +444,7 @@ class GenerationTemplateExecuteViewTests(APITestCase):
         body = response.json()
         self.assertEqual(len(body["result"]["nodes"]), 2)
         self.assertEqual(len(body["result"]["edges"]), 1)
+        self.assertEqual(body["filterImpact"], [])
         returned_ids = {node["recordPk"] for node in body["result"]["nodes"]}
         self.assertIn(str(self.provider.pk), returned_ids)
         self.assertIn(str(self.core_network.pk), returned_ids)
@@ -500,6 +501,18 @@ class GenerationTemplateExecuteViewTests(APITestCase):
         self.assertEqual(
             body["result"]["nodes"][0]["recordPk"], str(self.edge_network.pk)
         )
+        self.assertEqual(len(body["filterImpact"]), 1)
+        impact = body["filterImpact"][0]
+        self.assertEqual(impact["stepId"], "step-business-group")
+        self.assertEqual(impact["parentStepId"], "step-root")
+        self.assertEqual(impact["relationship"], "business_group")
+        self.assertEqual(impact["parentModel"], "infrastructure.Network")
+        self.assertEqual(impact["parentRecordPk"], str(self.edge_network.pk))
+        self.assertEqual(impact["targetModel"], "infrastructure.BusinessGroup")
+        self.assertIn(
+            "removed all infrastructure.BusinessGroup records",
+            impact["message"],
+        )
 
     def test_execute_filters_many_to_many_relations(self):
         self.client.force_authenticate(self.other_user)
@@ -544,6 +557,57 @@ class GenerationTemplateExecuteViewTests(APITestCase):
         self.assertIn(str(self.load_balancer.pk), returned_ids)
         self.assertIn(str(self.core_server.pk), returned_ids)
         self.assertNotIn(str(self.edge_server.pk), returned_ids)
+        self.assertEqual(body["filterImpact"], [])
+
+    def test_execute_does_not_warn_when_filtered_relationship_has_no_records(self):
+        self.client.force_authenticate(self.other_user)
+        empty_provider = CloudProvider.objects.create(
+            name="Empty Provider",
+            slug="empty-provider",
+        )
+        definition = build_definition(
+            "infrastructure.CloudProvider",
+            root_step={"childIds": ["step-region"]},
+            steps=[
+                build_step(
+                    step_id="step-region",
+                    parent_id="step-root",
+                    relationship="regions",
+                    resolved_model="infrastructure.Region",
+                    style_template_id=str(self.style_template.id),
+                    filter_fields={
+                        "andOperation": [
+                            {
+                                "field": "name",
+                                "op": "is",
+                                "value": "does-not-exist",
+                            }
+                        ]
+                    },
+                )
+            ],
+        )
+        template = attach_published_version(
+            GenerationTemplate.objects.create(
+                name="No related region overview",
+                owner=self.owner,
+                is_global=True,
+                root_model="infrastructure.CloudProvider",
+                steps=definition,
+            ),
+            definition,
+        )
+
+        response = self.run_published_template(template, empty_provider)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body["result"]["nodes"]), 1)
+        self.assertEqual(
+            body["result"]["nodes"][0]["recordPk"],
+            str(empty_provider.pk),
+        )
+        self.assertEqual(body["filterImpact"], [])
 
     def test_execute_keeps_all_many_to_one_edges_when_hidden_steps_reuse_a_visible_target(
         self,

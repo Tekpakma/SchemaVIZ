@@ -88,6 +88,12 @@ import { DataReferenceNode } from '@/features/lexical/dataReference/DataReferenc
 import { APPLY_INLINE_TEXT_STYLE_COMMAND } from '@/features/lexical/dataReference/commands'
 import { DataReferencePlugin } from '@/features/lexical/dataReference/DataReferencePlugin'
 import { DataReferenceAutocomplete } from '@/features/lexical/dataReference/DataReferenceAutocomplete'
+import { TextSizeDropdown } from '@/features/lexical/TextSizeDropdown'
+import {
+  applyTextSize,
+  readSelectionTextSize,
+  type TextSizePreset,
+} from '@/features/lexical/textSizePresets'
 import { LexicalOverlayRuntimeProvider } from '@/features/lexical/LexicalOverlayRuntimeContext'
 import type { LexicalOverlayRuntime } from '@/features/lexical/LexicalOverlayRuntimeContext'
 import { hasDataScope } from '@/features/canvas/model/types'
@@ -129,6 +135,7 @@ const INLINE_TOOLBAR_ITEMS = [
 
 type InlineToolbarFormatState = Record<InlineToolbarFormat, boolean> & {
   color: string
+  textSize: TextSizePreset
 }
 
 type InlineEditorNode = NonNullable<ReturnType<typeof useCanvasNodes>[string]>
@@ -140,6 +147,7 @@ const EMPTY_INLINE_TOOLBAR_FORMAT_STATE: InlineToolbarFormatState = {
   bold: false,
   color: DEFAULT_INLINE_TEXT_COLOR,
   italic: false,
+  textSize: 'normal',
   underline: false,
 }
 
@@ -173,6 +181,7 @@ function readInlineToolbarFormatState(): InlineToolbarFormatState {
     bold: selection.hasFormat('bold'),
     color: normalizeCssColorToHex(color || DEFAULT_INLINE_TEXT_COLOR),
     italic: selection.hasFormat('italic'),
+    textSize: readSelectionTextSize(),
     underline: selection.hasFormat('underline'),
   }
 }
@@ -185,7 +194,8 @@ function areInlineToolbarFormatStatesEqual(
     a.bold === b.bold &&
     a.italic === b.italic &&
     a.underline === b.underline &&
-    a.color === b.color
+    a.color === b.color &&
+    a.textSize === b.textSize
   )
 }
 
@@ -744,6 +754,12 @@ function InlineLexicalToolbar({ style }: { style: CSSProperties }) {
           </button>
         )
       })}
+      <TextSizeDropdown
+        activePreset={formatState.textSize}
+        controlClass={controlClass}
+        iconClass="size-3.5"
+        onSelect={(preset) => applyTextSize(editor, preset)}
+      />
       <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
       <label
         className={cn(controlClass, 'relative cursor-pointer overflow-hidden')}

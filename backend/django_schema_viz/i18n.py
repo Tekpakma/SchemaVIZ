@@ -5,7 +5,7 @@ from typing import Iterable
 from django.utils.translation import activate
 
 DEFAULT_LOCALE = "en"
-SUPPORTED_LOCALES = ("de", "en")
+SUPPORTED_LOCALES = ("en", "de")
 LOCALE_HEADER = "X-SchemaViz-Locale"
 
 _MESSAGES = {
@@ -58,33 +58,6 @@ def normalize_locale(value: str | None) -> str:
     return DEFAULT_LOCALE
 
 
-def parse_accept_language(header_value: str | None) -> str:
-    if not header_value:
-        return DEFAULT_LOCALE
-
-    candidates: list[tuple[str, float]] = []
-    for raw_part in header_value.split(","):
-        part = raw_part.strip()
-        if not part:
-            continue
-        locale, *_rest = part.split(";")
-        quality = 1.0
-        for rest_part in _rest:
-            rest = rest_part.strip()
-            if rest.startswith("q="):
-                try:
-                    quality = float(rest[2:])
-                except ValueError:
-                    quality = 0.0
-        candidates.append((locale, quality))
-
-    for locale, _quality in sorted(candidates, key=lambda item: item[1], reverse=True):
-        normalized = normalize_locale(locale)
-        if normalized in SUPPORTED_LOCALES:
-            return normalized
-    return DEFAULT_LOCALE
-
-
 def resolve_request_locale(request) -> str:
     user = getattr(request, "user", None)
     if getattr(user, "is_authenticated", False):
@@ -96,7 +69,7 @@ def resolve_request_locale(request) -> str:
     if explicit_locale in SUPPORTED_LOCALES and request.headers.get(LOCALE_HEADER):
         return explicit_locale
 
-    return parse_accept_language(request.headers.get("Accept-Language"))
+    return DEFAULT_LOCALE
 
 
 def activate_request_locale(request) -> str:

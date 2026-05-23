@@ -21,6 +21,11 @@ export type CanvasRasterPlan = {
   requestedPixelRatio: number
 }
 
+type RasterCompositeEnvironment = {
+  createCanvas?: (width: number, height: number) => HTMLCanvasElement
+  loadImage?: (dataUrl: string) => Promise<CanvasImageSource>
+}
+
 export const CANVAS_EXPORT_PADDING = 32
 export const CANVAS_PREVIEW_RASTER_LIMITS: CanvasRasterLimits = {
   maxArea: 4_000_000,
@@ -32,6 +37,22 @@ export const CANVAS_DOWNLOAD_RASTER_LIMITS: CanvasRasterLimits = {
 }
 
 const MIN_PIXEL_RATIO = 0.001
+
+function createBrowserCanvas(width: number, height: number) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  return canvas
+}
+
+function loadBrowserImage(dataUrl: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Canvas export image could not load'))
+    image.src = dataUrl
+  })
+}
 
 function roundBounds(bounds: CanvasRasterBounds): CanvasRasterBounds {
   const x = Math.floor(bounds.x)
@@ -118,10 +139,54 @@ export function getStageContentBounds(
   })
 }
 
-export function renderStageRasterDataUrl(
+export function normalizeRasterBackground(background?: string | null) {
+  const value = background?.trim()
+  if (!value || value === 'transparent') {
+    return null
+  }
+  return value
+}
+
+export async function compositeRasterBackground(
+  dataUrl: string,
+  outputWidth: number,
+  outputHeight: number,
+  background?: string | null,
+  environment: RasterCompositeEnvironment = {},
+) {
+  const fill = normalizeRasterBackground(background)
+  if (!fill) {
+    return dataUrl
+  }
+
+  const createCanvas = environment.createCanvas ?? createBrowserCanvas
+  const loadImage = environment.loadImage ?? loadBrowserImage
+  const canvas = createCanvas(outputWidth, outputHeight)
+  canvas.width = outputWidth
+  canvas.height = outputHeight
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Canvas export could not create a 2D context')
+  }
+
+  const image = await loadImage(dataUrl)
+  context.fillStyle = fill
+  context.fillRect(0, 0, outputWidth, outputHeight)
+  context.drawImage(image, 0, 0, outputWidth, outputHeight)
+
+  const composedDataUrl = canvas.toDataURL('image/png')
+  if (!composedDataUrl.startsWith('data:image/png')) {
+    throw new Error('Canvas export returned an empty image')
+  }
+  return composedDataUrl
+}
+
+export async function renderStageRasterDataUrl(
   stage: Konva.Stage,
   plan: CanvasRasterPlan,
-): string {
+  options: { background?: string | null } = {},
+): Promise<string> {
   const previous = {
     scaleX: stage.scaleX(),
     scaleY: stage.scaleY(),
@@ -149,7 +214,12 @@ export function renderStageRasterDataUrl(
       throw new Error('Canvas export returned an empty image')
     }
 
-    return dataUrl
+    return await compositeRasterBackground(
+      dataUrl,
+      plan.outputWidth,
+      plan.outputHeight,
+      options.background,
+    )
   } finally {
     stage.position({ x: previous.x, y: previous.y })
     stage.scale({ x: previous.scaleX, y: previous.scaleY })

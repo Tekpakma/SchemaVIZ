@@ -12,9 +12,9 @@ export const SessionState = zod.object({
   "canManageFeaturedTemplates": zod.boolean(),
   "canManageModelRegistry": zod.boolean()
 }),
-  "locale": zod.enum(['de', 'en']).describe('\* `de` - de\n\* `en` - en'),
-  "availableLocales": zod.array(zod.enum(['de', 'en']).describe('\* `de` - de\n\* `en` - en')),
-  "defaultLocale": zod.enum(['de', 'en']).describe('\* `de` - de\n\* `en` - en'),
+  "locale": zod.enum(['en', 'de']).describe('\* `en` - en\n\* `de` - de'),
+  "availableLocales": zod.array(zod.enum(['en', 'de']).describe('\* `en` - en\n\* `de` - de')),
+  "defaultLocale": zod.enum(['en', 'de']).describe('\* `en` - en\n\* `de` - de'),
   "helpHintsEnabled": zod.boolean(),
   "helpHintsDismissed": zod.record(zod.string(), zod.string()),
   "hasAiKey": zod.boolean(),

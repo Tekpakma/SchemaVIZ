@@ -24,43 +24,10 @@ export function normalizeLocale(value: unknown): Locale {
   return parseLocale(value) ?? DEFAULT_LOCALE
 }
 
-export function resolveAcceptLanguage(headerValue: string | null | undefined): Locale {
-  if (!headerValue) return DEFAULT_LOCALE
-
-  const candidates: Array<{ locale: string; quality: number }> = []
-
-  for (const rawPart of headerValue.split(',')) {
-    const part = rawPart.trim()
-    if (!part) continue
-
-    const [locale = '', ...rest] = part.split(';')
-    let quality = 1
-
-    for (const restPart of rest) {
-      const parameter = restPart.trim()
-      if (!parameter.startsWith('q=')) continue
-
-      const parsedQuality = Number(parameter.slice(2))
-      quality = Number.isFinite(parsedQuality) ? parsedQuality : 0
-    }
-
-    candidates.push({ locale, quality })
-  }
-
-  for (const candidate of candidates.sort((a, b) => b.quality - a.quality)) {
-    const locale = parseLocale(candidate.locale)
-    if (locale) return locale
-  }
-
-  return DEFAULT_LOCALE
-}
-
 export function resolveLocalePreference({
-  acceptLanguage,
   cookieLocale,
 }: {
-  acceptLanguage?: string | null
   cookieLocale?: string | null
 }): Locale {
-  return parseLocale(cookieLocale) ?? resolveAcceptLanguage(acceptLanguage)
+  return parseLocale(cookieLocale) ?? DEFAULT_LOCALE
 }

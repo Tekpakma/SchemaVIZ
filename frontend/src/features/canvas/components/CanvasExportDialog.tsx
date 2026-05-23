@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import {
   CheckIcon,
   ClipboardCopyIcon,
   DownloadIcon,
   ExternalLinkIcon,
   ImageIcon,
+  InfoIcon,
   ShareIcon,
 } from 'lucide-react'
 import type Konva from 'konva'
@@ -29,11 +30,14 @@ import {
   renderStageRasterDataUrl,
 } from '../canvasRasterExport'
 import type { CanvasRasterPlan } from '../canvasRasterExport'
+import { CANVAS_BACKGROUND_FALLBACKS } from '../themeColors'
+import type { ResolvedTheme } from '@/features/theme/constants'
 
 type ExportFormat = 'png' | 'svg' | 'drawio'
-type ExportBackground = 'light' | 'transparent' | 'dark'
+type ExportAppearance = ResolvedTheme
 
 type CanvasExportDialogProps = {
+  filterNotice?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   stageRef: React.RefObject<Konva.Stage | null>
@@ -86,10 +90,9 @@ const FORMAT_META: Record<
   },
 }
 
-const BG_OPTIONS: Array<{ id: ExportBackground; label: string }> = [
-  { id: 'light', label: 'Papier' },
-  { id: 'transparent', label: 'Transparent' },
-  { id: 'dark', label: 'Dunkel' },
+const APPEARANCE_OPTIONS: Array<{ id: ExportAppearance; label: string }> = [
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
 ]
 
 const SCALE_OPTIONS = [
@@ -203,23 +206,35 @@ function FormatIcon({ format }: { format: ExportFormat }) {
 }
 
 export function CanvasExportDialog({
+  filterNotice,
   open,
   onOpenChange,
   stageRef,
 }: CanvasExportDialogProps) {
+  const { resolvedTheme, setExportThemeOverride } = useTheme()
+  const { getCanvasExportSnapshot } = useCanvasSnapshotGetters()
   const [format, setFormat] = useState<ExportFormat>('png')
-  const [bg, setBg] = useState<ExportBackground>('light')
+  const [exportAppearance, setExportAppearance] =
+    useState<ExportAppearance>(() => resolvedTheme)
+  const [transparentBackground, setTransparentBackground] = useState(false)
+
+  // Temporarily override the app theme so the Konva stage re-renders with
+  // the chosen export appearance. Reverts on dialog close.
+  useEffect(() => {
+    if (open) {
+      setExportThemeOverride(exportAppearance)
+    }
+    return () => setExportThemeOverride(null)
+  }, [open, exportAppearance, setExportThemeOverride])
   const [scale, setScale] = useState(2)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [rasterPlan, setRasterPlan] = useState<CanvasRasterPlan | null>(null)
 
-  const { resolvedTheme } = useTheme()
-  const { getCanvasExportSnapshot } = useCanvasSnapshotGetters()
-
-  const exportTheme =
-    bg === 'dark' ? 'dark' : bg === 'light' ? 'light' : resolvedTheme
+  const exportBackground = transparentBackground
+    ? 'transparent'
+    : CANVAS_BACKGROUND_FALLBACKS[exportAppearance]
 
   const createDownloadRasterPlan = useCallback(() => {
     const stage = stageRef.current
@@ -231,20 +246,16 @@ export function CanvasExportDialog({
     return createRasterPlan(bounds, scale, CANVAS_DOWNLOAD_RASTER_LIMITS)
   }, [scale, stageRef])
 
-  const generatePreview = useCallback(() => {
+  const generatePreview = useEffectEvent(async () => {
     const stage = stageRef.current
     if (!stage || !open) {
-      setPreviewUrl(null)
-      setRasterPlan(null)
-      return
+      return null
     }
 
     try {
       const bounds = getStageContentBounds(stage)
       if (!bounds) {
-        setPreviewUrl(null)
-        setRasterPlan(null)
-        return
+        return null
       }
 
       const previewPlan = createRasterPlan(
@@ -257,25 +268,35 @@ export function CanvasExportDialog({
         scale,
         CANVAS_DOWNLOAD_RASTER_LIMITS,
       )
-      const dataUrl = renderStageRasterDataUrl(stage, previewPlan)
-      setPreviewUrl(dataUrl)
-      setRasterPlan(downloadPlan)
+      const dataUrl = await renderStageRasterDataUrl(stage, previewPlan, {
+        background: exportBackground,
+      })
+      return { dataUrl, downloadPlan }
     } catch {
-      setPreviewUrl(null)
-      setRasterPlan(null)
+      return null
     }
-  }, [open, scale, stageRef])
+  })
 
   useEffect(() => {
     if (open) {
-      const timer = setTimeout(generatePreview, 50)
-      return () => clearTimeout(timer)
+      let cancelled = false
+      const timer = setTimeout(() => {
+        void generatePreview().then((preview) => {
+          if (cancelled) return
+          setPreviewUrl(preview?.dataUrl ?? null)
+          setRasterPlan(preview?.downloadPlan ?? null)
+        })
+      }, 50)
+      return () => {
+        cancelled = true
+        clearTimeout(timer)
+      }
     }
     setPreviewUrl(null)
     setRasterPlan(null)
     setDone(null)
     setBusy(false)
-  }, [open, generatePreview])
+  }, [exportAppearance, exportBackground, open, scale, transparentBackground])
 
   const handleExportPng = useCallback(async () => {
     const stage = stageRef.current
@@ -286,7 +307,9 @@ export function CanvasExportDialog({
       const plan = createDownloadRasterPlan()
       if (!plan) return
 
-      const dataUrl = renderStageRasterDataUrl(stage, plan)
+      const dataUrl = await renderStageRasterDataUrl(stage, plan, {
+        background: exportBackground,
+      })
 
       const response = await fetch(dataUrl)
       const blob = await response.blob()
@@ -299,24 +322,18 @@ export function CanvasExportDialog({
     } finally {
       setBusy(false)
     }
-  }, [createDownloadRasterPlan, scale, stageRef])
+  }, [createDownloadRasterPlan, exportBackground, scale, stageRef])
 
   const handleExportServer = useCallback(
     async (exportFormat: 'svg' | 'drawio') => {
       setBusy(true)
       try {
         const snapshot = getCanvasExportSnapshot()
-        const bgMap: Record<ExportBackground, string> = {
-          light: '#ffffff',
-          dark: '#18181b',
-          transparent: 'transparent',
-        }
-
         const request = createStatelessExportRequestFromCanvas(snapshot, {
-          resolvedTheme: exportTheme,
+          resolvedTheme: exportAppearance,
           exportFormat,
           fileName: 'canvas-export',
-          background: bgMap[bg],
+          background: exportBackground,
         })
 
         const response = await schemaVizExportCreate(request)
@@ -341,7 +358,7 @@ export function CanvasExportDialog({
         setBusy(false)
       }
     },
-    [bg, exportTheme, getCanvasExportSnapshot],
+    [exportAppearance, exportBackground, getCanvasExportSnapshot],
   )
 
   const handleDownload = useCallback(() => {
@@ -363,7 +380,9 @@ export function CanvasExportDialog({
       const plan = createDownloadRasterPlan()
       if (!plan) return
 
-      const dataUrl = renderStageRasterDataUrl(stage, plan)
+      const dataUrl = await renderStageRasterDataUrl(stage, plan, {
+        background: exportBackground,
+      })
       const response = await fetch(dataUrl)
       const blob = await response.blob()
       await navigator.clipboard.write([
@@ -376,22 +395,17 @@ export function CanvasExportDialog({
     } finally {
       setBusy(false)
     }
-  }, [createDownloadRasterPlan, stageRef])
+  }, [createDownloadRasterPlan, exportBackground, stageRef])
 
   const handleOpenInDrawio = useCallback(async () => {
     setBusy(true)
     try {
       const snapshot = getCanvasExportSnapshot()
-      const bgMap: Record<ExportBackground, string> = {
-        light: '#ffffff',
-        dark: '#18181b',
-        transparent: 'transparent',
-      }
       const request = createStatelessExportRequestFromCanvas(snapshot, {
-        resolvedTheme: exportTheme,
+        resolvedTheme: exportAppearance,
         exportFormat: 'drawio',
         fileName: 'canvas-export',
-        background: bgMap[bg],
+        background: exportBackground,
       })
       const response = await schemaVizExportCreate(request)
       if (response.status !== 200) {
@@ -415,7 +429,7 @@ export function CanvasExportDialog({
     } finally {
       setBusy(false)
     }
-  }, [bg, exportTheme, getCanvasExportSnapshot])
+  }, [exportAppearance, exportBackground, getCanvasExportSnapshot])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -463,13 +477,11 @@ export function CanvasExportDialog({
             <div
               className={cn(
                 'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-5',
-                bg === 'light' && 'bg-background',
-                bg === 'dark' && 'bg-zinc-900',
-                bg === 'transparent' &&
+                transparentBackground &&
                   'bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0]',
               )}
               style={
-                bg === 'transparent'
+                transparentBackground
                   ? {
                       backgroundImage: [
                         'linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%)',
@@ -478,7 +490,7 @@ export function CanvasExportDialog({
                         'linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)',
                       ].join(','),
                     }
-                  : undefined
+                  : { backgroundColor: exportBackground }
               }
             >
               {previewUrl ? (
@@ -487,8 +499,10 @@ export function CanvasExportDialog({
                   alt="Diagramm-Vorschau"
                   className={cn(
                     'max-h-full max-w-full object-contain',
-                    bg === 'light' && 'rounded-md ring-1 ring-border/40',
-                    bg === 'dark' && 'rounded-md ring-1 ring-white/10',
+                    exportAppearance === 'light' &&
+                      'rounded-md ring-1 ring-border/40',
+                    exportAppearance === 'dark' &&
+                      'rounded-md ring-1 ring-white/10',
                   )}
                 />
               ) : (
@@ -548,49 +562,47 @@ export function CanvasExportDialog({
               </div>
             </div>
 
-            {/* Background */}
+            {/* Appearance */}
             <div className="flex flex-col gap-2.5">
               <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
-                HINTERGRUND
+                APPEARANCE
               </span>
-              <div className="grid grid-cols-3 gap-1.5">
-                {BG_OPTIONS.map((opt) => (
+              <div className="grid grid-cols-2 gap-1.5">
+                {APPEARANCE_OPTIONS.map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
                     className={cn(
-                      'flex flex-col items-center gap-1.5 rounded-lg border px-2 py-2 text-[11.5px] transition-colors',
-                      bg === opt.id
+                      'flex items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[12px] transition-colors',
+                      exportAppearance === opt.id
                         ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
                         : 'border-border hover:border-muted-foreground/50',
                     )}
-                    onClick={() => setBg(opt.id)}
+                    onClick={() => setExportAppearance(opt.id)}
                   >
                     <span
                       className={cn(
-                        'h-[18px] w-[26px] rounded border',
+                        'size-3 rounded-full border',
                         opt.id === 'light' && 'border-border bg-white',
-                        opt.id === 'dark' && 'border-zinc-800 bg-zinc-900',
-                        opt.id === 'transparent' &&
-                          'border-border bg-[length:6px_6px] bg-[position:0_0,0_3px,3px_-3px,-3px_0]',
+                        opt.id === 'dark' && 'border-zinc-800 bg-[#09090b]',
                       )}
-                      style={
-                        opt.id === 'transparent'
-                          ? {
-                              backgroundImage: [
-                                'linear-gradient(45deg, hsl(var(--border)) 25%, transparent 25%)',
-                                'linear-gradient(-45deg, hsl(var(--border)) 25%, transparent 25%)',
-                                'linear-gradient(45deg, transparent 75%, hsl(var(--border)) 75%)',
-                                'linear-gradient(-45deg, transparent 75%, hsl(var(--border)) 75%)',
-                              ].join(','),
-                            }
-                          : undefined
-                      }
                     />
                     <span>{opt.label}</span>
                   </button>
                 ))}
               </div>
+              <label className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-[12px] text-foreground">
+                <input
+                  aria-label="Transparent background"
+                  type="checkbox"
+                  className="size-3.5 accent-foreground"
+                  checked={transparentBackground}
+                  onChange={(event) =>
+                    setTransparentBackground(event.currentTarget.checked)
+                  }
+                />
+                <span>Transparent background</span>
+              </label>
             </div>
 
             {/* Scale (PNG only) */}
@@ -624,6 +636,13 @@ export function CanvasExportDialog({
 
             {/* Actions */}
             <div className="mt-auto flex flex-col gap-2">
+              {filterNotice ? (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
+                  <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{filterNotice}</span>
+                </div>
+              ) : null}
+
               <Button
                 className="w-full gap-2"
                 disabled={busy}

@@ -10,7 +10,7 @@ import * as zod from 'zod';
 
 
 export const SchemaVizSessionPartialUpdateBody = zod.object({
-  "locale": zod.enum(['de', 'en']).optional().describe('\* `de` - de\n\* `en` - en'),
+  "locale": zod.enum(['en', 'de']).optional().describe('\* `en` - en\n\* `de` - de'),
   "helpHintsEnabled": zod.boolean().optional(),
   "helpHintsDismissed": zod.record(zod.string(), zod.string().min(1)).optional(),
   "aiApiKey": zod.string().optional(),

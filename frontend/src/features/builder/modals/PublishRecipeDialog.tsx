@@ -60,6 +60,7 @@ type SlugStatus = 'idle' | 'checking' | 'available' | 'taken'
 type PublishDialogState = {
   copied: boolean
   isGlobal: boolean
+  nameTaken: boolean
   shareSlug: string
   slugStatus: SlugStatus
 }
@@ -84,10 +85,11 @@ export function PublishRecipeDialog({
   const [dialogState, setDialogState] = useState<PublishDialogState>(() => ({
     copied: false,
     isGlobal: isSharedTemplate(template?.scope, recipe.promoteVisibility),
+    nameTaken: false,
     shareSlug: '',
     slugStatus: 'idle',
   }))
-  const { copied, isGlobal, shareSlug, slugStatus } = dialogState
+  const { copied, isGlobal, nameTaken, shareSlug, slugStatus } = dialogState
   const VisibilityIcon = isGlobal ? Globe2 : Lock
   const templateTitle =
     recipe.title.trim() || t('builder.header.titlePlaceholder')
@@ -106,17 +108,30 @@ export function PublishRecipeDialog({
       setDialogState({
         copied: false,
         isGlobal: isSharedTemplate(template?.scope, recipe.promoteVisibility),
+        nameTaken: false,
         shareSlug: suggestedShareSlug,
         slugStatus: 'idle',
       })
     }
   }, [open, recipe.promoteVisibility, suggestedShareSlug, template?.scope])
 
+  // Run an initial uniqueness check when the dialog opens with a pre-filled slug
+  useEffect(() => {
+    if (open && suggestedShareSlug.trim()) {
+      void checkSlugUniqueness(suggestedShareSlug)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   const checkSlugUniqueness = useCallback(
     async (slug: string) => {
       const trimmed = slug.trim()
       if (!trimmed) {
-        setDialogState((current) => ({ ...current, slugStatus: 'idle' }))
+        setDialogState((current) => ({
+          ...current,
+          slugStatus: 'idle',
+          nameTaken: false,
+        }))
         return
       }
       setDialogState((current) => ({ ...current, slugStatus: 'checking' }))
@@ -134,16 +149,33 @@ export function PublishRecipeDialog({
           setDialogState((current) => ({
             ...current,
             slugStatus: nextStatus,
+            nameTaken: result.data.nameUnique === false,
           }))
         } else {
-          setDialogState((current) => ({ ...current, slugStatus: 'idle' }))
+          setDialogState((current) => ({
+            ...current,
+            slugStatus: 'idle',
+            nameTaken: false,
+          }))
         }
       } catch {
-        setDialogState((current) => ({ ...current, slugStatus: 'idle' }))
+        setDialogState((current) => ({
+          ...current,
+          slugStatus: 'idle',
+          nameTaken: false,
+        }))
       }
     },
     [isGlobal, recipe.title, template?.id, template?.name],
   )
+
+  // Re-check uniqueness when the visibility scope changes
+  useEffect(() => {
+    if (open && shareSlug.trim()) {
+      void checkSlugUniqueness(shareSlug)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGlobal])
 
   const handleSlugBlur = useCallback(() => {
     void checkSlugUniqueness(shareSlug)
@@ -297,6 +329,14 @@ export function PublishRecipeDialog({
           </div>
         )}
 
+        {nameTaken && (
+          <p className="text-[12.5px] text-destructive">
+            {t('builder.publish.nameTaken', {
+              name: recipe.title.trim() || t('builder.header.titlePlaceholder'),
+            })}
+          </p>
+        )}
+
         {publishError && (
           <p className="text-[12.5px] text-destructive">{publishError}</p>
         )}
@@ -309,7 +349,8 @@ export function PublishRecipeDialog({
             disabled={
               publishing ||
               shareSlug.trim().length === 0 ||
-              slugStatus === 'taken'
+              slugStatus === 'taken' ||
+              nameTaken
             }
             onClick={handlePublish}
           >

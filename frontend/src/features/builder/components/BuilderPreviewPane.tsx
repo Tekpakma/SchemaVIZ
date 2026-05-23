@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils'
 import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
 import { BuilderPreview } from '../BuilderPreview'
+import { FilterImpactNotice } from '../FilterImpactNotice'
 import type {
   BuilderPreviewCommit,
   BuilderPreviewResize,
@@ -23,6 +24,7 @@ import type {
 import type { FlushInlineNodeEdit } from '../BuilderInlineEditor'
 import type { BuilderDocumentActions } from '../builderWorkbench'
 import { GENERATION_PREVIEW_QUERIES } from '../generationPreviewQuery'
+import { hasFilterImpact } from '../generationDiagnostics'
 import { recipeToInlineDefinition } from '../templateRecipe'
 import type {
   ExampleRecord,
@@ -222,6 +224,9 @@ export function BuilderPreviewPane({
   const previewErrorMessage = getPreviewErrorMessage(generationQuery.error)
   const isPreviewLoading =
     isResolving && generationQuery.fetchStatus === 'fetching'
+  const exportFilterNotice = hasFilterImpact(generationQuery.data)
+    ? t('filterImpact.exportNotice')
+    : undefined
 
   const handleRecheck = () => {
     void queryClient.invalidateQueries({ queryKey: queryOptions.queryKey })
@@ -315,16 +320,20 @@ export function BuilderPreviewPane({
       )}
 
       {isResolving && generationQuery.data && (
-        <BuilderPreview
-          autoLayout
-          className="min-h-0 flex-1"
-          exportOpen={exportOpen}
-          generationResponse={generationQuery.data}
-          interactionMode="viewport"
-          onExportOpenChange={onExportOpenChange}
-          recipe={recipe}
-          showEdges
-        />
+        <>
+          <FilterImpactNotice response={generationQuery.data} />
+          <BuilderPreview
+            autoLayout
+            className="min-h-0 flex-1"
+            exportFilterNotice={exportFilterNotice}
+            exportOpen={exportOpen}
+            generationResponse={generationQuery.data}
+            interactionMode="viewport"
+            onExportOpenChange={onExportOpenChange}
+            recipe={recipe}
+            showEdges
+          />
+        </>
       )}
 
       {!isResolving && (

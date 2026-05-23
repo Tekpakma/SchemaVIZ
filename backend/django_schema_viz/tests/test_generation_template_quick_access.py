@@ -153,7 +153,7 @@ class SessionStateViewTests(APITestCase):
             is_staff=True,
         )
 
-    def test_initial_locale_uses_accept_language_and_creates_preference(self):
+    def test_initial_locale_defaults_to_english_and_creates_preference(self):
         self.client.force_authenticate(self.user)
 
         response = self.client.get(
@@ -168,8 +168,8 @@ class SessionStateViewTests(APITestCase):
                     "canManageFeaturedTemplates": False,
                     "canManageModelRegistry": False,
                 },
-                "locale": "de",
-                "availableLocales": ["de", "en"],
+                "locale": "en",
+                "availableLocales": ["en", "de"],
                 "defaultLocale": "en",
                 "helpHintsEnabled": True,
                 "helpHintsDismissed": {},
@@ -179,7 +179,7 @@ class SessionStateViewTests(APITestCase):
             },
         )
         preference = SchemaVizUserPreference.objects.get(user=self.user)
-        self.assertEqual(preference.locale, "de")
+        self.assertEqual(preference.locale, "en")
 
     def test_patch_updates_persisted_locale(self):
         self.client.force_authenticate(self.staff)

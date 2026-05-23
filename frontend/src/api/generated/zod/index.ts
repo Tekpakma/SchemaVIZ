@@ -23,6 +23,7 @@ export * from './generationDefinitionSchema.zod';
 export * from './generationDefinitionSchemaRequest.zod';
 export * from './generationDefinitionStepSchema.zod';
 export * from './generationDefinitionStepSchemaRequest.zod';
+export * from './generationFilterImpact.zod';
 export * from './generationLayoutSettingsSchema.zod';
 export * from './generationLayoutSettingsSchemaRequest.zod';
 export * from './generationResult.zod';

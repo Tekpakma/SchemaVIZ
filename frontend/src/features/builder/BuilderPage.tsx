@@ -90,7 +90,6 @@ function BuilderPageContent({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [publishOpen, setPublishOpen] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
   const [savedTemplate, setSavedTemplate] = useState<{
     tabId: WorkbenchTabId
     template: GenerationTemplateRead
@@ -319,7 +318,6 @@ function BuilderPageContent({
             shareSlug: null,
           })
         }
-        onShare={() => setExportOpen(true)}
         onTitleChange={actions.setTitle}
       />
 
@@ -334,10 +332,8 @@ function BuilderPageContent({
           activeExampleId={activeExampleId}
           activeStepKind={activeStep.kind}
           examples={recipe.examples}
-          exportOpen={exportOpen}
           models={recipe.models}
           onCommitNodeText={handleCommitNodeText}
-          onExportOpenChange={setExportOpen}
           onNodeResize={handleNodeResize}
           onNodeSelect={setSelectedCanvasNodeId}
           onRegisterFlushInlineEdit={handleRegisterFlushInlineEdit}

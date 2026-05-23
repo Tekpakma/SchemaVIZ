@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQueries'
+import { FilterImpactNotice } from '@/features/builder/FilterImpactNotice'
 import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
 import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
@@ -75,6 +76,9 @@ function GenerateTemplatePage() {
     pk: string
     displayName: string
   } | null>(null)
+  const selectedRunQuery = useQuery(
+    SHARED_GENERATION_QUERIES.run(slug, selectedRecord?.pk ?? ''),
+  )
 
   return (
     <div className="flex h-dvh w-dvw flex-col bg-background">
@@ -193,6 +197,16 @@ function GenerateTemplatePage() {
               </Button>
             )}
           </div>
+
+          {selectedRunQuery.isFetching ? (
+            <p className="text-center text-[12px] text-muted-foreground">
+              {t('filterImpact.checking')}
+            </p>
+          ) : null}
+          <FilterImpactNotice
+            className="rounded-md border border-amber-200 dark:border-amber-900/60"
+            response={selectedRunQuery.data}
+          />
         </div>
       </main>
     </div>

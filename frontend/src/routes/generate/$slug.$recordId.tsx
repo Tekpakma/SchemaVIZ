@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { BuilderPreview } from '@/features/builder/BuilderPreview'
+import { FilterImpactNotice } from '@/features/builder/FilterImpactNotice'
+import { hasFilterImpact } from '@/features/builder/generationDiagnostics'
 import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQueries'
 import { createRecipeFromTemplate } from '@/features/builder/templateRecipe'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
@@ -53,6 +55,9 @@ function GenerateViewPage() {
   )
 
   const recipe = useMemo(() => createRecipeFromTemplate(template), [template])
+  const exportFilterNotice = hasFilterImpact(runData)
+    ? t('filterImpact.exportNotice')
+    : undefined
 
   if (isEmbed) {
     return (
@@ -86,8 +91,11 @@ function GenerateViewPage() {
           {t('builder.header.share')}
         </Button>
       </header>
-      <main className="relative min-h-0 flex-1">
+      <main className="relative flex min-h-0 flex-1 flex-col">
+        <FilterImpactNotice response={runData} />
         <BuilderPreview
+          className="min-h-0 flex-1"
+          exportFilterNotice={exportFilterNotice}
           exportOpen={exportOpen}
           onExportOpenChange={setExportOpen}
           recipe={recipe}

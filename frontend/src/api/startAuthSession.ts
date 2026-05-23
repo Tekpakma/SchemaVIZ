@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { z } from 'zod'
+import * as z from 'zod'
 
 export const StartAuthSessionSchema = z.object({
   mode: z.enum(['dev', 'oidc']),

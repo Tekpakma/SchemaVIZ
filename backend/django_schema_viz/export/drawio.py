@@ -37,6 +37,7 @@ from ._lexical_utils import (
 def export_drawing_to_drawio(
     react_flow_state: dict[str, Any],
     lexical_state: dict[str, Any] | None = None,
+    background: str = "#ffffff",
 ) -> str:
     """
     Convert a Drawing's state into draw.io XML.
@@ -44,6 +45,7 @@ def export_drawing_to_drawio(
     Args:
         react_flow_state: The serialized ReactFlow state containing nodes, edges, viewport.
         lexical_state: Optional map of node_id -> Lexical editor state for text labels.
+        background: Page background hex color, or "transparent" to leave unset.
 
     Returns:
         A string of valid draw.io XML (mxGraphModel).
@@ -69,6 +71,8 @@ def export_drawing_to_drawio(
     model.set("pageScale", "1")
     model.set("pageWidth", "1169")
     model.set("pageHeight", "827")
+    if background != "transparent":
+        model.set("background", background)
 
     root = SubElement(model, "root")
 
@@ -82,6 +86,9 @@ def export_drawing_to_drawio(
 
     # Track cell IDs for edge references
     node_id_map: dict[str, str] = {}
+    node_by_id: dict[str, dict] = {
+        str(node.get("id")): node for node in nodes if node.get("id") is not None
+    }
 
     # Process nodes — groups first so children can reference parent
     sorted_nodes = _sort_nodes_parents_first(nodes)
@@ -94,11 +101,11 @@ def export_drawing_to_drawio(
         node_type = node.get("type", "")
         data = node.get("data", {})
         style_obj = node.get("style", {})
-        position = node.get("position", {})
 
         # Determine parent (for grouped nodes)
         parent_id = node.get("parentId") or node.get("parentNode")
         parent_cell = node_id_map.get(parent_id, "1") if parent_id else "1"
+        parent_node = node_by_id.get(str(parent_id)) if parent_id else None
 
         # Extract label
         label = _extract_label(node_id, data, lexical_state)
@@ -124,6 +131,7 @@ def export_drawing_to_drawio(
             cell.set("connectable", "0")
 
         geo = SubElement(cell, "mxGeometry")
+        position = _get_drawio_node_position(node, parent_node)
         geo.set("x", str(round(position.get("x", 0))))
         geo.set("y", str(round(position.get("y", 0))))
         geo.set("width", str(round(width)))
@@ -179,6 +187,62 @@ def _sort_nodes_parents_first(nodes: list[dict]) -> list[dict]:
         else:
             children.append(node)
     return groups + children
+
+
+def _get_position_dict(node: dict, key: str) -> dict[str, Any]:
+    value = node.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _to_float_coord(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _get_drawio_node_position(
+    node: dict,
+    parent_node: dict | None = None,
+) -> dict[str, float]:
+    """
+    Draw.io child cell geometry is relative to the parent cell.
+
+    React Flow state may include both relative `position` and absolute
+    `positionAbsolute`; SchemaVIZ's canvas keeps absolute coordinates
+    internally, so exported grouped nodes must be normalized here.
+    """
+    position = _get_position_dict(node, "position")
+    if not parent_node:
+        return {
+            "x": _to_float_coord(position.get("x")),
+            "y": _to_float_coord(position.get("y")),
+        }
+
+    absolute = _get_position_dict(node, "positionAbsolute") or _get_position_dict(
+        node,
+        "position_absolute",
+    )
+    if absolute:
+        parent_absolute = (
+            _get_position_dict(parent_node, "positionAbsolute")
+            or _get_position_dict(
+                parent_node,
+                "position_absolute",
+            )
+            or _get_position_dict(parent_node, "position")
+        )
+        return {
+            "x": _to_float_coord(absolute.get("x"))
+            - _to_float_coord(parent_absolute.get("x")),
+            "y": _to_float_coord(absolute.get("y"))
+            - _to_float_coord(parent_absolute.get("y")),
+        }
+
+    return {
+        "x": _to_float_coord(position.get("x")),
+        "y": _to_float_coord(position.get("y")),
+    }
 
 
 def _extract_label(

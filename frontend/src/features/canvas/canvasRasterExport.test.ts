@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { createRasterPlan } from './canvasRasterExport'
+import {
+  compositeRasterBackground,
+  createRasterPlan,
+  normalizeRasterBackground,
+} from './canvasRasterExport'
 
 describe('canvas raster export planning', () => {
   it('keeps the requested ratio when output stays under browser limits', () => {
@@ -50,5 +54,63 @@ describe('canvas raster export planning', () => {
     expect(plan.bounds).toEqual({ x: 10, y: 20, width: 100, height: 50 })
     expect(plan.outputWidth).toBe(100)
     expect(plan.outputHeight).toBe(50)
+  })
+
+  it('normalizes transparent raster backgrounds to no fill', () => {
+    expect(normalizeRasterBackground('transparent')).toBeNull()
+    expect(normalizeRasterBackground('')).toBeNull()
+    expect(normalizeRasterBackground(null)).toBeNull()
+    expect(normalizeRasterBackground('  #ffffff  ')).toBe('#ffffff')
+  })
+
+  it('composites an explicit raster background behind PNG pixels', async () => {
+    const calls: Array<[string, ...unknown[]]> = []
+    const context = {
+      fillStyle: '',
+      fillRect: (...args: unknown[]) => calls.push(['fillRect', ...args]),
+      drawImage: (...args: unknown[]) => calls.push(['drawImage', ...args]),
+    }
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => context,
+      toDataURL: () => 'data:image/png;base64,composited',
+    }
+    const image = { src: 'data:image/png;base64,raw' } as CanvasImageSource
+
+    const result = await compositeRasterBackground(
+      'data:image/png;base64,raw',
+      120,
+      80,
+      '#18181b',
+      {
+        createCanvas: () => canvas as unknown as HTMLCanvasElement,
+        loadImage: async () => image,
+      },
+    )
+
+    expect(result).toBe('data:image/png;base64,composited')
+    expect(canvas).toMatchObject({ width: 120, height: 80 })
+    expect(context.fillStyle).toBe('#18181b')
+    expect(calls).toEqual([
+      ['fillRect', 0, 0, 120, 80],
+      ['drawImage', image, 0, 0, 120, 80],
+    ])
+  })
+
+  it('leaves transparent raster exports untouched', async () => {
+    const result = await compositeRasterBackground(
+      'data:image/png;base64,raw',
+      120,
+      80,
+      'transparent',
+      {
+        createCanvas: () => {
+          throw new Error('transparent export should not create a canvas')
+        },
+      },
+    )
+
+    expect(result).toBe('data:image/png;base64,raw')
   })
 })

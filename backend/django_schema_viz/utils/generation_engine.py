@@ -25,6 +25,7 @@ from .generation_steps import GenerationStepValidationError
 from .generation_types import (  # noqa: F401 — re-exported for existing importers
     GeneratedEdge,
     GeneratedNode,
+    GenerationFilterImpact,
     GenerationResult,
     GenerationResultSerializer,
 )
@@ -365,7 +366,20 @@ class GenerationEngine:
 
         q_object = self._get_step_filter_q(child_step, related_model)
         if q_object is not None:
-            related_queryset = related_queryset.filter(q_object)
+            unfiltered_has_related = related_queryset.exists()
+            filtered_queryset = related_queryset.filter(q_object)
+            if unfiltered_has_related and not filtered_queryset.exists():
+                result.filter_impact.append(
+                    self._build_filter_impact(
+                        step=child_step,
+                        parent_record=parent_record,
+                        parent_model=parent_model,
+                        related_model=related_model,
+                        relationship_name=relationship_name,
+                    )
+                )
+                return
+            related_queryset = filtered_queryset
 
         for record in related_queryset:
             self._process_step(
@@ -376,6 +390,41 @@ class GenerationEngine:
                 group_ancestor_id=group_ancestor_id,
                 result=result,
             )
+
+    @staticmethod
+    def _build_filter_impact(
+        *,
+        step: dict,
+        parent_record: models.Model,
+        parent_model: type[models.Model],
+        related_model: type[models.Model],
+        relationship_name: str,
+    ) -> GenerationFilterImpact:
+        target_label = step.get("label")
+        if not isinstance(target_label, str) or not target_label.strip():
+            target_label = related_model._meta.verbose_name_plural.title()
+        target_model = related_model._meta.label
+        parent_model_ref = parent_model._meta.label
+        parent_display_name = str(parent_record)
+        message = (
+            f"Filter on {target_label} removed all {target_model} records "
+            f"related through {relationship_name} for {parent_display_name}."
+        )
+        return GenerationFilterImpact(
+            step_id=str(step.get("id") or ""),
+            parent_step_id=(
+                str(step.get("parentId") or step.get("parent_id"))
+                if step.get("parentId") or step.get("parent_id")
+                else None
+            ),
+            relationship=relationship_name,
+            parent_model=parent_model_ref,
+            parent_record_pk=str(parent_record.pk),
+            parent_display_name=parent_display_name,
+            target_model=target_model,
+            target_label=target_label,
+            message=message,
+        )
 
     def _get_step_filter_q(self, step: dict, model: type[models.Model]):
         cache_key = (str(step.get("id") or ""), model._meta.label_lower)

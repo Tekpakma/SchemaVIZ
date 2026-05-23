@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  CANVAS_BACKGROUND_FALLBACKS,
   CANVAS_EDGE_COLOR_VARIABLE,
   CANVAS_NODE_SURFACE_CSS_VALUE,
   CANVAS_NODE_SURFACE_VARIABLE,
@@ -22,6 +23,13 @@ describe('resolveCanvasThemeColor', () => {
   it('uses unified canvas theme tokens for domain colors', () => {
     expect(CANVAS_EDGE_COLOR_VARIABLE).toBe('--canvas-edge')
     expect(CANVAS_SELECTION_VARIABLE).toBe('--canvas-selection')
+  })
+
+  it('matches export backgrounds to the app theme backgrounds', () => {
+    expect(CANVAS_BACKGROUND_FALLBACKS).toEqual({
+      dark: '#09090b',
+      light: '#ffffff',
+    })
   })
 
   it('uses the exact computed CSS variable value for canvas fills', () => {

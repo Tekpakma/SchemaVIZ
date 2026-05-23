@@ -291,15 +291,32 @@ function BuilderPreviewAutoLayout({
     },
   })
 
+  // Debounce ELK layout runs for large graphs. Without this, every
+  // recipe edit (keystroke in title, inspector change) immediately
+  // serialises all nodes to the server function — at 150+ nodes the
+  // serialisation + network + ELK cost compounds and blocks the UI.
+  // Small graphs (<50 nodes) run immediately for snappy feedback.
+  const LAYOUT_DEBOUNCE_MS = nodeCount > 50 ? 250 : 0
+
   useEffect(() => {
     if (nodeCount === 0) return
     if (stageSize.width === 0 || stageSize.height === 0) return
 
-    const tabId = getActiveCanvasTabIdSnapshot()
-    const snapshot = getCanvasLayoutSnapshot(tabId)
+    const run = () => {
+      const tabId = getActiveCanvasTabIdSnapshot()
+      const snapshot = getCanvasLayoutSnapshot(tabId)
+      runAutoLayoutMutation({ layoutSignature, tabId, snapshot })
+    }
 
-    runAutoLayoutMutation({ layoutSignature, tabId, snapshot })
+    if (LAYOUT_DEBOUNCE_MS === 0) {
+      run()
+      return
+    }
+
+    const timer = setTimeout(run, LAYOUT_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
   }, [
+    LAYOUT_DEBOUNCE_MS,
     layoutKey,
     layoutSignature,
     nodeCount,
@@ -509,6 +526,7 @@ function BuilderPreviewCanvas({
   graph,
   autoLayout,
   exportOpen,
+  exportFilterNotice,
   interactionMode,
   layers,
   nodeCount,
@@ -526,6 +544,7 @@ function BuilderPreviewCanvas({
   layoutDirection: RecipeData['layoutDirection']
   autoLayout: boolean
   exportOpen?: boolean
+  exportFilterNotice?: string
   interactionMode: 'edit' | 'viewport' | 'static'
   layers: BuilderPreviewCanvasLayer[]
   nodeCount: number
@@ -605,6 +624,7 @@ function BuilderPreviewCanvas({
         }
         canvasOverlay={layerLabelsOverlay}
         exportOpen={exportOpen}
+        exportFilterNotice={exportFilterNotice}
         fitWorld={fitWorld}
         inlineEditor={
           <BuilderInlineEditor
@@ -635,6 +655,7 @@ export function BuilderPreview({
   autoLayout = true,
   className,
   exportOpen,
+  exportFilterNotice,
   generationResponse,
   interactionMode = 'viewport',
   onCapture,
@@ -651,6 +672,7 @@ export function BuilderPreview({
   autoLayout?: boolean
   className?: string
   exportOpen?: boolean
+  exportFilterNotice?: string
   generationResponse?: GenerationRunResponse
   interactionMode?: 'edit' | 'viewport' | 'static'
   /** Called once with a PNG data-URL after the canvas first renders. */
@@ -705,6 +727,7 @@ export function BuilderPreview({
         <BuilderPreviewCanvas
           autoLayout={autoLayout}
           exportOpen={exportOpen}
+          exportFilterNotice={exportFilterNotice}
           graph={graph}
           interactionMode={interactionMode}
           layoutAlgorithm={recipe.layoutAlgorithm}

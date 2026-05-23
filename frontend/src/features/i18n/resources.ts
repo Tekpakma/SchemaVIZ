@@ -15,6 +15,15 @@ export const resources = {
       preferences: {
         label: 'Einstellungen',
       },
+      filterImpact: {
+        checking: 'Filterauswirkung wird geprüft...',
+        exportNotice:
+          'Dieser Export berücksichtigt aktive Filter. Einige verwandte Datensätze werden ausgelassen.',
+        summary: 'Aktive Filter blenden einige verwandte Datensätze aus.',
+        summary_one: 'Aktive Filter blenden einige verwandte Datensätze aus.',
+        summary_other:
+          'Aktive Filter blenden einige verwandte Datensätze aus.',
+      },
       builder: {
         examples: {
           defaultBadge: 'Standard',
@@ -111,6 +120,11 @@ export const resources = {
           italic: 'Kursiv',
           label: 'Textformatierung',
           textColor: 'Textfarbe',
+          textSize: 'Textgröße',
+          textSize_large: 'Groß',
+          textSize_normal: 'Normal',
+          textSize_small: 'Klein',
+          textSize_veryLarge: 'Sehr groß',
           underline: 'Unterstreichen',
         },
         layerManager: {
@@ -204,6 +218,8 @@ export const resources = {
           shareSlug: 'Link-Name',
           shareSlugPlaceholder: 'cloud-provider-overview',
           slugTaken: 'Dieser Link-Name ist bereits vergeben.',
+          nameTaken:
+            'Es existiert bereits ein Template mit dem Namen "{{name}}" in diesem Sichtbarkeitsbereich.',
           templateLabel: 'Template',
           title: 'Template veröffentlichen',
           visibilityGlobal: 'Für alle sichtbar',
@@ -429,6 +445,14 @@ export const resources = {
       preferences: {
         label: 'Preferences',
       },
+      filterImpact: {
+        checking: 'Checking filter impact...',
+        exportNotice:
+          'This export reflects active filters; some related records are omitted.',
+        summary: 'Active filters hide some related records.',
+        summary_one: 'Active filters hide some related records.',
+        summary_other: 'Active filters hide some related records.',
+      },
       builder: {
         examples: {
           defaultBadge: 'Default',
@@ -522,6 +546,11 @@ export const resources = {
           italic: 'Italic',
           label: 'Text formatting',
           textColor: 'Text color',
+          textSize: 'Text size',
+          textSize_large: 'Large',
+          textSize_normal: 'Normal',
+          textSize_small: 'Small',
+          textSize_veryLarge: 'Very large',
           underline: 'Underline',
         },
         layerManager: {
@@ -613,6 +642,8 @@ export const resources = {
           shareSlug: 'Link name',
           shareSlugPlaceholder: 'cloud-provider-overview',
           slugTaken: 'This link name is already taken.',
+          nameTaken:
+            'A template with the name "{{name}}" already exists in this visibility scope.',
           templateLabel: 'Template',
           title: 'Publish template',
           visibilityGlobal: 'Visible to everyone',

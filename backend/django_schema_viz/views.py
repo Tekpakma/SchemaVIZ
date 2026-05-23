@@ -110,6 +110,7 @@ from .utils.style_template_compatibility import (
 )
 from django.http import HttpResponse
 from .utils.generation_engine import GenerationEngine, GenerationResultSerializer
+from .utils.generation_types import GenerationFilterImpactSerializer
 from .utils.generation_steps import GenerationStepValidationError
 from .template_uniqueness import (
     build_template_uniqueness_errors,
@@ -186,6 +187,10 @@ def build_generation_run_response(
         serialize_nested=serialize_nested,
     )
     payload["mode"] = mode
+    payload["filter_impact"] = GenerationFilterImpactSerializer(
+        generation_result.filter_impact,
+        many=True,
+    ).data
     payload["source_version"] = {
         "kind": "inline" if template is None else "template",
         "selection": version_label,
@@ -2546,7 +2551,7 @@ class DrawingExportView(SchemaVizViewMixin, APIView):
                 name="background",
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
-                description="SVG background: hex color (#rrggbb) or 'transparent'. Defaults to #ffffff.",
+                description="Export background: hex color (#rrggbb) or 'transparent'. Defaults to #ffffff.",
                 required=False,
                 default="#ffffff",
             ),
@@ -2582,6 +2587,18 @@ class DrawingExportView(SchemaVizViewMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Background color (optional, defaults to white).
+        import re as _re
+
+        background = request.query_params.get("background", "#ffffff")
+        if background != "transparent" and not _re.match(
+            r"^#[0-9a-fA-F]{6}$", background
+        ):
+            return Response(
+                {"error": "background must be 'transparent' or a 6-digit hex color."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Sanitize filename
         safe_title = "".join(
             c for c in (drawing.title or "drawing") if c.isalnum() or c in " -_"
@@ -2595,6 +2612,7 @@ class DrawingExportView(SchemaVizViewMixin, APIView):
             xml = export_drawing_to_drawio(
                 react_flow_state=react_flow_state,
                 lexical_state=lexical_state,
+                background=background,
             )
             filename = f"{file_base}.drawio"
             response = HttpResponse(xml, content_type="application/xml")
@@ -2675,18 +2693,6 @@ class DrawingExportView(SchemaVizViewMixin, APIView):
             scale_factor = 1.0
         scale_factor = max(0.25, min(4.0, scale_factor))
 
-        # Background color (optional, defaults to white).
-        import re as _re
-
-        background = request.query_params.get("background", "#ffffff")
-        if background != "transparent" and not _re.match(
-            r"^#[0-9a-fA-F]{6}$", background
-        ):
-            return Response(
-                {"error": "background must be 'transparent' or a 6-digit hex color."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         svg = export_drawing_to_svg(
             react_flow_state=react_flow_state,
             lexical_state=lexical_state,
@@ -2755,6 +2761,7 @@ class StatelessExportView(SchemaVizViewMixin, APIView):
             xml = export_drawing_to_drawio(
                 react_flow_state=react_flow_state,
                 lexical_state=lexical_state,
+                background=background,
             )
             response = HttpResponse(xml, content_type="application/xml")
             response["Content-Disposition"] = (

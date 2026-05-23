@@ -33,6 +33,10 @@ type SerializedReactFlowNode = {
     x: number
     y: number
   }
+  positionAbsolute?: {
+    x: number
+    y: number
+  }
   width: number
   height: number
   parentId?: string
@@ -165,19 +169,30 @@ function resolveExportPalette(
 function serializeCanvasNode(
   node: CanvasNode,
   palette: CanvasExportPalette,
+  parentNode?: CanvasNode,
 ): {
   lexicalState: Record<string, unknown> | null
   node: SerializedReactFlowNode
 } {
   const lexicalState = parseLexicalState(node.lexicalJson)
   const label = getNodeLabel(node)
+  const position = parentNode
+    ? {
+        x: node.x - parentNode.x,
+        y: node.y - parentNode.y,
+      }
+    : {
+        x: node.x,
+        y: node.y,
+      }
 
   return {
     lexicalState,
     node: {
       id: node.id,
       type: node.shape,
-      position: {
+      position,
+      positionAbsolute: {
         x: node.x,
         y: node.y,
       },
@@ -286,7 +301,10 @@ export function createCanvasReactFlowState(
         return []
       }
 
-      return [serializeCanvasNode(node, palette).node]
+      const parentNode = node.parentGroupId
+        ? snapshot.nodesById[node.parentGroupId]
+        : undefined
+      return [serializeCanvasNode(node, palette, parentNode).node]
     }),
   )
 
@@ -327,7 +345,10 @@ export function createStatelessExportRequestFromCanvas(
         return []
       }
 
-      return [serializeCanvasNode(node, palette)]
+      const parentNode = node.parentGroupId
+        ? snapshot.nodesById[node.parentGroupId]
+        : undefined
+      return [serializeCanvasNode(node, palette, parentNode)]
     }),
   )
 

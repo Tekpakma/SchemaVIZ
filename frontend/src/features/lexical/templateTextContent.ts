@@ -273,11 +273,25 @@ function renderTemplateNode(
 }
 
 export function createTemplateTextContent(label: string) {
-  const next = JSON.parse(
-    JSON.stringify(DEFAULT_TEXT_CONTENT),
-  ) as typeof DEFAULT_TEXT_CONTENT
-  next.root.children[0]!.children[0]!.text = label || 'Node'
-  return next
+  // Structurally clone only the parts that differ — the text node's
+  // `text` field. The old JSON.parse(JSON.stringify(...)) deep clone
+  // is ~0.1 ms per call; at 152 nodes that's 15 ms of pure waste on
+  // every recipe edit. This version allocates the same shape but
+  // shares nothing mutable with DEFAULT_TEXT_CONTENT.
+  const textNode = {
+    ...DEFAULT_TEXT_CONTENT.root.children[0]!.children[0]!,
+    text: label || 'Node',
+  }
+  const paragraph = {
+    ...DEFAULT_TEXT_CONTENT.root.children[0]!,
+    children: [textNode],
+  }
+  return {
+    root: {
+      ...DEFAULT_TEXT_CONTENT.root,
+      children: [paragraph],
+    },
+  }
 }
 
 export function stringifyTemplateTextContent(textContent: unknown) {

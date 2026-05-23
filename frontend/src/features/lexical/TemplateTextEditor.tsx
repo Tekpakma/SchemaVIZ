@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useRef } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
@@ -6,8 +6,15 @@ import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from 'lexical'
+import {
+  $getSelection,
+  $isRangeSelection,
+  FORMAT_TEXT_COMMAND,
+  SELECTION_CHANGE_COMMAND,
+  COMMAND_PRIORITY_LOW,
+} from 'lexical'
 import type { EditorState, TextFormatType } from 'lexical'
+import { mergeRegister } from '@lexical/utils'
 import { BoldIcon, BracesIcon, ItalicIcon, UnderlineIcon } from 'lucide-react'
 
 import { DataReferenceAutocomplete } from './dataReference/DataReferenceAutocomplete'
@@ -19,6 +26,12 @@ import { LexicalOverlayRuntimeProvider } from './LexicalOverlayRuntimeContext'
 import type { LexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
 import { renderTagCss, renderTagEditorStyle } from './exportRenderTagHtml'
 import { stringifyTemplateTextContent } from './templateTextContent'
+import { TextSizeDropdown } from './TextSizeDropdown'
+import {
+  applyTextSize,
+  readSelectionTextSize,
+  type TextSizePreset,
+} from './textSizePresets'
 
 type TemplateTextEditorProps = {
   dataScope: SchemaModelRef
@@ -91,6 +104,36 @@ function TemplateEditorToolbar({
   labels: TemplateTextEditorLabels
 }) {
   const [editor] = useLexicalComposerContext()
+  const [textSize, setTextSize] = useState<TextSizePreset>('normal')
+
+  const updateTextSize = useCallback(
+    (next: TextSizePreset) => {
+      setTextSize((prev) => (prev === next ? prev : next))
+    },
+    [],
+  )
+
+  useEffect(() => {
+    editor.getEditorState().read(() => {
+      updateTextSize(readSelectionTextSize())
+    })
+
+    return mergeRegister(
+      editor.registerUpdateListener(({ editorState }) => {
+        editorState.read(() => {
+          updateTextSize(readSelectionTextSize())
+        })
+      }),
+      editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        () => {
+          updateTextSize(readSelectionTextSize())
+          return false
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    )
+  }, [editor, updateTextSize])
 
   function formatText(format: TextFormatType) {
     editor.focus(() => {
@@ -141,6 +184,12 @@ function TemplateEditorToolbar({
       >
         <UnderlineIcon className="size-3.5" aria-hidden="true" />
       </button>
+      <TextSizeDropdown
+        activePreset={textSize}
+        controlClass={controlClass}
+        iconClass="size-3.5"
+        onSelect={(preset) => applyTextSize(editor, preset)}
+      />
       <span className="mx-1 h-4 w-px bg-border" />
       <button
         type="button"

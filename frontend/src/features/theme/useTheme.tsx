@@ -19,6 +19,7 @@ import { setThemePreference } from './themeServerFns'
 
 type ThemeContextValue = {
   resolvedTheme: ResolvedTheme
+  setExportThemeOverride: (override: ResolvedTheme | null) => void
   setTheme: (theme: ThemeMode) => void
   theme: ThemeMode
 }
@@ -55,12 +56,15 @@ export function ThemeProvider({
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
     getInitialResolvedTheme(parseThemeMode(initialTheme)),
   )
+  const [exportOverride, setExportOverride] = useState<ResolvedTheme | null>(
+    null,
+  )
+  const effectiveTheme = exportOverride ?? resolvedTheme
 
   useEffect(() => {
     const updateResolvedTheme = () => {
       const nextResolvedTheme = resolveThemeMode(theme, getSystemTheme() === 'dark')
       setResolvedTheme(nextResolvedTheme)
-      applyResolvedTheme(nextResolvedTheme)
     }
 
     updateResolvedTheme()
@@ -74,6 +78,12 @@ export function ThemeProvider({
       mediaQuery.removeEventListener('change', updateResolvedTheme)
     }
   }, [theme])
+
+  // Apply the effective theme (user theme or temporary export override) to the
+  // DOM so CSS variables and the `dark` class stay in sync with what React sees.
+  useEffect(() => {
+    applyResolvedTheme(effectiveTheme)
+  }, [effectiveTheme])
 
   const setTheme = useCallback(
     (nextTheme: ThemeMode) => {
@@ -94,13 +104,21 @@ export function ThemeProvider({
     [persistTheme],
   )
 
+  const setExportThemeOverride = useCallback(
+    (override: ResolvedTheme | null) => {
+      setExportOverride(override)
+    },
+    [],
+  )
+
   const value = useMemo(
     () => ({
-      resolvedTheme,
+      resolvedTheme: effectiveTheme,
+      setExportThemeOverride,
       setTheme,
       theme,
     }),
-    [resolvedTheme, setTheme, theme],
+    [effectiveTheme, setExportThemeOverride, setTheme, theme],
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

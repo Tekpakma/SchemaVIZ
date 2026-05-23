@@ -3,6 +3,11 @@ import type { ResolvedTheme } from '@/features/theme/constants'
 export const CANVAS_NODE_SURFACE_VARIABLE = '--canvas-node-surface'
 export const CANVAS_NODE_SURFACE_CSS_VALUE = `var(${CANVAS_NODE_SURFACE_VARIABLE})`
 
+export const CANVAS_BACKGROUND_FALLBACKS: Record<ResolvedTheme, string> = {
+  dark: '#09090b',
+  light: '#ffffff',
+}
+
 export const CANVAS_SURFACE_FALLBACKS: Record<ResolvedTheme, string> = {
   dark: 'rgba(24, 24, 27, 0.92)',
   light: 'rgba(255, 255, 255, 0.9)',

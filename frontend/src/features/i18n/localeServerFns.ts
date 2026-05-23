@@ -1,7 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import {
   getCookie,
-  getRequestHeader,
   setCookie,
   setResponseHeaders,
 } from '@tanstack/react-start/server'
@@ -19,12 +18,11 @@ export const getLocalePreference = createServerFn({ method: 'GET' }).handler(
     setResponseHeaders(
       new Headers({
         'cache-control': 'private, no-store',
-        vary: 'Cookie, Accept-Language',
+        vary: 'Cookie',
       }),
     )
 
     return resolveLocalePreference({
-      acceptLanguage: getRequestHeader('accept-language'),
       cookieLocale: getCookie(LOCALE_COOKIE_NAME),
     })
   },

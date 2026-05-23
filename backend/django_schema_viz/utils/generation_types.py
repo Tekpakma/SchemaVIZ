@@ -39,11 +39,27 @@ class GeneratedEdge:
 
 
 @dataclass
+class GenerationFilterImpact:
+    """A filtered traversal branch that had related records before filtering."""
+
+    step_id: str
+    parent_step_id: str | None
+    relationship: str
+    parent_model: str
+    parent_record_pk: str
+    parent_display_name: str
+    target_model: str
+    target_label: str | None
+    message: str
+
+
+@dataclass
 class GenerationResult:
     """Complete output of a template execution."""
 
     nodes: list[GeneratedNode] = field(default_factory=list)
     edges: list[GeneratedEdge] = field(default_factory=list)
+    filter_impact: list[GenerationFilterImpact] = field(default_factory=list)
 
 
 class GenerationResultSerializer(DataclassSerializer):
@@ -51,3 +67,11 @@ class GenerationResultSerializer(DataclassSerializer):
 
     class Meta:
         dataclass = GenerationResult
+        fields = ("nodes", "edges")
+
+
+class GenerationFilterImpactSerializer(DataclassSerializer):
+    """Filter diagnostics for a generation run."""
+
+    class Meta:
+        dataclass = GenerationFilterImpact

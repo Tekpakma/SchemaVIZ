@@ -31,7 +31,10 @@ from .template_uniqueness import (
     build_template_uniqueness_errors,
     normalize_export_name,
 )
-from .utils.generation_types import GenerationResultSerializer
+from .utils.generation_types import (
+    GenerationFilterImpactSerializer,
+    GenerationResultSerializer,
+)
 from .utils.generation_steps import (
     GenerationStepValidationError,
     validate_generation_root_model,
@@ -1486,6 +1489,7 @@ class GenerationRunSourceVersionSerializer(serializers.Serializer):
 class GenerationRunResponseSerializer(serializers.Serializer):
     mode = serializers.ChoiceField(choices=GENERATION_RUN_MODE_CHOICES)
     result = GenerationResultSerializer()
+    filter_impact = GenerationFilterImpactSerializer(many=True, required=False)
     source_version = GenerationRunSourceVersionSerializer()
     style_templates = StyleTemplateSerializer(many=True)
     group_templates = GroupTemplateSerializer(many=True)
@@ -1704,7 +1708,7 @@ class StatelessExportSerializer(serializers.Serializer):
         required=False,
         default="#ffffff",
         max_length=20,
-        help_text="SVG background color: hex (#rrggbb) or 'transparent'.",
+        help_text="Export background color: hex (#rrggbb) or 'transparent'.",
     )
 
     _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")

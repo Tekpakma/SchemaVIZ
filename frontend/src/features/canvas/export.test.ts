@@ -160,6 +160,52 @@ describe('canvas export serializer', () => {
     })
   })
 
+  it('serializes grouped child positions relative to the group for draw.io', () => {
+    const groupedSnapshot = {
+      ...snapshot,
+      nodesById: {
+        'group-1': snapshot.nodesById['group-1'],
+        'box-2': {
+          id: 'box-2',
+          kind: 'editable',
+          shape: 'box',
+          parentGroupId: 'group-1',
+          layoutMode: 'manual',
+          x: 460,
+          y: 150,
+          width: 180,
+          height: 90,
+          lexicalJson: '',
+          html: '<div>Grouped child</div>',
+          contentHeight: 32,
+          version: 1,
+          appLabel: 'inventory',
+          modelName: 'product',
+        },
+      },
+      nodeOrder: ['group-1', 'box-2'],
+      edgesById: {},
+      edgeOrder: [],
+    } satisfies CanvasExportSnapshot
+
+    const request = createStatelessExportRequestFromCanvas(groupedSnapshot, {
+      resolvedTheme: 'light',
+      exportFormat: 'drawio',
+    })
+
+    expect(request.reactFlowState.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'box-2',
+          parentId: 'group-1',
+          parentNode: 'group-1',
+          position: { x: 60, y: 70 },
+          positionAbsolute: { x: 460, y: 150 },
+        }),
+      ]),
+    )
+  })
+
   it('supports runtime color and request option overrides', () => {
     const request = createStatelessExportRequestFromCanvas(snapshot, {
       resolvedTheme: 'dark',
