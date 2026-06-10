@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useEffectEvent, useReducer } from 'react'
 import {
   CheckIcon,
   ClipboardCopyIcon,
@@ -9,6 +9,7 @@ import {
   ShareIcon,
 } from 'lucide-react'
 import type Konva from 'konva'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -30,11 +31,12 @@ import {
   renderStageRasterDataUrl,
 } from '../canvasRasterExport'
 import type { CanvasRasterPlan } from '../canvasRasterExport'
-import { CANVAS_BACKGROUND_FALLBACKS } from '../themeColors'
+import { resolveCanvasExportBackground } from '../themeColors'
 import type { ResolvedTheme } from '@/features/theme/constants'
 
 type ExportFormat = 'png' | 'svg' | 'drawio'
 type ExportAppearance = ResolvedTheme
+type ExportDoneState = ExportFormat | 'clip' | 'drawio-open' | null
 
 type CanvasExportDialogProps = {
   filterNotice?: string
@@ -73,33 +75,125 @@ async function deflateToBase64(input: string): Promise<string> {
   return btoa(binary)
 }
 
-const FORMAT_META: Record<
-  ExportFormat,
-  { label: string; hint: string; ext: string }
-> = {
-  png: { label: 'PNG', hint: 'Bild fuer Slides, E-Mail, Slack.', ext: '.png' },
-  svg: {
-    label: 'SVG',
-    hint: 'Vektor — verlustfrei skalierbar.',
-    ext: '.svg',
-  },
-  drawio: {
-    label: 'draw.io',
-    hint: 'Editierbares Diagramm (mxfile).',
-    ext: '.drawio',
-  },
+const FORMAT_META: Record<ExportFormat, { label: string; ext: string }> = {
+  png: { label: 'PNG', ext: '.png' },
+  svg: { label: 'SVG', ext: '.svg' },
+  drawio: { label: 'draw.io', ext: '.drawio' },
 }
 
-const APPEARANCE_OPTIONS: Array<{ id: ExportAppearance; label: string }> = [
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
+const APPEARANCE_OPTIONS: Array<{ id: ExportAppearance }> = [
+  { id: 'light' },
+  { id: 'dark' },
 ]
 
 const SCALE_OPTIONS = [
-  { value: 1, label: '1x', hint: 'Standard' },
-  { value: 2, label: '2x', hint: 'Retina' },
-  { value: 3, label: '3x', hint: 'Print' },
+  { value: 1, label: '1x', hintKey: 'standard' },
+  { value: 2, label: '2x', hintKey: 'retina' },
+  { value: 3, label: '3x', hintKey: 'print' },
 ]
+
+const FORMAT_HINT_KEYS: Record<ExportFormat, string> = {
+  png: 'canvas.export.formats.png.hint',
+  svg: 'canvas.export.formats.svg.hint',
+  drawio: 'canvas.export.formats.drawio.hint',
+}
+
+const FORMAT_META_KEYS: Record<ExportFormat, string> = {
+  png: 'canvas.export.formats.png.meta',
+  svg: 'canvas.export.formats.svg.meta',
+  drawio: 'canvas.export.formats.drawio.meta',
+}
+
+const FORMAT_TIP_KEYS: Record<ExportFormat, string> = {
+  png: 'canvas.export.tips.png',
+  svg: 'canvas.export.tips.svg',
+  drawio: 'canvas.export.tips.drawio',
+}
+
+const SCALE_HINT_KEYS: Record<number, string> = {
+  1: 'canvas.export.scale.standard',
+  2: 'canvas.export.scale.retina',
+  3: 'canvas.export.scale.print',
+}
+
+type ExportDialogState = {
+  busy: boolean
+  done: ExportDoneState
+  exportAppearance: ExportAppearance
+  format: ExportFormat
+  previewUrl: string | null
+  rasterPlan: CanvasRasterPlan | null
+  scale: number
+  transparentBackground: boolean
+}
+
+type ExportDialogAction =
+  | { type: 'close' }
+  | { type: 'done-cleared' }
+  | { type: 'format-changed'; format: ExportFormat }
+  | {
+      type: 'preview-loaded'
+      preview: { dataUrl: string; downloadPlan: CanvasRasterPlan } | null
+    }
+  | { type: 'scale-changed'; scale: number }
+  | { type: 'started' }
+  | { type: 'stopped' }
+  | { type: 'succeeded'; done: Exclude<ExportDoneState, null> }
+  | { type: 'appearance-changed'; appearance: ExportAppearance }
+  | { type: 'transparent-background-changed'; transparent: boolean }
+
+function createInitialExportDialogState(
+  resolvedTheme: ExportAppearance,
+): ExportDialogState {
+  return {
+    busy: false,
+    done: null,
+    exportAppearance: resolvedTheme,
+    format: 'png',
+    previewUrl: null,
+    rasterPlan: null,
+    scale: 2,
+    transparentBackground: false,
+  }
+}
+
+function exportDialogReducer(
+  state: ExportDialogState,
+  action: ExportDialogAction,
+): ExportDialogState {
+  switch (action.type) {
+    case 'appearance-changed':
+      return { ...state, exportAppearance: action.appearance }
+    case 'close':
+      return {
+        ...state,
+        busy: false,
+        done: null,
+        previewUrl: null,
+        rasterPlan: null,
+      }
+    case 'done-cleared':
+      return { ...state, done: null }
+    case 'format-changed':
+      return { ...state, format: action.format }
+    case 'preview-loaded':
+      return {
+        ...state,
+        previewUrl: action.preview?.dataUrl ?? null,
+        rasterPlan: action.preview?.downloadPlan ?? null,
+      }
+    case 'scale-changed':
+      return { ...state, scale: action.scale }
+    case 'started':
+      return { ...state, busy: true }
+    case 'stopped':
+      return { ...state, busy: false }
+    case 'succeeded':
+      return { ...state, busy: false, done: action.done }
+    case 'transparent-background-changed':
+      return { ...state, transparentBackground: action.transparent }
+  }
+}
 
 function FormatIcon({ format }: { format: ExportFormat }) {
   if (format === 'png') {
@@ -205,6 +299,359 @@ function FormatIcon({ format }: { format: ExportFormat }) {
   )
 }
 
+function ExportPreviewPane({
+  exportAppearance,
+  exportBackground,
+  format,
+  previewUrl,
+  rasterPlan,
+  transparentBackground,
+}: {
+  exportAppearance: ExportAppearance
+  exportBackground: string
+  format: ExportFormat
+  previewUrl: string | null
+  rasterPlan: CanvasRasterPlan | null
+  transparentBackground: boolean
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex min-h-0 flex-col border-r">
+      <div className="flex items-center gap-2.5 border-b bg-muted/30 px-4 py-2.5">
+        <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
+          {t('canvas.export.preview')}
+        </span>
+        {rasterPlan && format === 'png' && (
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+            {rasterPlan.outputWidth} x {rasterPlan.outputHeight} px
+            {rasterPlan.clamped ? ' max' : ''}
+          </span>
+        )}
+        {format !== 'png' && (
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+            {t(FORMAT_META_KEYS[format])}
+          </span>
+        )}
+      </div>
+      <div
+        className={cn(
+          'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-5',
+          transparentBackground &&
+            'bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0]',
+        )}
+        style={
+          transparentBackground
+            ? {
+                backgroundImage: [
+                  'linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%)',
+                  'linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%)',
+                  'linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%)',
+                  'linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)',
+                ].join(','),
+              }
+            : { backgroundColor: exportBackground }
+        }
+      >
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt={t('canvas.export.previewAlt')}
+            className={cn(
+              'max-h-full max-w-full object-contain',
+              exportAppearance === 'light' &&
+                'rounded-md ring-1 ring-border/40',
+              exportAppearance === 'dark' && 'rounded-md ring-1 ring-white/10',
+            )}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <ImageIcon className="size-8 opacity-40" />
+            <span className="text-sm">{t('canvas.export.noPreview')}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ExportFormatSection({
+  format,
+  onFormatChange,
+}: {
+  format: ExportFormat
+  onFormatChange: (format: ExportFormat) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
+        {t('canvas.export.format')}
+      </span>
+      <div className="flex flex-col gap-1.5">
+        {(
+          Object.entries(FORMAT_META) as Array<
+            [ExportFormat, typeof FORMAT_META.png]
+          >
+        ).map(([key, meta]) => (
+          <button
+            key={key}
+            type="button"
+            className={cn(
+              'grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+              format === key
+                ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
+                : 'border-border hover:border-muted-foreground/50',
+            )}
+            onClick={() => onFormatChange(key)}
+          >
+            <span
+              className={cn(
+                'flex size-8 items-center justify-center rounded-md',
+                format === key
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-muted text-foreground',
+              )}
+            >
+              <FormatIcon format={key} />
+            </span>
+            <span className="flex flex-col gap-px">
+              <b className="text-[13px] font-semibold">{meta.label}</b>
+              <em className="text-[11.5px] not-italic text-muted-foreground">
+                {t(FORMAT_HINT_KEYS[key])}
+              </em>
+            </span>
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+              {meta.ext}
+            </code>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ExportAppearanceSection({
+  exportAppearance,
+  onAppearanceChange,
+  onTransparentBackgroundChange,
+  transparentBackground,
+}: {
+  exportAppearance: ExportAppearance
+  onAppearanceChange: (appearance: ExportAppearance) => void
+  onTransparentBackgroundChange: (transparent: boolean) => void
+  transparentBackground: boolean
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
+        {t('canvas.export.appearance')}
+      </span>
+      <div className="grid grid-cols-2 gap-1.5">
+        {APPEARANCE_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            className={cn(
+              'flex items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[12px] transition-colors',
+              exportAppearance === opt.id
+                ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
+                : 'border-border hover:border-muted-foreground/50',
+            )}
+            onClick={() => onAppearanceChange(opt.id)}
+          >
+            <span
+              className={cn(
+                'size-3 rounded-full border',
+                opt.id === 'light' && 'border-border bg-white',
+                opt.id === 'dark' && 'border-zinc-800 bg-[#09090b]',
+              )}
+            />
+            <span>{t(`theme.${opt.id}`)}</span>
+          </button>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-[12px] text-foreground">
+        <input
+          aria-label={t('canvas.export.transparentBackground')}
+          type="checkbox"
+          className="size-3.5 accent-foreground"
+          checked={transparentBackground}
+          onChange={(event) =>
+            onTransparentBackgroundChange(event.currentTarget.checked)
+          }
+        />
+        <span>{t('canvas.export.transparentBackground')}</span>
+      </label>
+    </div>
+  )
+}
+
+function ExportScaleSection({
+  onScaleChange,
+  scale,
+}: {
+  onScaleChange: (scale: number) => void
+  scale: number
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
+        {t('canvas.export.resolution')}
+      </span>
+      <div className="grid grid-cols-3 gap-1.5">
+        {SCALE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            className={cn(
+              'flex flex-col items-center gap-px rounded-lg border px-2 py-2 transition-colors',
+              scale === opt.value
+                ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
+                : 'border-border hover:border-muted-foreground/50',
+            )}
+            onClick={() => onScaleChange(opt.value)}
+          >
+            <b className="text-[14px] font-semibold">{opt.label}</b>
+            <em className="text-[10.5px] not-italic text-muted-foreground">
+              {t(SCALE_HINT_KEYS[opt.value])}
+            </em>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ExportActions({
+  busy,
+  done,
+  filterNotice,
+  format,
+  onCopyImage,
+  onDownload,
+  onOpenDrawio,
+}: {
+  busy: boolean
+  done: ExportDoneState
+  filterNotice?: string
+  format: ExportFormat
+  onCopyImage: () => Promise<void>
+  onDownload: () => void
+  onOpenDrawio: () => Promise<void>
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="mt-auto flex flex-col gap-2">
+      {filterNotice ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
+          <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
+          <span>{filterNotice}</span>
+        </div>
+      ) : null}
+
+      <Button className="w-full gap-2" disabled={busy} onClick={onDownload}>
+        {done === format ? (
+          <>
+            <CheckIcon className="size-4" />
+            {t('canvas.export.saved')}
+          </>
+        ) : (
+          <>
+            <DownloadIcon className="size-4" />
+            {busy
+              ? t('canvas.export.rendering')
+              : t('canvas.export.downloadAs', {
+                  format: FORMAT_META[format].label,
+                })}
+          </>
+        )}
+      </Button>
+
+      {format === 'png' && (
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          disabled={busy}
+          onClick={() => void onCopyImage()}
+        >
+          {done === 'clip' ? (
+            <>
+              <CheckIcon className="size-4" />
+              {t('canvas.export.copied')}
+            </>
+          ) : (
+            <>
+              <ClipboardCopyIcon className="size-4" />
+              {t('canvas.export.copyImage')}
+            </>
+          )}
+        </Button>
+      )}
+      {format === 'drawio' && (
+        <Button
+          variant="outline"
+          className="w-full gap-2"
+          disabled={busy}
+          onClick={() => void onOpenDrawio()}
+        >
+          {done === 'drawio-open' ? (
+            <>
+              <CheckIcon className="size-4" />
+              {t('canvas.export.opened')}
+            </>
+          ) : (
+            <>
+              <ExternalLinkIcon className="size-4" />
+              {busy
+                ? t('canvas.export.loading')
+                : t('canvas.export.openDrawio')}
+            </>
+          )}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function ExportTip({ format, scale }: { format: ExportFormat; scale: number }) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="flex items-start gap-1.5 rounded-lg bg-muted/50 px-2.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+      <ShareIcon className="mt-0.5 size-3.5 shrink-0 opacity-60" />
+      {t(FORMAT_TIP_KEYS[format], {
+        scale,
+      })}
+    </div>
+  )
+}
+
+function ExportDialogHeader() {
+  const { t } = useTranslation()
+
+  return (
+    <DialogHeader className="border-b px-5 py-3.5">
+      <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
+            {t('canvas.export.label')}
+          </span>
+          <DialogTitle className="text-[15px]">
+            {t('canvas.export.title')}
+          </DialogTitle>
+        </div>
+      </div>
+    </DialogHeader>
+  )
+}
+
 export function CanvasExportDialog({
   filterNotice,
   open,
@@ -213,30 +660,39 @@ export function CanvasExportDialog({
 }: CanvasExportDialogProps) {
   const { resolvedTheme, setExportThemeOverride } = useTheme()
   const { getCanvasExportSnapshot } = useCanvasSnapshotGetters()
-  const [format, setFormat] = useState<ExportFormat>('png')
-  const [exportAppearance, setExportAppearance] =
-    useState<ExportAppearance>(() => resolvedTheme)
-  const [transparentBackground, setTransparentBackground] = useState(false)
+  const [state, dispatch] = useReducer(
+    exportDialogReducer,
+    resolvedTheme,
+    createInitialExportDialogState,
+  )
+  const {
+    busy,
+    done,
+    exportAppearance,
+    format,
+    previewUrl,
+    rasterPlan,
+    scale,
+    transparentBackground,
+  } = state
 
   // Temporarily override the app theme so the Konva stage re-renders with
   // the chosen export appearance. Reverts on dialog close.
   useEffect(() => {
-    if (open) {
-      setExportThemeOverride(exportAppearance)
+    if (!open) {
+      setExportThemeOverride(null)
+      return
     }
+    setExportThemeOverride(exportAppearance)
     return () => setExportThemeOverride(null)
   }, [open, exportAppearance, setExportThemeOverride])
-  const [scale, setScale] = useState(2)
-  const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [rasterPlan, setRasterPlan] = useState<CanvasRasterPlan | null>(null)
 
-  const exportBackground = transparentBackground
-    ? 'transparent'
-    : CANVAS_BACKGROUND_FALLBACKS[exportAppearance]
+  const exportBackground = resolveCanvasExportBackground({
+    appearance: exportAppearance,
+    transparent: transparentBackground,
+  })
 
-  const createDownloadRasterPlan = useCallback(() => {
+  const createDownloadRasterPlan = () => {
     const stage = stageRef.current
     if (!stage) return null
 
@@ -244,7 +700,7 @@ export function CanvasExportDialog({
     if (!bounds) return null
 
     return createRasterPlan(bounds, scale, CANVAS_DOWNLOAD_RASTER_LIMITS)
-  }, [scale, stageRef])
+  }
 
   const generatePreview = useEffectEvent(async () => {
     const stage = stageRef.current
@@ -283,8 +739,7 @@ export function CanvasExportDialog({
       const timer = setTimeout(() => {
         void generatePreview().then((preview) => {
           if (cancelled) return
-          setPreviewUrl(preview?.dataUrl ?? null)
-          setRasterPlan(preview?.downloadPlan ?? null)
+          dispatch({ type: 'preview-loaded', preview })
         })
       }, 50)
       return () => {
@@ -292,20 +747,20 @@ export function CanvasExportDialog({
         clearTimeout(timer)
       }
     }
-    setPreviewUrl(null)
-    setRasterPlan(null)
-    setDone(null)
-    setBusy(false)
+    dispatch({ type: 'close' })
   }, [exportAppearance, exportBackground, open, scale, transparentBackground])
 
-  const handleExportPng = useCallback(async () => {
+  const handleExportPng = async () => {
     const stage = stageRef.current
     if (!stage) return
 
-    setBusy(true)
+    dispatch({ type: 'started' })
     try {
       const plan = createDownloadRasterPlan()
-      if (!plan) return
+      if (!plan) {
+        dispatch({ type: 'stopped' })
+        return
+      }
 
       const dataUrl = await renderStageRasterDataUrl(stage, plan, {
         background: exportBackground,
@@ -315,70 +770,70 @@ export function CanvasExportDialog({
       const blob = await response.blob()
       const scaleLabel = plan.clamped ? 'bounded' : `${scale}x`
       downloadBlob(blob, `canvas-export@${scaleLabel}.png`)
-      setDone('png')
-      setTimeout(() => setDone(null), 1600)
+      dispatch({ type: 'succeeded', done: 'png' })
+      setTimeout(() => dispatch({ type: 'done-cleared' }), 1600)
     } catch (e) {
       console.error('PNG export failed:', e)
-    } finally {
-      setBusy(false)
+      dispatch({ type: 'stopped' })
     }
-  }, [createDownloadRasterPlan, exportBackground, scale, stageRef])
+  }
 
-  const handleExportServer = useCallback(
-    async (exportFormat: 'svg' | 'drawio') => {
-      setBusy(true)
-      try {
-        const snapshot = getCanvasExportSnapshot()
-        const request = createStatelessExportRequestFromCanvas(snapshot, {
-          resolvedTheme: exportAppearance,
-          exportFormat,
-          fileName: 'canvas-export',
-          background: exportBackground,
-        })
+  const handleExportServer = async (exportFormat: 'svg' | 'drawio') => {
+    dispatch({ type: 'started' })
+    try {
+      const snapshot = getCanvasExportSnapshot()
+      const request = createStatelessExportRequestFromCanvas(snapshot, {
+        resolvedTheme: exportAppearance,
+        exportFormat,
+        fileName: 'canvas-export',
+        background: exportBackground,
+      })
 
-        const response = await schemaVizExportCreate(request)
-        if (response.status !== 200) {
-          throw new Error('Export failed')
-        }
-
-        const contentType =
-          exportFormat === 'svg'
-            ? 'image/svg+xml;charset=utf-8'
-            : 'application/xml;charset=utf-8'
-        const ext = exportFormat === 'svg' ? '.svg' : '.drawio'
-        const blob = new Blob([response.data], {
-          type: contentType,
-        })
-        downloadBlob(blob, `canvas-export${ext}`)
-        setDone(exportFormat)
-        setTimeout(() => setDone(null), 1600)
-      } catch (e) {
-        console.error(`${exportFormat} export failed:`, e)
-      } finally {
-        setBusy(false)
+      const response = await schemaVizExportCreate(request)
+      if (response.status !== 200) {
+        console.error(`${exportFormat} export failed: unexpected status`)
+        dispatch({ type: 'stopped' })
+        return
       }
-    },
-    [exportAppearance, exportBackground, getCanvasExportSnapshot],
-  )
 
-  const handleDownload = useCallback(() => {
-    if (format === 'png') {
-      handleExportPng()
-    } else {
-      handleExportServer(format)
+      const contentType =
+        exportFormat === 'svg'
+          ? 'image/svg+xml;charset=utf-8'
+          : 'application/xml;charset=utf-8'
+      const ext = exportFormat === 'svg' ? '.svg' : '.drawio'
+      const blob = new Blob([response.data], {
+        type: contentType,
+      })
+      downloadBlob(blob, `canvas-export${ext}`)
+      dispatch({ type: 'succeeded', done: exportFormat })
+      setTimeout(() => dispatch({ type: 'done-cleared' }), 1600)
+    } catch (e) {
+      console.error(`${exportFormat} export failed:`, e)
+      dispatch({ type: 'stopped' })
     }
-  }, [format, handleExportPng, handleExportServer])
+  }
 
-  const handleCopyImage = useCallback(async () => {
+  const handleDownload = () => {
+    if (format === 'png') {
+      void handleExportPng()
+    } else {
+      void handleExportServer(format)
+    }
+  }
+
+  const handleCopyImage = async () => {
     const stage = stageRef.current
     if (!stage || !('clipboard' in navigator) || !('ClipboardItem' in window)) {
       return
     }
 
-    setBusy(true)
+    dispatch({ type: 'started' })
     try {
       const plan = createDownloadRasterPlan()
-      if (!plan) return
+      if (!plan) {
+        dispatch({ type: 'stopped' })
+        return
+      }
 
       const dataUrl = await renderStageRasterDataUrl(stage, plan, {
         background: exportBackground,
@@ -388,17 +843,16 @@ export function CanvasExportDialog({
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': blob }),
       ])
-      setDone('clip')
-      setTimeout(() => setDone(null), 1600)
+      dispatch({ type: 'succeeded', done: 'clip' })
+      setTimeout(() => dispatch({ type: 'done-cleared' }), 1600)
     } catch (e) {
       console.error('Copy to clipboard failed:', e)
-    } finally {
-      setBusy(false)
+      dispatch({ type: 'stopped' })
     }
-  }, [createDownloadRasterPlan, exportBackground, stageRef])
+  }
 
-  const handleOpenInDrawio = useCallback(async () => {
-    setBusy(true)
+  const handleOpenInDrawio = async () => {
+    dispatch({ type: 'started' })
     try {
       const snapshot = getCanvasExportSnapshot()
       const request = createStatelessExportRequestFromCanvas(snapshot, {
@@ -409,7 +863,9 @@ export function CanvasExportDialog({
       })
       const response = await schemaVizExportCreate(request)
       if (response.status !== 200) {
-        throw new Error('Export failed')
+        console.error('Open in diagrams.net failed: unexpected status')
+        dispatch({ type: 'stopped' })
+        return
       }
       const xml = response.data as unknown as string
       const encoded = await deflateToBase64(xml)
@@ -418,18 +874,17 @@ export function CanvasExportDialog({
         console.warn('draw.io URL too long, falling back to download')
         const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' })
         downloadBlob(blob, 'canvas-export.drawio')
-        setDone('drawio')
+        dispatch({ type: 'succeeded', done: 'drawio' })
       } else {
         window.open(url, '_blank', 'noopener,noreferrer')
-        setDone('drawio-open')
+        dispatch({ type: 'succeeded', done: 'drawio-open' })
       }
-      setTimeout(() => setDone(null), 1600)
+      setTimeout(() => dispatch({ type: 'done-cleared' }), 1600)
     } catch (e) {
       console.error('Open in diagrams.net failed:', e)
-    } finally {
-      setBusy(false)
+      dispatch({ type: 'stopped' })
     }
-  }, [exportAppearance, exportBackground, getCanvasExportSnapshot])
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -437,284 +892,54 @@ export function CanvasExportDialog({
         className="grid h-[min(680px,calc(100dvh-2rem))] max-w-[min(1080px,92vw)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(1080px,92vw)]"
         showCloseButton
       >
-        <DialogHeader className="border-b px-5 py-3.5">
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
-                EXPORT
-              </span>
-              <DialogTitle className="text-[15px]">
-                Diagramm exportieren
-              </DialogTitle>
-            </div>
-          </div>
-        </DialogHeader>
-
+        <ExportDialogHeader />
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_340px] overflow-hidden">
-          {/* Preview pane */}
-          <div className="flex min-h-0 flex-col border-r">
-            <div className="flex items-center gap-2.5 border-b bg-muted/30 px-4 py-2.5">
-              <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
-                VORSCHAU
-              </span>
-              {rasterPlan && format === 'png' && (
-                <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                  {rasterPlan.outputWidth} x {rasterPlan.outputHeight} px
-                  {rasterPlan.clamped ? ' max' : ''}
-                </span>
-              )}
-              {format === 'svg' && (
-                <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                  Vektor
-                </span>
-              )}
-              {format === 'drawio' && (
-                <span className="ml-auto font-mono text-[11px] text-muted-foreground">
-                  mxfile
-                </span>
-              )}
-            </div>
-            <div
-              className={cn(
-                'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-5',
-                transparentBackground &&
-                  'bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0]',
-              )}
-              style={
-                transparentBackground
-                  ? {
-                      backgroundImage: [
-                        'linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%)',
-                        'linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%)',
-                        'linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%)',
-                        'linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)',
-                      ].join(','),
-                    }
-                  : { backgroundColor: exportBackground }
-              }
-            >
-              {previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt="Diagramm-Vorschau"
-                  className={cn(
-                    'max-h-full max-w-full object-contain',
-                    exportAppearance === 'light' &&
-                      'rounded-md ring-1 ring-border/40',
-                    exportAppearance === 'dark' &&
-                      'rounded-md ring-1 ring-white/10',
-                  )}
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <ImageIcon className="size-8 opacity-40" />
-                  <span className="text-sm">Keine Vorschau</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Sidebar */}
+          <ExportPreviewPane
+            exportAppearance={exportAppearance}
+            exportBackground={exportBackground}
+            format={format}
+            previewUrl={previewUrl}
+            rasterPlan={rasterPlan}
+            transparentBackground={transparentBackground}
+          />
           <div className="flex min-h-0 flex-col gap-5 overflow-y-auto bg-background p-5">
-            {/* Format */}
-            <div className="flex flex-col gap-2.5">
-              <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
-                FORMAT
-              </span>
-              <div className="flex flex-col gap-1.5">
-                {(
-                  Object.entries(FORMAT_META) as Array<
-                    [ExportFormat, typeof FORMAT_META.png]
-                  >
-                ).map(([key, meta]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={cn(
-                      'grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
-                      format === key
-                        ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
-                        : 'border-border hover:border-muted-foreground/50',
-                    )}
-                    onClick={() => setFormat(key)}
-                  >
-                    <span
-                      className={cn(
-                        'flex size-8 items-center justify-center rounded-md',
-                        format === key
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-muted text-foreground',
-                      )}
-                    >
-                      <FormatIcon format={key} />
-                    </span>
-                    <span className="flex flex-col gap-px">
-                      <b className="text-[13px] font-semibold">{meta.label}</b>
-                      <em className="text-[11.5px] not-italic text-muted-foreground">
-                        {meta.hint}
-                      </em>
-                    </span>
-                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-                      {meta.ext}
-                    </code>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Appearance */}
-            <div className="flex flex-col gap-2.5">
-              <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
-                APPEARANCE
-              </span>
-              <div className="grid grid-cols-2 gap-1.5">
-                {APPEARANCE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={cn(
-                      'flex items-center justify-center gap-2 rounded-lg border px-2 py-2 text-[12px] transition-colors',
-                      exportAppearance === opt.id
-                        ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
-                        : 'border-border hover:border-muted-foreground/50',
-                    )}
-                    onClick={() => setExportAppearance(opt.id)}
-                  >
-                    <span
-                      className={cn(
-                        'size-3 rounded-full border',
-                        opt.id === 'light' && 'border-border bg-white',
-                        opt.id === 'dark' && 'border-zinc-800 bg-[#09090b]',
-                      )}
-                    />
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-[12px] text-foreground">
-                <input
-                  aria-label="Transparent background"
-                  type="checkbox"
-                  className="size-3.5 accent-foreground"
-                  checked={transparentBackground}
-                  onChange={(event) =>
-                    setTransparentBackground(event.currentTarget.checked)
-                  }
-                />
-                <span>Transparent background</span>
-              </label>
-            </div>
-
-            {/* Scale (PNG only) */}
+            <ExportFormatSection
+              format={format}
+              onFormatChange={(nextFormat) =>
+                dispatch({ type: 'format-changed', format: nextFormat })
+              }
+            />
+            <ExportAppearanceSection
+              exportAppearance={exportAppearance}
+              onAppearanceChange={(appearance) =>
+                dispatch({ type: 'appearance-changed', appearance })
+              }
+              onTransparentBackgroundChange={(transparent) =>
+                dispatch({
+                  type: 'transparent-background-changed',
+                  transparent,
+                })
+              }
+              transparentBackground={transparentBackground}
+            />
             {format === 'png' && (
-              <div className="flex flex-col gap-2.5">
-                <span className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground">
-                  AUFLOESUNG
-                </span>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {SCALE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={cn(
-                        'flex flex-col items-center gap-px rounded-lg border px-2 py-2 transition-colors',
-                        scale === opt.value
-                          ? 'border-foreground bg-muted/50 shadow-[inset_0_0_0_1px_hsl(var(--foreground))]'
-                          : 'border-border hover:border-muted-foreground/50',
-                      )}
-                      onClick={() => setScale(opt.value)}
-                    >
-                      <b className="text-[14px] font-semibold">{opt.label}</b>
-                      <em className="text-[10.5px] not-italic text-muted-foreground">
-                        {opt.hint}
-                      </em>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <ExportScaleSection
+                onScaleChange={(nextScale) =>
+                  dispatch({ type: 'scale-changed', scale: nextScale })
+                }
+                scale={scale}
+              />
             )}
-
-            {/* Actions */}
-            <div className="mt-auto flex flex-col gap-2">
-              {filterNotice ? (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
-                  <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{filterNotice}</span>
-                </div>
-              ) : null}
-
-              <Button
-                className="w-full gap-2"
-                disabled={busy}
-                onClick={handleDownload}
-              >
-                {done === format ? (
-                  <>
-                    <CheckIcon className="size-4" />
-                    Gespeichert
-                  </>
-                ) : (
-                  <>
-                    <DownloadIcon className="size-4" />
-                    {busy
-                      ? 'Wird gerendert…'
-                      : `Herunterladen als ${FORMAT_META[format].label}`}
-                  </>
-                )}
-              </Button>
-
-              {format === 'png' && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  disabled={busy}
-                  onClick={handleCopyImage}
-                >
-                  {done === 'clip' ? (
-                    <>
-                      <CheckIcon className="size-4" />
-                      In Zwischenablage
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardCopyIcon className="size-4" />
-                      Als Bild kopieren
-                    </>
-                  )}
-                </Button>
-              )}
-              {format === 'drawio' && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  disabled={busy}
-                  onClick={handleOpenInDrawio}
-                >
-                  {done === 'drawio-open' ? (
-                    <>
-                      <CheckIcon className="size-4" />
-                      Geoeffnet
-                    </>
-                  ) : (
-                    <>
-                      <ExternalLinkIcon className="size-4" />
-                      {busy ? 'Wird geladen…' : 'In diagrams.net oeffnen'}
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-
-            {/* Tip */}
-            <div className="flex items-start gap-1.5 rounded-lg bg-muted/50 px-2.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
-              <ShareIcon className="mt-0.5 size-3.5 shrink-0 opacity-60" />
-              {format === 'svg' &&
-                'SVG behaelt Schrift und Vektor. Ideal fuer Print-PDFs.'}
-              {format === 'png' &&
-                `${scale}x Aufloesung — Retina ist fuer die meisten Slides ausreichend.`}
-              {format === 'drawio' &&
-                'Oeffne die .drawio-Datei direkt in diagrams.net oder VS Code.'}
-            </div>
+            <ExportActions
+              busy={busy}
+              done={done}
+              filterNotice={filterNotice}
+              format={format}
+              onCopyImage={handleCopyImage}
+              onDownload={handleDownload}
+              onOpenDrawio={handleOpenInDrawio}
+            />
+            <ExportTip format={format} scale={scale} />
           </div>
         </div>
       </DialogContent>

@@ -3,6 +3,7 @@ import { routeTree } from '@/routeTree.gen'
 import { MutationCache, QueryClient } from '@tanstack/react-query'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { toast } from 'sonner'
+import { GlobalLoader } from '@/components/GlobalLoader'
 
 export function getRouter() {
   const mutationCache = new MutationCache({
@@ -29,6 +30,7 @@ export function getRouter() {
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
+    defaultPendingComponent: GlobalLoader,
   })
   setupRouterSsrQueryIntegration({
     router,

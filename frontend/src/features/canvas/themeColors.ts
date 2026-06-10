@@ -8,6 +8,16 @@ export const CANVAS_BACKGROUND_FALLBACKS: Record<ResolvedTheme, string> = {
   light: '#ffffff',
 }
 
+export function resolveCanvasExportBackground({
+  appearance,
+  transparent,
+}: {
+  appearance: ResolvedTheme
+  transparent: boolean
+}) {
+  return transparent ? 'transparent' : CANVAS_BACKGROUND_FALLBACKS[appearance]
+}
+
 export const CANVAS_SURFACE_FALLBACKS: Record<ResolvedTheme, string> = {
   dark: 'rgba(24, 24, 27, 0.92)',
   light: 'rgba(255, 255, 255, 0.9)',

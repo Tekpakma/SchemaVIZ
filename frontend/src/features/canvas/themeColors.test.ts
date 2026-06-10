@@ -11,6 +11,7 @@ import {
   SCHEMA_NODE_FIELD_COLOR,
   SCHEMA_NODE_SUBTITLE_COLOR,
   SCHEMA_NODE_TITLE_COLOR,
+  resolveCanvasExportBackground,
   resolveCanvasThemeColor,
 } from './themeColors'
 
@@ -30,6 +31,27 @@ describe('resolveCanvasThemeColor', () => {
       dark: '#09090b',
       light: '#ffffff',
     })
+  })
+
+  it('resolves export backgrounds from appearance and transparency controls', () => {
+    expect(
+      resolveCanvasExportBackground({
+        appearance: 'light',
+        transparent: false,
+      }),
+    ).toBe('#ffffff')
+    expect(
+      resolveCanvasExportBackground({
+        appearance: 'dark',
+        transparent: false,
+      }),
+    ).toBe('#09090b')
+    expect(
+      resolveCanvasExportBackground({
+        appearance: 'dark',
+        transparent: true,
+      }),
+    ).toBe('transparent')
   })
 
   it('uses the exact computed CSS variable value for canvas fills', () => {

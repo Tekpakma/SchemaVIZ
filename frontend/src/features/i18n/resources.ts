@@ -21,8 +21,53 @@ export const resources = {
           'Dieser Export berücksichtigt aktive Filter. Einige verwandte Datensätze werden ausgelassen.',
         summary: 'Aktive Filter blenden einige verwandte Datensätze aus.',
         summary_one: 'Aktive Filter blenden einige verwandte Datensätze aus.',
-        summary_other:
-          'Aktive Filter blenden einige verwandte Datensätze aus.',
+        summary_other: 'Aktive Filter blenden einige verwandte Datensätze aus.',
+      },
+      canvas: {
+        export: {
+          appearance: 'Darstellung',
+          copied: 'In Zwischenablage',
+          copyImage: 'Als Bild kopieren',
+          downloadAs: 'Als {{format}} herunterladen',
+          format: 'Format',
+          formats: {
+            drawio: {
+              hint: 'Editierbares Diagramm.',
+              meta: 'mxfile',
+            },
+            png: {
+              hint: 'Bild für Slides, E-Mail oder Slack.',
+              meta: 'Raster',
+            },
+            svg: {
+              hint: 'Vektor, verlustfrei skalierbar.',
+              meta: 'Vektor',
+            },
+          },
+          label: 'Export',
+          loading: 'Wird geladen...',
+          noPreview: 'Keine Vorschau',
+          openDrawio: 'In diagrams.net öffnen',
+          opened: 'Geöffnet',
+          preview: 'Vorschau',
+          previewAlt: 'Diagramm-Vorschau',
+          rendering: 'Wird gerendert...',
+          resolution: 'Auflösung',
+          saved: 'Gespeichert',
+          scale: {
+            print: 'Print',
+            retina: 'Retina',
+            standard: 'Standard',
+          },
+          tips: {
+            drawio:
+              'Die .drawio-Datei direkt in diagrams.net oder VS Code öffnen.',
+            png: '{{scale}}x Auflösung. Retina reicht für die meisten Slides.',
+            svg: 'SVG behält Schrift und Vektor. Ideal für Print-PDFs.',
+          },
+          title: 'Diagramm exportieren',
+          transparentBackground: 'Transparenter Hintergrund',
+        },
       },
       builder: {
         examples: {
@@ -452,6 +497,52 @@ export const resources = {
         summary: 'Active filters hide some related records.',
         summary_one: 'Active filters hide some related records.',
         summary_other: 'Active filters hide some related records.',
+      },
+      canvas: {
+        export: {
+          appearance: 'Appearance',
+          copied: 'Copied to clipboard',
+          copyImage: 'Copy as image',
+          downloadAs: 'Download as {{format}}',
+          format: 'Format',
+          formats: {
+            drawio: {
+              hint: 'Editable diagram.',
+              meta: 'mxfile',
+            },
+            png: {
+              hint: 'Image for slides, email, or Slack.',
+              meta: 'Raster',
+            },
+            svg: {
+              hint: 'Vector, lossless scaling.',
+              meta: 'Vector',
+            },
+          },
+          label: 'Export',
+          loading: 'Loading...',
+          noPreview: 'No preview',
+          openDrawio: 'Open in diagrams.net',
+          opened: 'Opened',
+          preview: 'Preview',
+          previewAlt: 'Diagram preview',
+          rendering: 'Rendering...',
+          resolution: 'Resolution',
+          saved: 'Saved',
+          scale: {
+            print: 'Print',
+            retina: 'Retina',
+            standard: 'Standard',
+          },
+          tips: {
+            drawio:
+              'Open the .drawio file directly in diagrams.net or VS Code.',
+            png: '{{scale}}x resolution. Retina is enough for most slides.',
+            svg: 'SVG keeps text and vectors. Best for print PDFs.',
+          },
+          title: 'Export diagram',
+          transparentBackground: 'Transparent background',
+        },
       },
       builder: {
         examples: {

@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { createStatelessExportRequestFromCanvas } from './export'
 import type { CanvasExportSnapshot } from '@/store/canvasStore'
 import { extractPlainTextFromHtml } from '@/utils/html'
+import {
+  CANVAS_BACKGROUND_FALLBACKS,
+  CANVAS_EDGE_COLOR_FALLBACK,
+  CANVAS_SURFACE_FALLBACKS,
+} from './themeColors'
 
 const snapshot = {
   nodesById: {
@@ -240,6 +245,52 @@ describe('canvas export serializer', () => {
       id: 'edge-1',
       style: {
         stroke: '#9ef0e8',
+      },
+    })
+  })
+
+  it('propagates selected dark appearance and background into SVG export requests', () => {
+    const request = createStatelessExportRequestFromCanvas(snapshot, {
+      resolvedTheme: 'dark',
+      exportFormat: 'svg',
+      background: CANVAS_BACKGROUND_FALLBACKS.dark,
+    })
+
+    expect(request).toMatchObject({
+      exportFormat: 'svg',
+      background: CANVAS_BACKGROUND_FALLBACKS.dark,
+    })
+    expect(request.reactFlowState.nodes[0]).toMatchObject({
+      style: {
+        backgroundColor: CANVAS_SURFACE_FALLBACKS.dark,
+      },
+    })
+    expect(request.reactFlowState.edges[0]).toMatchObject({
+      style: {
+        stroke: CANVAS_EDGE_COLOR_FALLBACK.dark,
+      },
+    })
+  })
+
+  it('propagates selected light appearance and transparent background into draw.io export requests', () => {
+    const request = createStatelessExportRequestFromCanvas(snapshot, {
+      resolvedTheme: 'light',
+      exportFormat: 'drawio',
+      background: 'transparent',
+    })
+
+    expect(request).toMatchObject({
+      exportFormat: 'drawio',
+      background: 'transparent',
+    })
+    expect(request.reactFlowState.nodes[0]).toMatchObject({
+      style: {
+        backgroundColor: CANVAS_SURFACE_FALLBACKS.light,
+      },
+    })
+    expect(request.reactFlowState.edges[0]).toMatchObject({
+      style: {
+        stroke: CANVAS_EDGE_COLOR_FALLBACK.light,
       },
     })
   })
