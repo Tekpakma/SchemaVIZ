@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight, Pencil, RefreshCw } from 'lucide-react'
@@ -50,16 +50,34 @@ export function HomePage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null,
   )
-  const authSessionQuery = useQuery(START_AUTH_SESSION_QUERY)
-  const hasResolvedAuthSession =
-    authSessionQuery.isSuccess && !authSessionQuery.isFetching
+  const {
+    data: authSession,
+    error: authSessionError,
+    isError: isAuthSessionError,
+    isFetching: isAuthSessionFetching,
+    isSuccess: isAuthSessionSuccess,
+    refetch: refetchAuthSession,
+  } = useQuery(START_AUTH_SESSION_QUERY)
+  const hasResolvedAuthSession = isAuthSessionSuccess && !isAuthSessionFetching
   const canLoadTemplates =
-    hasResolvedAuthSession && canLoadHomeQuickAccess(authSessionQuery.data)
-  const ownRecentQuery = useQuery({
+    hasResolvedAuthSession && canLoadHomeQuickAccess(authSession)
+  const {
+    data: ownRecentData,
+    error: ownRecentError,
+    isError: isOwnRecentError,
+    isLoading: isOwnRecentLoading,
+    refetch: refetchOwnRecent,
+  } = useQuery({
     ...HOME_QUICK_ACCESS_QUERIES.ownRecent(),
     enabled: canLoadTemplates,
   })
-  const featuredQuery = useQuery({
+  const {
+    data: featuredData,
+    error: featuredError,
+    isError: isFeaturedError,
+    isLoading: isFeaturedLoading,
+    refetch: refetchFeatured,
+  } = useQuery({
     ...HOME_QUICK_ACCESS_QUERIES.featured({
       limit: HOME_FEATURED_TEMPLATE_LIMIT,
     }),
@@ -67,63 +85,44 @@ export function HomePage() {
   })
 
   useEffect(() => {
-    if (
-      hasResolvedAuthSession &&
-      shouldRedirectHomeToLogin(authSessionQuery.data)
-    ) {
+    if (hasResolvedAuthSession && shouldRedirectHomeToLogin(authSession)) {
       redirectToLogin()
     }
-  }, [authSessionQuery.data, hasResolvedAuthSession])
+  }, [authSession, hasResolvedAuthSession])
 
-  const ownRecentTemplates = useMemo(
-    () => createHomeTemplatePreviews(ownRecentQuery.data?.ownRecent ?? []),
-    [ownRecentQuery.data?.ownRecent],
+  const ownRecentTemplates = createHomeTemplatePreviews(
+    ownRecentData?.ownRecent ?? [],
   )
-  const featuredTemplates = useMemo(
-    () => createHomeTemplatePreviews(featuredQuery.data?.results ?? []),
-    [featuredQuery.data?.results],
+  const featuredTemplates = createHomeTemplatePreviews(
+    featuredData?.results ?? [],
   )
-  const allTemplates = useMemo(
-    () =>
-      uniqueHomeTemplatePreviews([...featuredTemplates, ...ownRecentTemplates]),
-    [featuredTemplates, ownRecentTemplates],
-  )
-  const filteredTemplates = useMemo(
-    () => filterHomeTemplatePreviews(allTemplates, activeFilter),
-    [activeFilter, allTemplates],
+  const allTemplates = uniqueHomeTemplatePreviews([
+    ...featuredTemplates,
+    ...ownRecentTemplates,
+  ])
+  const filteredTemplates = filterHomeTemplatePreviews(
+    allTemplates,
+    activeFilter,
   )
   const primaryTemplate = ownRecentTemplates[0] ?? featuredTemplates[0] ?? null
-  const selectedTemplate = useMemo(
-    () =>
-      selectedTemplateId
-        ? (allTemplates.find(
-            (template) => template.id === selectedTemplateId,
-          ) ?? null)
-        : null,
-    [allTemplates, selectedTemplateId],
-  )
+  const selectedTemplate = selectedTemplateId
+    ? (allTemplates.find((template) => template.id === selectedTemplateId) ??
+      null)
+    : null
   const readyCount = allTemplates.filter(
     (template) => template.status === 'ready',
   ).length
   const attentionCount = allTemplates.filter(
     (template) => template.status !== 'ready',
   ).length
-  const isLoading = ownRecentQuery.isLoading || featuredQuery.isLoading
+  const isLoading = isOwnRecentLoading || isFeaturedLoading
   const errorMessage =
-    ownRecentQuery.isError || featuredQuery.isError
+    isOwnRecentError || isFeaturedError
       ? getQueryErrorMessage(
-          ownRecentQuery.error ?? featuredQuery.error,
+          ownRecentError ?? featuredError,
           t('home.error.loadTemplates'),
         )
       : null
-
-  useEffect(() => {
-    if (!selectedTemplateId) return
-    if (allTemplates.some((template) => template.id === selectedTemplateId)) {
-      return
-    }
-    setSelectedTemplateId(null)
-  }, [allTemplates, selectedTemplateId])
 
   function navigateToTarget(target: HomeTemplateNavigationTarget) {
     if (target.type === 'generation-run') {
@@ -178,14 +177,14 @@ export function HomePage() {
     void navigate({ to: '/builder' })
   }
 
-  if (authSessionQuery.isError) {
+  if (isAuthSessionError) {
     return (
       <AuthGateStatus
         label={getQueryErrorMessage(
-          authSessionQuery.error,
+          authSessionError,
           t('home.error.loadTemplates'),
         )}
-        onRetry={() => void authSessionQuery.refetch()}
+        onRetry={() => void refetchAuthSession()}
       />
     )
   }
@@ -206,7 +205,7 @@ export function HomePage() {
             <div className="flex items-end justify-between gap-6">
               <div className="flex flex-col gap-1.5">
                 <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                  <span className="size-[7px] rounded-full bg-brand" />
+                  <span className="h-px w-5 bg-brand" />
                   {t('home.hero.kicker')}
                 </span>
                 <h1 className="text-[32px] font-semibold leading-tight tracking-tight">
@@ -261,10 +260,7 @@ export function HomePage() {
             <ErrorBanner
               message={errorMessage}
               onRetry={() =>
-                void Promise.all([
-                  ownRecentQuery.refetch(),
-                  featuredQuery.refetch(),
-                ])
+                void Promise.all([refetchOwnRecent(), refetchFeatured()])
               }
             />
           ) : null}
@@ -308,6 +304,7 @@ export function HomePage() {
       </main>
       {selectedTemplate ? (
         <TemplateDetailPanel
+          key={selectedTemplate.id}
           template={selectedTemplate}
           onClose={() => setSelectedTemplateId(null)}
           onEdit={handleEditTemplate}

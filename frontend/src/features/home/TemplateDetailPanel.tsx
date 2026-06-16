@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useState } from 'react'
 import {
   Check,
   ChevronDown,
@@ -66,26 +66,21 @@ export function TemplateDetailPanel({
   const { t } = useTranslation()
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [recordPickerOpen, setRecordPickerOpen] = useState(false)
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(
-    template.sampleRecordId,
-  )
-  const [selectedRecordLabel, setSelectedRecordLabel] = useState<string | null>(
-    template.sampleRecordDisplayName,
-  )
+  const [selectedRecord, setSelectedRecord] = useState<{
+    id: string
+    label: string
+  } | null>(null)
 
-  const generationUrl = useMemo(
-    () => buildGenerationUrl(template.shareSlug, selectedRecordId),
-    [template.shareSlug, selectedRecordId],
-  )
+  const selectedRecordId = selectedRecord?.id ?? template.sampleRecordId
+  const selectedRecordLabel =
+    selectedRecord?.label ?? template.sampleRecordDisplayName
+  const generationUrl = buildGenerationUrl(template.shareSlug, selectedRecordId)
 
-  const rootModel = useMemo(
-    () => splitModelId(template.rootModel),
-    [template.rootModel],
-  )
+  const rootModel = splitModelId(template.rootModel)
   const isEditable = canEditTemplate(template)
   const canPickRecord = Boolean(template.shareSlug && rootModel)
 
-  const recordsQuery = useQuery({
+  const { data: recordsData } = useQuery({
     ...SCHEMA_QUERIES.records({
       appLabel: rootModel?.appLabel ?? '',
       modelName: rootModel?.modelName ?? '',
@@ -94,32 +89,28 @@ export function TemplateDetailPanel({
     }),
     enabled: recordPickerOpen && canPickRecord,
   })
-  const records = recordsQuery.data?.results ?? []
+  const records = recordsData?.results ?? []
 
-  const handleCopy = useCallback(async () => {
+  async function handleCopy() {
     if (!generationUrl) return
     await navigator.clipboard.writeText(generationUrl)
     setCopiedUrl(true)
     setTimeout(() => setCopiedUrl(false), 2000)
-  }, [generationUrl])
+  }
 
-  const handleSelectRecord = useCallback(
-    (recordId: string, displayName: string) => {
-      setSelectedRecordId(recordId)
-      setSelectedRecordLabel(displayName)
-      setRecordPickerOpen(false)
-      setCopiedUrl(false)
-    },
-    [],
-  )
+  function handleSelectRecord(recordId: string, displayName: string) {
+    setSelectedRecord({ id: recordId, label: displayName })
+    setRecordPickerOpen(false)
+    setCopiedUrl(false)
+  }
 
-  const handleOpen = useCallback(() => {
+  function handleOpen() {
     if (selectedRecordId) {
       onPickRecord(template, selectedRecordId)
     } else {
       onOpen(template)
     }
-  }, [onOpen, onPickRecord, selectedRecordId, template])
+  }
 
   return (
     <aside
@@ -158,7 +149,7 @@ export function TemplateDetailPanel({
         <div className="px-4 pt-4">
           <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
             <span>{t(`home.source.${template.source}`)}</span>
-            <span className="text-border">·</span>
+            <span className="h-3 w-px bg-border" />
             <span>{t(`home.status.${template.status}`)}</span>
           </div>
           <h3 className="mt-1.5 text-[18px] font-semibold leading-snug tracking-tight">
@@ -176,7 +167,7 @@ export function TemplateDetailPanel({
                 {t('home.detail.nodes')}
               </span>
             </span>
-            <span className="text-border">·</span>
+            <span className="h-3 w-px bg-border" />
             <span className="text-foreground">
               <span className="font-semibold">{template.edgeCount}</span>{' '}
               <span className="text-muted-foreground">

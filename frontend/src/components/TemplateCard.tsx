@@ -48,7 +48,7 @@ export function TemplateCard({
       >
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="text-foreground">{template.author}</span>
-          <span className="text-border">·</span>
+          <span className="h-3 w-px bg-border" />
           <span className="font-mono text-[11px]">
             {t('home.count.nodes', { count: template.nodeCount })}
           </span>
@@ -75,8 +75,7 @@ export function TemplateCard({
             <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
               {t('home.card.sampleRecord')}
             </span>
-            <div className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full bg-brand-muted px-2 py-0.5 text-[11.5px] text-brand">
-              <span className="size-[5px] rounded-full bg-brand" />
+            <div className="mt-1.5 inline-flex max-w-full border-l-2 border-brand bg-brand-muted py-0.5 pl-2 pr-2 text-[11.5px] text-brand">
               <span className="truncate">
                 {template.sampleRecordDisplayName}
               </span>
@@ -86,7 +85,7 @@ export function TemplateCard({
         <div className="mt-1 inline-flex items-center gap-1.5 self-start text-[12px] font-medium text-brand">
           {large ? t('home.card.reviewLandscape') : t('home.card.details')}
           <span className="ml-1 text-xs text-muted-foreground">
-            · {t(`home.status.${template.status}`)}
+            / {t(`home.status.${template.status}`)}
           </span>
           <ArrowRight className="size-3" />
         </div>

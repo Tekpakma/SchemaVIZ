@@ -24,7 +24,7 @@ const KEYFRAMES = `
   25%, 74%  { background: var(--svz-wash); border-color: var(--svz-accent); }
   75%, 100% { background: var(--svz-paper); border-color: var(--svz-ink); }
 }
-@keyframes svz-node-dot {
+@keyframes svz-node-mark {
   0%, 24%   { background: var(--svz-mute); transform: scale(1); }
   25%, 74%  { background: var(--svz-accent); transform: scale(1.3); }
   75%, 100% { background: var(--svz-mute); transform: scale(1); }
@@ -32,10 +32,6 @@ const KEYFRAMES = `
 @keyframes svz-link-fill {
   0%, 49%   { background: var(--svz-mute); }
   50%, 100% { background: var(--svz-accent); }
-}
-@keyframes svz-blink {
-  0%, 100% { opacity: 0.25; transform: scale(0.85); }
-  50%      { opacity: 1;    transform: scale(1.1); }
 }
 @media (prefers-reduced-motion: reduce) {
   .svz-loader * { animation-duration: 6s !important; animation-timing-function: linear !important; }
@@ -76,35 +72,29 @@ export function GlobalLoader({
   const cycle = speed * nodes
 
   return (
-    <div
+    <output
       aria-busy="true"
       aria-live="polite"
       className={cn(
         'svz-loader flex flex-col items-center justify-center gap-6',
-        variant === 'page' &&
-          'fixed inset-0 z-[9999] bg-background',
+        variant === 'page' && 'fixed inset-0 z-[9999] bg-background',
         variant === 'inline' && 'relative min-h-[200px] h-full w-full',
         className,
       )}
-      role="status"
-      style={{
-        '--svz-accent': 'var(--primary)',
-        '--svz-ink': 'var(--foreground)',
-        '--svz-paper': 'var(--background)',
-        '--svz-mute': 'var(--border)',
-        '--svz-wash': 'var(--accent)',
-      } as React.CSSProperties}
+      style={
+        {
+          '--svz-accent': 'var(--primary)',
+          '--svz-ink': 'var(--foreground)',
+          '--svz-paper': 'var(--background)',
+          '--svz-mute': 'var(--border)',
+          '--svz-wash': 'var(--accent)',
+        } as React.CSSProperties
+      }
     >
-      {/* Dot grid background for page variant */}
       {variant === 'page' && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-5"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle, currentColor 1px, transparent 1px)',
-            backgroundSize: '22px 22px',
-          }}
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-border"
         />
       )}
 
@@ -127,7 +117,7 @@ export function GlobalLoader({
           style={{
             background:
               'linear-gradient(to right, transparent, var(--svz-accent), transparent)',
-            animation: 'svz-sweep 1.4s ease-in-out infinite',
+            animation: 'svz-sweep 900ms ease-in-out infinite',
           }}
         />
       </div>
@@ -136,10 +126,7 @@ export function GlobalLoader({
       {variant !== 'bare' && (label || sub) && (
         <div className="relative z-[1] flex flex-col items-center gap-1">
           <span className="inline-flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-muted-foreground">
-            <span
-              className="size-1.5 rounded-full bg-primary"
-              style={{ animation: 'svz-blink 1.2s ease-in-out infinite' }}
-            />
+            <span className="h-px w-5 bg-primary" />
             SchemaVIZ
           </span>
           {label && (
@@ -157,7 +144,7 @@ export function GlobalLoader({
 
       {/* Screen-reader-only label */}
       <span className="sr-only">{label || 'Loading…'}</span>
-    </div>
+    </output>
   )
 }
 
@@ -182,10 +169,10 @@ function NodeWithLink({
         }}
       >
         <span
-          className="size-2 rounded-full"
+          className="size-2 rounded-[2px]"
           style={{
             background: 'var(--svz-mute)',
-            animation: `svz-node-dot ${cycle}ms linear infinite`,
+            animation: `svz-node-mark ${cycle}ms linear infinite`,
             animationDelay: `${delay}ms`,
           }}
         />

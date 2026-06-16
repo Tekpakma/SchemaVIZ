@@ -25,7 +25,7 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            <span className="size-[7px] rounded-full bg-brand" />
+            <span className="h-px w-5 bg-brand" />
             {t('home.promoted.kicker')}
           </span>
           <h2 className="mt-1.5 text-xl font-semibold tracking-tight">
@@ -65,11 +65,11 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
                   {featured.author}
                 </span>
               </span>
-              <span className="text-border">·</span>
+              <span className="h-3 w-px bg-border" />
               <span>
                 {t('home.count.nodes', { count: featured.nodeCount })}
               </span>
-              <span className="text-border">·</span>
+              <span className="h-3 w-px bg-border" />
               <span>
                 {t('home.count.edges', { count: featured.edgeCount })}
               </span>
@@ -79,7 +79,7 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
                 {t(`home.status.${featured.status}`)}
               </span>
               {featured.sampleRecordDisplayName ? (
-                <span className="inline-flex max-w-[220px] items-center rounded-full bg-brand-muted px-2 py-0.5 text-[11.5px] text-brand">
+                <span className="inline-flex max-w-[220px] items-center border-l-2 border-brand bg-brand-muted py-0.5 pl-2 pr-2 text-[11.5px] text-brand">
                   <span className="truncate">
                     {featured.sampleRecordDisplayName}
                   </span>
@@ -113,7 +113,7 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
                   <span>
                     {t('home.detail.author')} {template.author}
                   </span>
-                  <span className="text-border">·</span>
+                  <span className="h-3 w-px bg-border" />
                   <span>{t(`home.status.${template.status}`)}</span>
                 </div>
               </div>
