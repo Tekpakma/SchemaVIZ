@@ -36,6 +36,43 @@ const aboutKeys = [
   'unavailable',
 ] as const
 
+const commandCenterKeys = [
+  'aiPlaceholder',
+  'aiPromptSubtitle',
+  'aiPromptTitle',
+  'description',
+  'empty',
+  'loading',
+  'searchPlaceholder',
+  'title',
+] as const
+
+const schemaDiscoveryKeys = [
+  'allModels',
+  'details',
+  'emptyList',
+  'fieldCount',
+  'fields',
+  'loadError',
+  'loading',
+  'managed',
+  'models',
+  'no',
+  'noModels',
+  'noRelations',
+  'noSelection',
+  'overviewDescription',
+  'overviewTitle',
+  'relationCount',
+  'relations',
+  'route',
+  'searchPlaceholder',
+  'selection',
+  'table',
+  'title',
+  'yes',
+] as const
+
 describe('i18n resources', () => {
   it('defaults to English unless another locale is selected', () => {
     expect(DEFAULT_LOCALE).toBe('en')
@@ -61,6 +98,30 @@ describe('i18n resources', () => {
 
     expect(resources.en.translation.about.frontend).toBe('Frontend')
     expect(resources.de.translation.about.backend).toBe('Backend')
+  })
+
+  it('provides command center copy in English and German', () => {
+    for (const key of commandCenterKeys) {
+      expect(resources.en.translation.commandCenter[key]).toBeTruthy()
+      expect(resources.de.translation.commandCenter[key]).toBeTruthy()
+    }
+
+    expect(resources.en.translation.commandCenter.groups.workflows).toBe(
+      'Workflows',
+    )
+    expect(resources.de.translation.commandCenter.modes.search).toBe('Suche')
+  })
+
+  it('provides schema discovery copy in English and German', () => {
+    for (const key of schemaDiscoveryKeys) {
+      expect(resources.en.translation.schemaDiscovery[key]).toBeTruthy()
+      expect(resources.de.translation.schemaDiscovery[key]).toBeTruthy()
+    }
+
+    expect(resources.en.translation.schemaDiscovery.stats.models).toBe('Models')
+    expect(resources.de.translation.schemaDiscovery.noSelection).toBe(
+      'Kein Modell ausgewählt.',
+    )
   })
 
   it('keeps export dialog visible copy in resource files', () => {

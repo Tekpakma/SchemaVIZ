@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppSchemaDiscoveryRouteImport } from './routes/_app/schema-discovery'
+import { Route as AppFreedrawRouteImport } from './routes/_app/freedraw'
 import { Route as AppBuilderRouteImport } from './routes/_app/builder'
 import { Route as GenerateSlugIndexRouteImport } from './routes/generate/$slug.index'
 import { Route as GenerateSlugRecordIdRouteImport } from './routes/generate/$slug.$recordId'
@@ -28,6 +30,16 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSchemaDiscoveryRoute = AppSchemaDiscoveryRouteImport.update({
+  id: '/schema-discovery',
+  path: '/schema-discovery',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFreedrawRoute = AppFreedrawRouteImport.update({
+  id: '/freedraw',
+  path: '/freedraw',
   getParentRoute: () => AppRoute,
 } as any)
 const AppBuilderRoute = AppBuilderRouteImport.update({
@@ -50,12 +62,16 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/mcp': typeof McpRoute
   '/builder': typeof AppBuilderRoute
+  '/freedraw': typeof AppFreedrawRoute
+  '/schema-discovery': typeof AppSchemaDiscoveryRoute
   '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
   '/generate/$slug/': typeof GenerateSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
   '/builder': typeof AppBuilderRoute
+  '/freedraw': typeof AppFreedrawRoute
+  '/schema-discovery': typeof AppSchemaDiscoveryRoute
   '/': typeof AppIndexRoute
   '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
   '/generate/$slug': typeof GenerateSlugIndexRoute
@@ -65,6 +81,8 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/mcp': typeof McpRoute
   '/_app/builder': typeof AppBuilderRoute
+  '/_app/freedraw': typeof AppFreedrawRoute
+  '/_app/schema-discovery': typeof AppSchemaDiscoveryRoute
   '/_app/': typeof AppIndexRoute
   '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
   '/generate/$slug/': typeof GenerateSlugIndexRoute
@@ -75,12 +93,16 @@ export interface FileRouteTypes {
     | '/'
     | '/mcp'
     | '/builder'
+    | '/freedraw'
+    | '/schema-discovery'
     | '/generate/$slug/$recordId'
     | '/generate/$slug/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/mcp'
     | '/builder'
+    | '/freedraw'
+    | '/schema-discovery'
     | '/'
     | '/generate/$slug/$recordId'
     | '/generate/$slug'
@@ -89,6 +111,8 @@ export interface FileRouteTypes {
     | '/_app'
     | '/mcp'
     | '/_app/builder'
+    | '/_app/freedraw'
+    | '/_app/schema-discovery'
     | '/_app/'
     | '/generate/$slug/$recordId'
     | '/generate/$slug/'
@@ -124,6 +148,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/schema-discovery': {
+      id: '/_app/schema-discovery'
+      path: '/schema-discovery'
+      fullPath: '/schema-discovery'
+      preLoaderRoute: typeof AppSchemaDiscoveryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/freedraw': {
+      id: '/_app/freedraw'
+      path: '/freedraw'
+      fullPath: '/freedraw'
+      preLoaderRoute: typeof AppFreedrawRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/builder': {
       id: '/_app/builder'
       path: '/builder'
@@ -150,11 +188,15 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBuilderRoute: typeof AppBuilderRoute
+  AppFreedrawRoute: typeof AppFreedrawRoute
+  AppSchemaDiscoveryRoute: typeof AppSchemaDiscoveryRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppBuilderRoute: AppBuilderRoute,
+  AppFreedrawRoute: AppFreedrawRoute,
+  AppSchemaDiscoveryRoute: AppSchemaDiscoveryRoute,
   AppIndexRoute: AppIndexRoute,
 }
 
