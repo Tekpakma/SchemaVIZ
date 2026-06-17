@@ -203,11 +203,7 @@ export function HomePage() {
         <div className="mx-auto max-w-[1480px] px-6 pb-20 pt-7">
           <section className="mb-2 border-b border-border pb-6 pt-2">
             <div className="flex items-end justify-between gap-6">
-              <div className="flex flex-col gap-1.5">
-                <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                  <span className="h-px w-5 bg-brand" />
-                  {t('home.hero.kicker')}
-                </span>
+              <div>
                 <h1 className="text-[32px] font-semibold leading-tight tracking-tight">
                   {t('home.hero.title')}
                 </h1>
@@ -279,7 +275,7 @@ export function HomePage() {
             />
           )}
 
-          <section className="mt-9 flex items-center justify-between gap-6 rounded-[14px] border border-border bg-card px-[22px] py-[18px]">
+          <section className="mt-9 flex items-center justify-between gap-6 rounded-[10px] border border-border bg-card px-[22px] py-[18px]">
             <div className="flex items-center gap-3.5">
               <Pencil className="size-[18px] text-muted-foreground" />
               <div>
@@ -370,7 +366,7 @@ function HomeTemplateSections({
           <h2 className="text-base font-semibold tracking-tight">
             {t('home.sections.recent')}
           </h2>
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="text-[12.5px] text-muted-foreground">
             {t('home.count.owned', { count: ownRecentTemplates.length })}
           </span>
         </div>
@@ -390,16 +386,16 @@ function HomeTemplateSections({
           <h2 className="text-base font-semibold tracking-tight">
             {t('home.sections.allTemplates')}
           </h2>
-          <div className="flex gap-1.5">
+          <div className="inline-flex rounded-[8px] border border-border bg-background p-0.5">
             {FILTER_CHIPS.map((chip) => (
               <button
                 key={chip.id}
                 type="button"
                 className={cn(
-                  'rounded-full border border-transparent px-3 py-1 text-[12.5px]',
+                  'rounded-[6px] px-2.5 py-1 text-[12.5px] transition-colors',
                   activeFilter === chip.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground',
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                 )}
                 onClick={() => onFilterChange(chip.id)}
               >
@@ -484,12 +480,12 @@ function TemplateSectionSkeleton() {
     <section className="border-t border-border pb-4 pt-7">
       <div className="mb-4 h-6 w-56 rounded bg-muted" />
       <div className="grid grid-cols-[1.4fr_1fr] gap-4">
-        <div className="h-[220px] rounded-[14px] border border-border bg-muted" />
+        <div className="h-[220px] rounded-[10px] border border-border bg-muted" />
         <div className="flex flex-col gap-2">
           {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}
-              className="h-[69px] rounded-[14px] border border-border bg-muted"
+              className="h-[69px] rounded-[10px] border border-border bg-muted"
             />
           ))}
         </div>
@@ -502,9 +498,7 @@ function StatBlock({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col gap-px">
       <span className="text-lg font-semibold tracking-tight">{value}</span>
-      <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </span>
+      <span className="text-[12px] text-muted-foreground">{label}</span>
     </div>
   )
 }

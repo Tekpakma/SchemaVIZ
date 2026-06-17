@@ -24,15 +24,11 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
     <section className="border-t border-border pb-4 pt-7 text-foreground">
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
-          <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-            <span className="h-px w-5 bg-brand" />
-            {t('home.promoted.kicker')}
-          </span>
-          <h2 className="mt-1.5 text-xl font-semibold tracking-tight">
+          <h2 className="text-xl font-semibold tracking-tight">
             {t('home.promoted.title')}
           </h2>
         </div>
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+        <span className="text-[12.5px] text-muted-foreground">
           {t('home.count.featured', { count: promoted.length })}
         </span>
       </div>
@@ -40,7 +36,7 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
       <div className="grid grid-cols-[1.4fr_1fr] gap-4">
         <button
           type="button"
-          className="group grid min-h-[220px] cursor-pointer grid-cols-2 overflow-hidden rounded-[14px] border border-border bg-card text-left text-card-foreground shadow-[0_8px_24px_color-mix(in_oklab,var(--brand)_8%,transparent)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(0,0,0,0.10)]"
+          className="group grid min-h-[220px] cursor-pointer grid-cols-2 overflow-hidden rounded-[10px] border border-border bg-card text-left text-card-foreground transition-colors duration-150 hover:border-muted-foreground/45"
           onClick={() => onOpen(featured)}
         >
           <div className="border-r border-border bg-muted">
@@ -75,7 +71,7 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
               </span>
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11.5px] text-muted-foreground">
+              <span className="inline-flex items-center rounded-[6px] bg-muted px-2 py-0.5 text-[11.5px] text-muted-foreground">
                 {t(`home.status.${featured.status}`)}
               </span>
               {featured.sampleRecordDisplayName ? (
@@ -94,7 +90,7 @@ export function PromotedRow({ templates, onOpen }: PromotedRowProps) {
             <button
               key={template.id}
               type="button"
-              className="group/item grid cursor-pointer grid-cols-[72px_1fr_auto] items-center gap-3 rounded-[14px] border border-border bg-card px-3.5 py-2.5 text-left text-card-foreground transition-all duration-100 hover:translate-x-0.5 hover:border-muted-foreground/45"
+              className="group/item grid cursor-pointer grid-cols-[72px_1fr_auto] items-center gap-3 rounded-[10px] border border-border bg-card px-3.5 py-2.5 text-left text-card-foreground transition-colors duration-100 hover:border-muted-foreground/45"
               onClick={() => onOpen(template)}
             >
               <div className="h-12 overflow-hidden rounded-lg border border-border bg-muted">

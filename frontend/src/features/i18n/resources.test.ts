@@ -25,6 +25,17 @@ const exportKeys = [
   'transparentBackground',
 ] as const
 
+const aboutKeys = [
+  'app',
+  'backend',
+  'description',
+  'frontend',
+  'loading',
+  'open',
+  'title',
+  'unavailable',
+] as const
+
 describe('i18n resources', () => {
   it('defaults to English unless another locale is selected', () => {
     expect(DEFAULT_LOCALE).toBe('en')
@@ -40,6 +51,16 @@ describe('i18n resources', () => {
     expect(resources.de.translation.canvas.export.title).toBe(
       'Diagramm exportieren',
     )
+  })
+
+  it('provides about dialog copy in English and German', () => {
+    for (const key of aboutKeys) {
+      expect(resources.en.translation.about[key]).toBeTruthy()
+      expect(resources.de.translation.about[key]).toBeTruthy()
+    }
+
+    expect(resources.en.translation.about.frontend).toBe('Frontend')
+    expect(resources.de.translation.about.backend).toBe('Backend')
   })
 
   it('keeps export dialog visible copy in resource files', () => {

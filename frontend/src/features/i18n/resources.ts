@@ -15,6 +15,16 @@ export const resources = {
       preferences: {
         label: 'Einstellungen',
       },
+      about: {
+        app: 'App',
+        backend: 'Backend',
+        description: 'Versionsinformationen für diese SchemaVIZ-Installation.',
+        frontend: 'Frontend',
+        loading: 'Wird geladen...',
+        open: 'Über SchemaVIZ',
+        title: 'Über SchemaVIZ',
+        unavailable: 'Nicht verfügbar',
+      },
       filterImpact: {
         checking: 'Filterauswirkung wird geprüft...',
         exportNotice:
@@ -489,6 +499,16 @@ export const resources = {
       },
       preferences: {
         label: 'Preferences',
+      },
+      about: {
+        app: 'App',
+        backend: 'Backend',
+        description: 'Version information for this SchemaVIZ installation.',
+        frontend: 'Frontend',
+        loading: 'Loading...',
+        open: 'About SchemaVIZ',
+        title: 'About SchemaVIZ',
+        unavailable: 'Unavailable',
       },
       filterImpact: {
         checking: 'Checking filter impact...',

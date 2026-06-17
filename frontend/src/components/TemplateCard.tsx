@@ -26,9 +26,8 @@ export function TemplateCard({
       type="button"
       className={cn(
         'group flex cursor-pointer flex-col overflow-hidden rounded-[10px] border border-border bg-card text-left text-card-foreground transition-all duration-150',
-        'hover:-translate-y-0.5 hover:border-muted-foreground/45 hover:shadow-[0_18px_40px_rgba(0,0,0,0.08),0_2px_6px_rgba(0,0,0,0.04)]',
-        large &&
-          'grid grid-rows-[220px_auto] border-border shadow-[0_22px_60px_rgba(0,0,0,0.10)]',
+        'hover:border-muted-foreground/45',
+        large && 'grid grid-rows-[220px_auto] border-border',
         className,
       )}
       onClick={onClick}
@@ -49,10 +48,10 @@ export function TemplateCard({
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="text-foreground">{template.author}</span>
           <span className="h-3 w-px bg-border" />
-          <span className="font-mono text-[11px]">
+          <span>
             {t('home.count.nodes', { count: template.nodeCount })}
           </span>
-          <span className="font-mono text-[11px]">
+          <span>
             {t('home.count.edges', { count: template.edgeCount })}
           </span>
           <PromotionBadge promotion={template.promotion} compact />
@@ -72,7 +71,7 @@ export function TemplateCard({
         )}
         {large && template.sampleRecordDisplayName && (
           <div className="mt-2">
-            <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="text-[12px] text-muted-foreground">
               {t('home.card.sampleRecord')}
             </span>
             <div className="mt-1.5 inline-flex max-w-full border-l-2 border-brand bg-brand-muted py-0.5 pl-2 pr-2 text-[11.5px] text-brand">
