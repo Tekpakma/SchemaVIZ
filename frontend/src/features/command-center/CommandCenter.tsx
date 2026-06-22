@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useEffectEvent, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Bot, Search } from 'lucide-react'
@@ -13,6 +13,10 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
+import {
+  RELEASE_FEATURES,
+  isReleaseFeatureEnabled,
+} from '@/config/releaseFeatures'
 import { cn } from '@/lib/utils'
 import {
   AI_ACTIONS,
@@ -44,31 +48,35 @@ export function CommandCenter({ open, onOpenChange }: CommandCenterProps) {
   const navigate = useNavigate()
   const [mode, setMode] = useState<CommandCenterMode>('search')
   const [query, setQuery] = useState('')
+  const changeOpenState = useEffectEvent(onOpenChange)
 
-  const templatesQuery = useQuery(COMMAND_CENTER_QUERIES.templates(open))
-  const drawingsQuery = useQuery(COMMAND_CENTER_QUERIES.drawings(open))
-  const modelsQuery = useQuery(COMMAND_CENTER_QUERIES.models(open))
+  const { data: templates = [], isLoading: templatesLoading } = useQuery(
+    COMMAND_CENTER_QUERIES.templates(open),
+  )
+  const { data: drawings = [], isLoading: drawingsLoading } = useQuery(
+    COMMAND_CENTER_QUERIES.drawings(open && RELEASE_FEATURES.freedraw),
+  )
+  const { data: models = [], isLoading: modelsLoading } = useQuery(
+    COMMAND_CENTER_QUERIES.models(open && RELEASE_FEATURES.schemaDiscovery),
+  )
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!shouldToggleCommandCenter(event)) return
       event.preventDefault()
-      onOpenChange(!open)
+      changeOpenState(!open)
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onOpenChange, open])
+  }, [open])
 
-  const searchItems = useMemo(
-    () => [
-      ...SEARCH_ACTIONS,
-      ...createTemplateCommandItems(templatesQuery.data ?? []),
-      ...createDrawingCommandItems(drawingsQuery.data ?? []),
-      ...createModelCommandItems(modelsQuery.data ?? []),
-    ],
-    [drawingsQuery.data, modelsQuery.data, templatesQuery.data],
-  )
+  const searchItems = [
+    ...SEARCH_ACTIONS,
+    ...createTemplateCommandItems(templates),
+    ...createDrawingCommandItems(drawings),
+    ...createModelCommandItems(models),
+  ]
 
   const activeItems = mode === 'search' ? searchItems : AI_ACTIONS
   const filteredItems = filterCommandCenterItems(activeItems, query)
@@ -79,6 +87,8 @@ export function CommandCenter({ open, onOpenChange }: CommandCenterProps) {
   }
 
   function runItem(item: CommandCenterItem) {
+    if (item.feature && !isReleaseFeatureEnabled(item.feature)) return
+
     if (item.id === 'ai:ask') {
       setMode('ai')
       return
@@ -111,10 +121,7 @@ export function CommandCenter({ open, onOpenChange }: CommandCenterProps) {
   }
 
   const hasLoadingSources =
-    mode === 'search' &&
-    (templatesQuery.isLoading ||
-      drawingsQuery.isLoading ||
-      modelsQuery.isLoading)
+    mode === 'search' && (templatesLoading || drawingsLoading || modelsLoading)
 
   return (
     <CommandDialog
@@ -133,6 +140,7 @@ export function CommandCenter({ open, onOpenChange }: CommandCenterProps) {
         />
         <ModeButton
           active={mode === 'ai'}
+          disabled={!RELEASE_FEATURES.ai}
           icon={Bot}
           label={t('commandCenter.modes.ai')}
           onClick={() => setMode('ai')}
@@ -194,10 +202,23 @@ export function CommandCenter({ open, onOpenChange }: CommandCenterProps) {
                     ...item.keywords,
                   ].join(' ')}
                   onSelect={() => runItem(item)}
+                  disabled={
+                    item.feature
+                      ? !isReleaseFeatureEnabled(item.feature)
+                      : false
+                  }
                   className="items-start gap-3"
                 >
                   <item.icon className="mt-0.5 size-4" />
-                  <ItemCopy title={item.title} subtitle={item.subtitle} />
+                  <ItemCopy
+                    title={item.title}
+                    subtitle={item.subtitle}
+                    unavailable={
+                      item.feature
+                        ? !isReleaseFeatureEnabled(item.feature)
+                        : false
+                    }
+                  />
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -210,18 +231,29 @@ export function CommandCenter({ open, onOpenChange }: CommandCenterProps) {
 
 type ModeButtonProps = {
   active: boolean
+  disabled?: boolean
   icon: typeof Search
   label: string
   onClick: () => void
 }
 
-function ModeButton({ active, icon: Icon, label, onClick }: ModeButtonProps) {
+function ModeButton({
+  active,
+  disabled = false,
+  icon: Icon,
+  label,
+  onClick,
+}: ModeButtonProps) {
+  const { t } = useTranslation()
+
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
+      title={disabled ? t('commandCenter.comingSoon') : undefined}
       className={cn(
-        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+        'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground',
         active && 'bg-accent text-foreground',
       )}
     >
@@ -234,15 +266,25 @@ function ModeButton({ active, icon: Icon, label, onClick }: ModeButtonProps) {
 type ItemCopyProps = {
   title: string
   subtitle: string
+  unavailable?: boolean
 }
 
-function ItemCopy({ title, subtitle }: ItemCopyProps) {
+function ItemCopy({ title, subtitle, unavailable = false }: ItemCopyProps) {
+  const { t } = useTranslation()
+
   return (
-    <span className="min-w-0">
-      <span className="block truncate font-medium">{title}</span>
-      <span className="block truncate text-xs text-muted-foreground">
-        {subtitle}
+    <span className="flex min-w-0 flex-1 items-start gap-3">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{title}</span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {subtitle}
+        </span>
       </span>
+      {unavailable ? (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {t('commandCenter.comingSoon')}
+        </span>
+      ) : null}
     </span>
   )
 }

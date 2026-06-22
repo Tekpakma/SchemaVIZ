@@ -80,7 +80,7 @@ export function TemplateDetailPanel({
   const isEditable = canEditTemplate(template)
   const canPickRecord = Boolean(template.shareSlug && rootModel)
 
-  const { data: recordsData } = useQuery({
+  const { data: recordsData, isLoading: recordsLoading } = useQuery({
     ...SCHEMA_QUERIES.records({
       appLabel: rootModel?.appLabel ?? '',
       modelName: rootModel?.modelName ?? '',
@@ -295,7 +295,7 @@ export function TemplateDetailPanel({
         >
           <CommandInput placeholder={t('home.detail.searchRecords')} />
           <CommandList>
-            {recordsQuery.isLoading ? (
+            {recordsLoading ? (
               <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
                 {t('home.detail.loadingRecords')}

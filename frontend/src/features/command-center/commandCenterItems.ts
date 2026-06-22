@@ -18,6 +18,7 @@ import type {
   GenerationTemplateList,
   ModelInfo,
 } from '@/api/contracts'
+import type { ReleaseFeature } from '@/config/releaseFeatures'
 
 export type CommandCenterMode = 'search' | 'ai'
 
@@ -72,6 +73,7 @@ export type CommandCenterItem = {
   icon: LucideIcon
   keywords: string[]
   actionId?: CommandCenterActionId
+  feature?: ReleaseFeature
   route?: CommandCenterRouteTarget
 }
 
@@ -93,6 +95,7 @@ export const SEARCH_ACTIONS: CommandCenterItem[] = [
     icon: PenLine,
     keywords: ['canvas', 'drawing', 'landscape', 'diagram'],
     actionId: 'create-freedraw',
+    feature: 'freedraw',
     route: COMMAND_CENTER_ROUTE_TARGETS.freedraw,
   },
   {
@@ -104,6 +107,7 @@ export const SEARCH_ACTIONS: CommandCenterItem[] = [
     icon: Network,
     keywords: ['schema', 'models', 'relations', 'graph'],
     actionId: 'open-schema-discovery',
+    feature: 'schemaDiscovery',
     route: COMMAND_CENTER_ROUTE_TARGETS.schemaDiscovery,
   },
   {
@@ -140,6 +144,7 @@ export const AI_ACTIONS: CommandCenterItem[] = [
     icon: Bot,
     keywords: ['chat', 'assistant', 'question'],
     actionId: 'ai-ask',
+    feature: 'ai',
   },
   {
     id: 'ai:explain-schema',
@@ -150,6 +155,7 @@ export const AI_ACTIONS: CommandCenterItem[] = [
     icon: Search,
     keywords: ['model', 'field', 'relation'],
     actionId: 'ai-explain-schema',
+    feature: 'ai',
     route: COMMAND_CENTER_ROUTE_TARGETS.schemaDiscovery,
   },
   {
@@ -161,6 +167,7 @@ export const AI_ACTIONS: CommandCenterItem[] = [
     icon: Sparkles,
     keywords: ['builder', 'template', 'draft'],
     actionId: 'ai-create-draft',
+    feature: 'ai',
     route: COMMAND_CENTER_ROUTE_TARGETS.builder,
   },
   {
@@ -172,6 +179,7 @@ export const AI_ACTIONS: CommandCenterItem[] = [
     icon: Route,
     keywords: ['path', 'route', 'relations'],
     actionId: 'ai-suggest-traversal',
+    feature: 'ai',
     route: COMMAND_CENTER_ROUTE_TARGETS.schemaDiscovery,
   },
   {
@@ -183,6 +191,7 @@ export const AI_ACTIONS: CommandCenterItem[] = [
     icon: GitFork,
     keywords: ['schema', 'model', 'records'],
     actionId: 'ai-find-relationships',
+    feature: 'ai',
     route: COMMAND_CENTER_ROUTE_TARGETS.schemaDiscovery,
   },
 ]
@@ -269,6 +278,7 @@ export function createDrawingCommandItems(
     subtitle: drawing.description || 'Freedraw landscape',
     icon: Map,
     keywords: ['drawing', 'freedraw', 'landscape', drawing.description ?? ''],
+    feature: 'freedraw',
     route: {
       to: '/freedraw',
       search: drawing.id
@@ -305,6 +315,7 @@ export function createModelCommandItems(
         model.appVerboseName,
         model.verboseNamePlural,
       ],
+      feature: 'schemaDiscovery',
       route: {
         to: '/schema-discovery',
         search: {

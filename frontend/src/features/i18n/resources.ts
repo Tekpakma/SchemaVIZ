@@ -30,6 +30,7 @@ export const resources = {
         aiPromptSubtitle: 'KI-Modus aktiv',
         aiPromptTitle: 'Fragen: {{query}}',
         description: 'Suchen und Workflows starten.',
+        comingSoon: 'Demnächst',
         empty: 'Keine Treffer.',
         groups: {
           ai: 'KI',
@@ -569,6 +570,7 @@ export const resources = {
         aiPromptSubtitle: 'AI mode active',
         aiPromptTitle: 'Ask: {{query}}',
         description: 'Search and start workflows.',
+        comingSoon: 'Coming soon',
         empty: 'No results found.',
         groups: {
           ai: 'AI',

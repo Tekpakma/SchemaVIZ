@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import {
   Braces,
   Columns3,
@@ -17,6 +17,7 @@ import * as zod from 'zod'
 import type { ModelInfo } from '@/api/contracts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { RELEASE_FEATURES } from '@/config/releaseFeatures'
 import { BUILDER_SCHEMA_QUERIES } from '@/features/builder/schemaModelQueries'
 import {
   filterSchemaModels,
@@ -34,6 +35,9 @@ const schemaDiscoverySearchSchema = zod.object({
 export const Route = createFileRoute('/_app/schema-discovery')({
   validateSearch: schemaDiscoverySearchSchema,
   ssr: false,
+  beforeLoad: () => {
+    if (!RELEASE_FEATURES.schemaDiscovery) throw redirect({ to: '/' })
+  },
   component: SchemaDiscoveryRoute,
 })
 
@@ -42,18 +46,15 @@ function SchemaDiscoveryRoute() {
   const navigate = useNavigate()
   const { model: selectedModelId } = Route.useSearch()
   const [query, setQuery] = useState('')
-  const modelsQuery = useQuery(BUILDER_SCHEMA_QUERIES.models())
-  const models = modelsQuery.data ?? []
-  const filteredModels = useMemo(
-    () => filterSchemaModels(models, query),
-    [models, query],
-  )
-  const groupedModels = useMemo(
-    () => groupSchemaModelsByApp(filteredModels),
-    [filteredModels],
-  )
+  const {
+    data: models = [],
+    isError: modelsError,
+    isLoading: modelsLoading,
+  } = useQuery(BUILDER_SCHEMA_QUERIES.models())
+  const filteredModels = filterSchemaModels(models, query)
+  const groupedModels = groupSchemaModelsByApp(filteredModels)
   const selectedModel = findSchemaModel(models, selectedModelId ?? null)
-  const stats = useMemo(() => getSchemaDiscoveryStats(models), [models])
+  const stats = getSchemaDiscoveryStats(models)
 
   function selectModel(model: ModelInfo) {
     navigate({
@@ -87,8 +88,8 @@ function SchemaDiscoveryRoute() {
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
         <ModelRail
           groups={groupedModels}
-          isError={modelsQuery.isError}
-          isLoading={modelsQuery.isLoading}
+          isError={modelsError}
+          isLoading={modelsLoading}
           selectedModelId={selectedModelId}
           onSelectModel={selectModel}
         />
@@ -98,7 +99,7 @@ function SchemaDiscoveryRoute() {
             <ModelRelationMap model={selectedModel} />
           ) : (
             <SchemaOverview
-              isLoading={modelsQuery.isLoading}
+              isLoading={modelsLoading}
               stats={stats}
               visibleModelCount={filteredModels.length}
             />

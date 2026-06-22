@@ -14,7 +14,7 @@ export function NavbarSearch({ onOpen }: NavbarSearchProps) {
     >
       <Search className="size-[13px] shrink-0" />
       <span className="hidden min-w-0 flex-1 truncate text-[13px] md:block">
-        Find a template, landscape, or model...
+        Find a template or action...
       </span>
       <kbd className="hidden shrink-0 rounded border border-border bg-background px-1.5 py-px font-mono text-[10px] text-muted-foreground md:inline">
         Ctrl K

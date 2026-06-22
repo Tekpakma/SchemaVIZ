@@ -5,6 +5,7 @@ import type {
   GenerationTemplateList,
   ModelInfo,
 } from '@/api/contracts'
+import { RELEASE_FEATURES } from '@/config/releaseFeatures'
 import {
   AI_ACTIONS,
   COMMAND_CENTER_ROUTE_TARGETS,
@@ -143,6 +144,23 @@ describe('command center items', () => {
       'ai-find-relationships',
     ])
     expect(AI_ACTIONS.every((item) => item.group === 'ai')).toBe(true)
+    expect(AI_ACTIONS.every((item) => item.feature === 'ai')).toBe(true)
+  })
+
+  it('keeps unfinished workspaces disabled for the release', () => {
+    expect(RELEASE_FEATURES).toEqual({
+      ai: false,
+      freedraw: false,
+      schemaDiscovery: false,
+    })
+    expect(
+      SEARCH_ACTIONS.find((item) => item.actionId === 'create-freedraw')
+        ?.feature,
+    ).toBe('freedraw')
+    expect(
+      SEARCH_ACTIONS.find((item) => item.actionId === 'open-schema-discovery')
+        ?.feature,
+    ).toBe('schemaDiscovery')
   })
 
   it('detects Ctrl K and Meta K without hijacking shifted shortcuts', () => {

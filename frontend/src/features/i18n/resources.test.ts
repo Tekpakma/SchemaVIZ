@@ -40,6 +40,7 @@ const commandCenterKeys = [
   'aiPlaceholder',
   'aiPromptSubtitle',
   'aiPromptTitle',
+  'comingSoon',
   'description',
   'empty',
   'loading',

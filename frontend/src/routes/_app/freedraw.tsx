@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import {
   Download,
   Hand,
@@ -10,6 +10,7 @@ import {
 import * as zod from 'zod'
 
 import { Button } from '@/components/ui/button'
+import { RELEASE_FEATURES } from '@/config/releaseFeatures'
 
 const freedrawSearchSchema = zod.object({
   drawingId: zod.string().optional(),
@@ -18,6 +19,9 @@ const freedrawSearchSchema = zod.object({
 export const Route = createFileRoute('/_app/freedraw')({
   validateSearch: freedrawSearchSchema,
   ssr: false,
+  beforeLoad: () => {
+    if (!RELEASE_FEATURES.freedraw) throw redirect({ to: '/' })
+  },
   component: FreedrawRoute,
 })
 
