@@ -10,6 +10,7 @@ import type {
   ModelInfo,
   QueryRecordRequestRequest,
   QueryRecordsRequestRequest,
+  QueryRecordsResponse,
 } from '@/api/contracts'
 import { splitModelId, toModelId } from './modelUtils'
 import type { SchemaModelRef } from './modelUtils'
@@ -37,6 +38,73 @@ export type RelationPathTarget = {
 }
 
 const SCHEMA_KEY = ['schema'] as const
+
+export const QUERY_RECORDS_PAGE_SIZE = 100
+
+function stableQueryPart(value: unknown) {
+  return value == null ? '' : JSON.stringify(value)
+}
+
+function recordsQueryKey(params: QueryRecordsRequestRequest) {
+  return [
+    ...SCHEMA_KEY,
+    'records',
+    params.appLabel,
+    params.modelName,
+    stableQueryPart(params.filterFields),
+    stableQueryPart(params.selectFields),
+    params.page ?? 1,
+    params.pageSize ?? '',
+  ] as const
+}
+
+function recordPagesQueryKey(params: QueryRecordsRequestRequest) {
+  return [
+    ...SCHEMA_KEY,
+    'records-pages',
+    params.appLabel,
+    params.modelName,
+    stableQueryPart(params.filterFields),
+    stableQueryPart(params.selectFields),
+    params.page ?? 1,
+    params.pageSize ?? '',
+  ] as const
+}
+
+export async function fetchRecordsPage(
+  params: QueryRecordsRequestRequest,
+): Promise<QueryRecordsResponse> {
+  const response = await schemaVizQueryRecordsCreate(params)
+  if (response.status !== 200) {
+    throw new Error(`Failed to fetch records: ${response.status}`)
+  }
+  return response.data
+}
+
+export async function fetchAllRecordPages(
+  client: QueryClient,
+  params: QueryRecordsRequestRequest,
+): Promise<QueryRecordsResponse['results']> {
+  const results: QueryRecordsResponse['results'] = []
+  const seenPages = new Set<number>()
+  let page = params.page ?? 1
+
+  while (!seenPages.has(page)) {
+    seenPages.add(page)
+    const pageData = await client.fetchQuery(
+      SCHEMA_QUERIES.records({
+        ...params,
+        page,
+        pageSize: params.pageSize ?? QUERY_RECORDS_PAGE_SIZE,
+      }),
+    )
+    results.push(...pageData.results)
+    if (pageData.next == null) break
+    page = pageData.next
+  }
+
+  return results
+}
 
 export const SCHEMA_QUERIES = {
   _base: queryOptions({
@@ -89,23 +157,17 @@ export const SCHEMA_QUERIES = {
 
   records: (params: QueryRecordsRequestRequest) =>
     queryOptions({
-      queryKey: [
-        ...SCHEMA_QUERIES._base.queryKey,
-        'records',
-        params.appLabel,
-        params.modelName,
-        JSON.stringify(params.filterFields),
-      ],
-      queryFn: async () => {
-        const response = await schemaVizQueryRecordsCreate(params)
-        if (response.status !== 200) {
-          throw new Error(`Failed to fetch records: ${response.status}`)
-        }
-        return response.data
-      },
+      queryKey: recordsQueryKey(params),
+      queryFn: () => fetchRecordsPage(params),
       staleTime: 1000 * 60 * 5,
     }),
 
+  recordPages: (params: QueryRecordsRequestRequest) =>
+    queryOptions({
+      queryKey: recordPagesQueryKey(params),
+      queryFn: () => fetchRecordsPage(params),
+      staleTime: 1000 * 60 * 5,
+    }),
   /**
    * Walks a chain of relations (e.g. `["author", "company"]`) starting from
    * `rootRef`, fetching each intermediate model's schema along the way.
@@ -386,13 +448,12 @@ async function fetchReverseRelation(
     .map((record) => String(record.fields.id ?? record.id))
     .filter(Boolean)
     .map(async (currentRecordId) => {
-      const relatedRecords = await client.fetchQuery(
-        SCHEMA_QUERIES.records({
-          ...relatedModel,
-          filterFields: { [relation.relatedName]: currentRecordId },
-        }),
-      )
-      return relatedRecords.results.map((relatedRecord) => ({
+      const relatedRecords = await fetchAllRecordPages(client, {
+        ...relatedModel,
+        filterFields: { [relation.relatedName]: currentRecordId },
+        pageSize: QUERY_RECORDS_PAGE_SIZE,
+      })
+      return relatedRecords.map((relatedRecord) => ({
         id: String(relatedRecord.fields.id ?? ''),
         fields: relatedRecord.fields,
       }))

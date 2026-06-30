@@ -4,9 +4,14 @@ import z from 'zod'
 export const appEnvSchema = z.object({})
 
 export const serverAppEnvSchema = appEnvSchema.extend({
-  SCHEMA_VIZ_AUTH_MODE: z.enum(['dev', 'oidc']).default('dev'),
+  SCHEMA_VIZ_AUTH_MODE: z
+    .enum(['dev', 'oidc', 'session', 'django-session'])
+    .default('dev'),
   SCHEMA_VIZ_AUTH_SECRET: z.string().optional(),
-  SCHEMA_VIZ_SERVER_BASE_URL: z.string().default('http://localhost:8000/schema-viz'),
+  SCHEMA_VIZ_DJANGO_LOGIN_URL: z.string().optional(),
+  SCHEMA_VIZ_SERVER_BASE_URL: z
+    .string()
+    .default('http://localhost:8000/schema-viz'),
   SCHEMA_VIZ_OIDC_ISSUER: z.string().optional(),
   SCHEMA_VIZ_OIDC_CLIENT_ID: z.string().optional(),
   SCHEMA_VIZ_OIDC_CLIENT_SECRET: z.string().optional(),

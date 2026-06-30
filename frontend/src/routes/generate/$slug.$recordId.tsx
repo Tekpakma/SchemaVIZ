@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -6,13 +6,17 @@ import { DownloadIcon, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import { BuilderPreview } from '@/features/builder/BuilderPreview'
 import { FilterImpactNotice } from '@/features/builder/FilterImpactNotice'
 import { hasFilterImpact } from '@/features/builder/generationDiagnostics'
 import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQueries'
 import { createRecipeFromTemplate } from '@/features/builder/templateRecipe'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
 import { DeleteGenerationTemplateButton } from '@/features/builder/DeleteGenerationTemplateButton'
+
+const BuilderPreview = lazy(async () => {
+  const module = await import('@/features/builder/BuilderPreview')
+  return { default: module.BuilderPreview }
+})
 
 const searchSchema = z.object({
   embed: z.coerce.number().optional().default(0),
@@ -54,7 +58,7 @@ function GenerateViewPage() {
     SHARED_GENERATION_QUERIES.run(slug, recordId),
   )
 
-  const recipe = useMemo(() => createRecipeFromTemplate(template), [template])
+  const recipe = createRecipeFromTemplate(template)
   const exportFilterNotice = hasFilterImpact(runData)
     ? t('filterImpact.exportNotice')
     : undefined
@@ -62,11 +66,13 @@ function GenerateViewPage() {
   if (isEmbed) {
     return (
       <div className="h-dvh w-dvw overflow-hidden bg-background">
-        <BuilderPreview
-          recipe={recipe}
-          generationResponse={runData}
-          interactionMode="static"
-        />
+        <Suspense fallback={<GenerateViewPending />}>
+          <BuilderPreview
+            recipe={recipe}
+            generationResponse={runData}
+            interactionMode="static"
+          />
+        </Suspense>
       </div>
     )
   }
@@ -93,15 +99,17 @@ function GenerateViewPage() {
       </header>
       <main className="relative flex min-h-0 flex-1 flex-col">
         <FilterImpactNotice response={runData} />
-        <BuilderPreview
-          className="min-h-0 flex-1"
-          exportFilterNotice={exportFilterNotice}
-          exportOpen={exportOpen}
-          onExportOpenChange={setExportOpen}
-          recipe={recipe}
-          generationResponse={runData}
-          interactionMode="viewport"
-        />
+        <Suspense fallback={<GenerateViewPending />}>
+          <BuilderPreview
+            className="min-h-0 flex-1"
+            exportFilterNotice={exportFilterNotice}
+            exportOpen={exportOpen}
+            onExportOpenChange={setExportOpen}
+            recipe={recipe}
+            generationResponse={runData}
+            interactionMode="viewport"
+          />
+        </Suspense>
       </main>
     </div>
   )

@@ -35,7 +35,7 @@ export function PromotionBadge({
       )}
     >
       <span className="text-[11px] leading-none">{config.icon}</span>
-      {!compact && t(config.labelKey)}
+      {t(config.labelKey)}
     </span>
   )
 }

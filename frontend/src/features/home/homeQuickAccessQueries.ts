@@ -1,14 +1,20 @@
 import { queryOptions } from '@tanstack/react-query'
+import * as zod from 'zod'
 
 import {
+  GenerationTemplateList,
   GenerationTemplateOwnRecentQuickAccess,
   PaginatedGenerationTemplateQuickAccessEntryList,
 } from '@/api/contracts'
 import {
-  schemaVizGenerationTemplateQuickAccessFeaturedList,
-  schemaVizGenerationTemplateQuickAccessRetrieve,
+  getSchemaVizGenerationTemplateQuickAccessFeaturedListUrl,
+  getSchemaVizGenerationTemplateQuickAccessRetrieveUrl,
 } from '@/api/generated/schema-viz'
 import type { SchemaVizGenerationTemplateQuickAccessFeaturedListParams } from '@/api/generated/schema-viz'
+import {
+  createHomeTemplateEntryFromListTemplate,
+  type GenerationTemplateListWithSample,
+} from './homeTemplatePreview'
 
 const HOME_QUICK_ACCESS_KEY = ['home', 'quick-access'] as const
 export const HOME_FEATURED_TEMPLATE_LIMIT = 8
@@ -23,6 +29,32 @@ function getErrorMessage(responseData: unknown, status: number) {
   return `Failed to fetch home templates: ${status}`
 }
 
+async function parseQuickAccessResponseBody(response: Response) {
+  if (response.status === 204) return undefined
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    return response.json()
+  }
+
+  const text = await response.text()
+  return text.length === 0 ? undefined : text
+}
+
+async function fetchHomeQuickAccess(url: string) {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      accept: 'application/json',
+    },
+  })
+
+  return {
+    data: await parseQuickAccessResponseBody(response),
+    headers: response.headers,
+    status: response.status,
+  }
+}
 export class HomeQuickAccessRequestError extends Error {
   constructor(
     message: string,
@@ -32,6 +64,16 @@ export class HomeQuickAccessRequestError extends Error {
     this.name = 'HomeQuickAccessRequestError'
   }
 }
+
+const GenerationTemplateSample = zod.object({
+  recordId: zod.string().nullable(),
+  recordDisplayName: zod.string().nullable(),
+  status: zod.enum(['ready', 'no_record', 'error']),
+  run: zod.unknown().optional(),
+})
+const GenerationTemplateListWithSampleSchema = GenerationTemplateList.extend({
+  sample: GenerationTemplateSample.optional(),
+})
 
 export function shouldRetryHomeQuickAccessRequest(
   failureCount: number,
@@ -47,8 +89,33 @@ export function shouldRetryHomeQuickAccessRequest(
   return failureCount < 3
 }
 
+async function fetchAllTemplates() {
+  const response = await fetchHomeQuickAccess(
+    '/schema-viz/generation-templates/?includeSample=true',
+  )
+  const status = response.status as number
+
+  if (status !== 200) {
+    throw new HomeQuickAccessRequestError(
+      getErrorMessage(response.data, status),
+      status,
+    )
+  }
+
+  return zod
+    .array(GenerationTemplateListWithSampleSchema)
+    .parse(response.data)
+    .map((template) =>
+      createHomeTemplateEntryFromListTemplate(
+        template as GenerationTemplateListWithSample,
+      ),
+    )
+}
+
 async function fetchOwnRecentQuickAccess() {
-  const response = await schemaVizGenerationTemplateQuickAccessRetrieve()
+  const response = await fetchHomeQuickAccess(
+    getSchemaVizGenerationTemplateQuickAccessRetrieveUrl(),
+  )
   const status = response.status as number
 
   if (status !== 200) {
@@ -64,8 +131,9 @@ async function fetchOwnRecentQuickAccess() {
 async function fetchFeaturedQuickAccess(
   params: SchemaVizGenerationTemplateQuickAccessFeaturedListParams,
 ) {
-  const response =
-    await schemaVizGenerationTemplateQuickAccessFeaturedList(params)
+  const response = await fetchHomeQuickAccess(
+    getSchemaVizGenerationTemplateQuickAccessFeaturedListUrl(params),
+  )
   const status = response.status as number
 
   if (status !== 200) {
@@ -87,6 +155,15 @@ export const HOME_QUICK_ACCESS_QUERIES = {
     queryOptions({
       queryKey: [...HOME_QUICK_ACCESS_KEY, 'own-recent'] as const,
       queryFn: fetchOwnRecentQuickAccess,
+      retry: shouldRetryHomeQuickAccessRequest,
+      retryOnMount: false,
+      staleTime: 1000 * 60 * 5,
+    }),
+
+  all: () =>
+    queryOptions({
+      queryKey: [...HOME_QUICK_ACCESS_KEY, 'all'] as const,
+      queryFn: fetchAllTemplates,
       retry: shouldRetryHomeQuickAccessRequest,
       retryOnMount: false,
       staleTime: 1000 * 60 * 5,

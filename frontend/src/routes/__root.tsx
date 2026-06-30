@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import {
   HeadContent,
   ScriptOnce,
@@ -10,7 +11,6 @@ import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
 
 import { Toaster } from 'sonner'
 import { GlobalLoader } from '@/components/GlobalLoader'
-import { CanvasDevtoolsPanel } from '@/features/canvas/components/CanvasDevtoolsPanel'
 import { I18nProvider } from '@/features/i18n/useI18n'
 import { getLocalePreference } from '@/features/i18n/localeServerFns'
 import { ThemeProvider } from '@/features/theme/useTheme'
@@ -86,6 +86,11 @@ export const Route = createRootRouteWithContext<{
   shellComponent: RootDocument,
 })
 
+const CanvasDevtoolsPanel = lazy(async () => {
+  const module =
+    await import('@/features/canvas/components/CanvasDevtoolsPanel')
+  return { default: module.CanvasDevtoolsPanel }
+})
 const systemThemeScript = `
 try {
   var isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -108,7 +113,17 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     },
     {
       name: 'Canvas',
-      render: <CanvasDevtoolsPanel />,
+      render: (
+        <Suspense
+          fallback={
+            <div className="p-3 text-xs text-muted-foreground">
+              Loading canvas tools...
+            </div>
+          }
+        >
+          <CanvasDevtoolsPanel />
+        </Suspense>
+      ),
     },
   ]
 
@@ -129,11 +144,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <ThemeProvider initialTheme={theme}>
             <I18nProvider initialLocale={locale}>{children}</I18nProvider>
           </ThemeProvider>
-          <Toaster
-            position="bottom-right"
-            theme={resolvedTheme}
-            richColors
-          />
+          <Toaster position="bottom-right" theme={resolvedTheme} richColors />
           <TanStackDevtools
             config={{
               position: 'bottom-right',

@@ -106,6 +106,28 @@ class GenerationV2ApiTests(APITestCase):
         self.assertEqual(body["draftVersion"]["versionNumber"], 1)
         self.assertIsNone(body["publishedVersion"])
 
+    def test_list_include_sample_serializes_fresh_draft_template_run(self):
+        self.client.force_authenticate(self.owner)
+        create_response = self.client.post(
+            GENERATION_TEMPLATES_URL,
+            build_template_payload(name="Fresh Draft Template"),
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        template_id = create_response.json()["id"]
+
+        response = self.client.get(f"{GENERATION_TEMPLATES_URL}?includeSample=true")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        fresh_entry = next(entry for entry in body if entry["id"] == template_id)
+        self.assertEqual(fresh_entry["sample"]["status"], "ready")
+        self.assertEqual(fresh_entry["sample"]["recordId"], str(self.provider.pk))
+        self.assertEqual(
+            fresh_entry["sample"]["run"]["template"]["id"],
+            template_id,
+        )
+        self.assertEqual(fresh_entry["sample"]["run"]["sourceVersion"]["kind"], "template")
     def test_publish_snapshots_current_draft_and_enables_published_runs(self):
         self.client.force_authenticate(self.owner)
         create_response = self.client.post(

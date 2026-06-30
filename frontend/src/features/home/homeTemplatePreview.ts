@@ -2,8 +2,8 @@ import * as R from 'remeda'
 
 import { GenerationRunResponse } from '@/api/contracts'
 import type {
+  GenerationTemplateListOutput,
   GenerationTemplateQuickAccessEntryOutput,
-  GenerationTemplateRead,
 } from '@/api/contracts'
 import type {
   LayoutAlgorithm,
@@ -17,6 +17,7 @@ import type {
 import type {
   HomeTemplateFilter,
   HomeTemplatePreview,
+  HomeTemplateSource,
   PromotionLevel,
   TemplateHue,
 } from './types'
@@ -30,8 +31,27 @@ const LAYOUT_ALGORITHMS = new Set<LayoutAlgorithm>([
   'Radial',
   'Tree',
 ])
+type GenerationTemplateRead = GenerationTemplateListOutput
 type TemplateVersion = NonNullable<GenerationTemplateRead['draftVersion']>
 type RawDefinitionStep = TemplateVersion['definition']['stepsById'][string]
+export type HomeTemplateEntry = Omit<
+  GenerationTemplateQuickAccessEntryOutput,
+  'source' | 'run'
+> & {
+  run: unknown
+  source: HomeTemplateSource
+}
+
+export type GenerationTemplateSample = {
+  recordId: string | null
+  recordDisplayName: string | null
+  run?: unknown
+  status: HomeTemplatePreview['status']
+}
+
+export type GenerationTemplateListWithSample = GenerationTemplateListOutput & {
+  sample?: GenerationTemplateSample
+}
 
 type DefinitionStep = {
   childIds: string[]
@@ -226,16 +246,17 @@ function createPreviewRecipeFromTemplate(
   }
 }
 
-function getPromotion(
-  entry: GenerationTemplateQuickAccessEntryOutput,
-): PromotionLevel {
+function getPromotion(entry: HomeTemplateEntry): PromotionLevel {
   if (entry.template.featured.enabled || entry.source === 'featured') {
     return 'featured'
   }
   return entry.template.scope === 'global' ? 'system' : 'personal'
 }
 
-function getTemplateAuthor(template: GenerationTemplateRead, source: string) {
+function getTemplateAuthor(
+  template: GenerationTemplateRead,
+  source: HomeTemplateSource,
+) {
   const author =
     template.publishedBy?.displayName ??
     template.draftVersion?.createdBy?.displayName ??
@@ -245,17 +266,19 @@ function getTemplateAuthor(template: GenerationTemplateRead, source: string) {
   return source === 'own' ? 'You' : 'SchemaVIZ'
 }
 
-function getSourceLabel(entry: GenerationTemplateQuickAccessEntryOutput) {
-  return entry.source === 'own' ? 'Owned' : 'Featured'
+function getSourceLabel(entry: HomeTemplateEntry) {
+  if (entry.source === 'own') return 'Owned'
+  if (entry.source === 'featured') return 'Featured'
+  return 'Global'
 }
 
-function getStatusLabel(entry: GenerationTemplateQuickAccessEntryOutput) {
+function getStatusLabel(entry: HomeTemplateEntry) {
   if (entry.previewStatus === 'ready') return 'Ready'
   if (entry.previewStatus === 'no_record') return 'Needs record'
   return 'Preview issue'
 }
 
-function getNavigationTarget(entry: GenerationTemplateQuickAccessEntryOutput) {
+function getNavigationTarget(entry: HomeTemplateEntry) {
   const shareSlug = entry.template.shareSlug
   if (shareSlug && entry.previewStatus === 'ready' && entry.sampleRecordId) {
     return {
@@ -299,17 +322,43 @@ function readResultCounts(result: unknown) {
   }
 }
 
-function parseGenerationResponse(
-  entry: GenerationTemplateQuickAccessEntryOutput,
-) {
+function parseGenerationResponse(entry: HomeTemplateEntry) {
   if (entry.previewStatus !== 'ready' || !entry.run) return null
 
   const parsed = GenerationRunResponse.safeParse(entry.run)
   return parsed.success ? parsed.data : null
 }
 
+function getSourceForTemplate(
+  template: GenerationTemplateListOutput,
+): HomeTemplateSource {
+  if (template.ownedByCurrentUser) return 'own'
+  return template.featured.enabled ? 'featured' : 'global'
+}
+
+export function createHomeTemplateEntryFromListTemplate(
+  template: GenerationTemplateListWithSample,
+): HomeTemplateEntry {
+  const sample = template.sample
+  const run = sample?.run ?? null
+
+  return {
+    template,
+    source: getSourceForTemplate(template),
+    sampleRecordId: sample?.recordId ?? null,
+    sampleRecordDisplayName: sample?.recordDisplayName ?? null,
+    previewStatus: sample?.status ?? 'no_record',
+    run,
+    result:
+      run && typeof run === 'object'
+        ? ((run as Record<string, unknown>).result ?? null)
+        : null,
+    styleTemplates: [],
+  }
+}
+
 export function createHomeTemplatePreview(
-  entry: GenerationTemplateQuickAccessEntryOutput,
+  entry: HomeTemplateEntry,
 ): HomeTemplatePreview {
   const template = entry.template
   const recipe = createPreviewRecipeFromTemplate(template)
@@ -342,9 +391,7 @@ export function createHomeTemplatePreview(
   }
 }
 
-export function createHomeTemplatePreviews(
-  entries: GenerationTemplateQuickAccessEntryOutput[],
-) {
+export function createHomeTemplatePreviews(entries: HomeTemplateEntry[]) {
   return R.pipe(entries, R.map(createHomeTemplatePreview))
 }
 

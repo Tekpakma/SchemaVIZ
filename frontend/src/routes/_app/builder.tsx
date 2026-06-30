@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import * as zod from 'zod'
 
 import { InlineLoader } from '@/components/GlobalLoader'
-import { BuilderPage } from '@/features/builder/BuilderPage'
 import {
   getBuilderOpenIntentKey,
   openBuilderTabFromIntent,
@@ -13,6 +12,11 @@ import {
   GENERATION_TEMPLATE_QUERIES,
   isGenerationTemplateNotFoundError,
 } from '@/features/builder/generationTemplateQueries'
+
+const BuilderPage = lazy(async () => {
+  const module = await import('@/features/builder/BuilderPage')
+  return { default: module.BuilderPage }
+})
 
 const builderSearchSchema = zod.object({
   templateId: zod.string().optional(),
@@ -55,16 +59,19 @@ export const Route = createFileRoute('/_app/builder')({
 function BuilderRoute() {
   const { intent } = Route.useLoaderData()
   const intentKey = getBuilderOpenIntentKey(intent)
-  const [tabId, setTabId] = useState(() => openBuilderTabFromIntent(intent))
 
-  useEffect(() => {
-    setTabId(openBuilderTabFromIntent(intent))
-  }, [intent, intentKey])
+  return <BuilderRouteContent key={intentKey} intent={intent} />
+}
+
+function BuilderRouteContent({ intent }: { intent: BuilderOpenIntent }) {
+  const [tabId] = useState(() => openBuilderTabFromIntent(intent))
 
   return (
-    <BuilderPage
-      tabId={tabId}
-      template={intent.type === 'template' ? intent.template : null}
-    />
+    <Suspense fallback={<InlineLoader label="Loading builder..." />}>
+      <BuilderPage
+        tabId={tabId}
+        template={intent.type === 'template' ? intent.template : null}
+      />
+    </Suspense>
   )
 }

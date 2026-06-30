@@ -21,3 +21,4 @@ graphify-out/
 .graphify/
 .playwright-mcp/
 .claude/
+.tmp/

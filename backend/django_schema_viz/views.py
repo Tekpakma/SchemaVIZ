@@ -256,7 +256,12 @@ def resolve_generation_template_sample_record(
     return model._default_manager.all().first()
 
 
-def build_generation_template_sample_payload(request, template: GenerationTemplate):
+def build_generation_template_sample_payload(
+    request,
+    template: GenerationTemplate,
+    *,
+    serialize_nested: bool = False,
+):
     sample_record = resolve_generation_template_sample_record(
         template,
         user=request.user,
@@ -305,7 +310,7 @@ def build_generation_template_sample_payload(request, template: GenerationTempla
             ),
             root_model=version.root_model,
             layout_settings=version.layout_settings,
-            serialize_nested=False,
+            serialize_nested=serialize_nested,
         ),
     }
 
@@ -2061,7 +2066,9 @@ class GenerationTemplateViewSet(
         if include_sample:
             for item, template in zip(payload, queryset):
                 item["sample"] = build_generation_template_sample_payload(
-                    request, template
+                    request,
+                    template,
+                    serialize_nested=True,
                 )
 
         return Response(payload)

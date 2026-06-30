@@ -189,6 +189,33 @@ describe('builder template recipe conversion', () => {
     })
   })
 
+  it('uses explicit featured metadata when building a generation template payload', () => {
+    const recipe = {
+      ...createRecipeFromTemplate(createTemplate()),
+      models: [
+        {
+          id: 'provider',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'CloudProvider',
+          modelId: 'infrastructure.CloudProvider',
+          displayName: 'Cloud provider',
+          layerId: 'layer-provider',
+        },
+      ],
+    }
+
+    expect(
+      recipeToGenerationTemplateWriteRequest(recipe, {
+        featured: { enabled: true, rank: 2 },
+        scope: 'global',
+      }),
+    ).toMatchObject({
+      featured: { enabled: true, rank: 2 },
+      scope: 'global',
+    })
+  })
+
   it('round-trips style drafts through layout settings', () => {
     const styleDraft = {
       sourceTemplateId: 'style-source',

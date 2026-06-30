@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import {
   Check,
   Eye,
@@ -20,6 +19,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoading,
 } from '@/components/ui/command'
 import {
   DropdownMenu,
@@ -27,7 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
+import { usePaginatedRecords } from '@/features/lexical/dataReference/usePaginatedRecords'
 import type { BuilderDocumentActions } from '../builderWorkbench'
 import type { ExampleRecord, RecipeModel } from '../types'
 
@@ -65,17 +65,13 @@ function RecordPickerDialog({
 }: RecordPickerDialogProps) {
   const { t } = useTranslation()
 
-  const recordsQuery = useQuery(
-    SCHEMA_QUERIES.records({
-      appLabel: startModel.appLabel,
-      modelName: startModel.modelName,
-      page: 1,
-      pageSize: 50,
-    }),
-  )
+  const recordsQuery = usePaginatedRecords({
+    appLabel: startModel.appLabel,
+    modelName: startModel.modelName,
+    page: 1,
+  })
 
-  const records = recordsQuery.data?.results ?? []
-
+  const records = recordsQuery.records
   return (
     <CommandDialog
       title={t('builder.examples.pickerTitle')}
@@ -89,10 +85,10 @@ function RecordPickerDialog({
       <CommandInput placeholder={t('builder.examples.pickerSearch')} />
       <CommandList>
         {recordsQuery.isLoading && (
-          <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+          <CommandLoading>
             <Loader2 className="size-4 animate-spin" />
             {t('builder.examples.loading')}
-          </div>
+          </CommandLoading>
         )}
         {recordsQuery.isError && (
           <div className="py-6 text-center text-[13px] text-destructive">
@@ -138,6 +134,23 @@ function RecordPickerDialog({
               )
             })}
           </CommandGroup>
+        )}
+        {recordsQuery.hasNextPage && (
+          <CommandItem
+            forceMount
+            value="__load-more-records"
+            disabled={recordsQuery.isFetchingNextPage}
+            onSelect={() => void recordsQuery.fetchNextPage()}
+          >
+            {recordsQuery.isFetchingNextPage ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Search className="size-4" />
+            )}
+            {recordsQuery.isFetchingNextPage
+              ? t('builder.examples.loadingMore')
+              : t('builder.examples.loadMore')}
+          </CommandItem>
         )}
       </CommandList>
     </CommandDialog>
@@ -267,45 +280,30 @@ export function ExamplesStep({
 
   const startModel = getStartModel(models)
 
-  const existingIds = useMemo(
-    () => new Set(examples.map((ex) => ex.idValue)),
-    [examples],
-  )
+  const existingIds = new Set(examples.map((ex) => ex.idValue))
 
-  const handlePickRecord = useCallback(
-    (record: ExampleRecord) => {
-      const shouldBeDefault = examples.length === 0
-      actions.addExample({
-        ...record,
-        isDefault: shouldBeDefault,
-      })
-    },
-    [actions, examples.length],
-  )
+  function handlePickRecord(record: ExampleRecord) {
+    const shouldBeDefault = examples.length === 0
+    actions.addExample({
+      ...record,
+      isDefault: shouldBeDefault,
+    })
+  }
 
-  const handleRemove = useCallback(
-    (id: string) => {
-      if (activeExampleId === id) {
-        actions.setActiveExample(null)
-      }
-      actions.removeExample(id)
-    },
-    [actions, activeExampleId],
-  )
+  function handleRemove(id: string) {
+    if (activeExampleId === id) {
+      actions.setActiveExample(null)
+    }
+    actions.removeExample(id)
+  }
 
-  const handleSetDefault = useCallback(
-    (id: string) => {
-      actions.setDefaultExample(id)
-    },
-    [actions],
-  )
+  function handleSetDefault(id: string) {
+    actions.setDefaultExample(id)
+  }
 
-  const handleActivate = useCallback(
-    (id: string | null) => {
-      actions.setActiveExample(id)
-    },
-    [actions],
-  )
+  function handleActivate(id: string | null) {
+    actions.setActiveExample(id)
+  }
 
   return (
     <div className="flex flex-col gap-2">

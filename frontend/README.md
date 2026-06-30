@@ -9,6 +9,19 @@ bun install
 bun --bun run dev
 ```
 
+## Local Django Session Auth
+
+For local testing without OIDC, run the frontend in Django session mode:
+
+```powershell
+$env:SCHEMA_VIZ_AUTH_MODE='session'
+$env:SCHEMA_VIZ_SERVER_BASE_URL='http://127.0.0.1:8000/schema-viz'
+bun --bun run dev
+```
+
+Log in to Django at `http://127.0.0.1:8000/django/admin/login/`, then open the frontend at `http://127.0.0.1:3000`. Keep both URLs on `127.0.0.1` so the browser sends the Django `sessionid` and `csrftoken` cookies to the frontend proxy.
+
+If your Django login lives somewhere else, set `SCHEMA_VIZ_DJANGO_LOGIN_URL`.
 # Building For Production
 
 To build this application for production:

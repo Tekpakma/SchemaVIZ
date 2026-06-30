@@ -66,16 +66,19 @@ function throwSaveError(fallbackMessage: string, responseData: unknown): never {
 
 function getTemplateWriteRequest({
   recipe,
+  featured,
   scope,
   shareSlug,
   template,
 }: {
   recipe: RecipeData
+  featured?: GenerationTemplateRead['featured']
   scope?: 'owner' | 'global'
   shareSlug?: string | null
   template?: GenerationTemplateRead | null
 }) {
   const request = recipeToGenerationTemplateWriteRequest(recipe, {
+    featured,
     scope,
     shareSlug,
     template,
@@ -90,12 +93,14 @@ function getTemplateWriteRequest({
 
 export async function saveGenerationTemplateDraft({
   recipe,
+  featured,
   scope,
   shareSlug,
   template,
   templateId,
 }: {
   recipe: RecipeData
+  featured?: GenerationTemplateRead['featured']
   scope?: 'owner' | 'global'
   shareSlug?: string | null
   template?: GenerationTemplateRead | null
@@ -103,6 +108,7 @@ export async function saveGenerationTemplateDraft({
 }) {
   const request = getTemplateWriteRequest({
     recipe,
+    featured,
     scope,
     shareSlug,
     template,

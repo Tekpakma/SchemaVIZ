@@ -296,9 +296,7 @@ type PersistedLayer = {
   textContent?: unknown | null
 }
 
-function serializeLayers(
-  layers: RecipeLayer[],
-): PersistedLayer[] | undefined {
+function serializeLayers(layers: RecipeLayer[]): PersistedLayer[] | undefined {
   const hasCustomLabel = layers.some(
     (layer, i) => layer.label !== `L${i + 1}` || layer.textContent,
   )
@@ -724,6 +722,7 @@ export function recipeToGenerationTemplateWriteRequest(
     scope?: 'owner' | 'global'
     template?: GenerationTemplateRead | null
     shareSlug?: string | null
+    featured?: GenerationTemplateRead['featured']
   } = {},
 ): GenerationTemplateWriteRequest | null {
   const source = recipeToInlineDefinition(recipe)
@@ -741,7 +740,7 @@ export function recipeToGenerationTemplateWriteRequest(
     description: options.template?.description ?? '',
     rootModel: source.rootModel,
     scope: options.scope ?? options.template?.scope ?? 'owner',
-    featured: options.template?.featured,
+    featured: options.featured ?? options.template?.featured,
     shareSlug: shareSlug || undefined,
     definition: source.inlineDefinition,
     layoutSettings: {

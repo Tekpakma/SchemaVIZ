@@ -1,6 +1,6 @@
 import type {
   GenerationRunResponse,
-  GenerationTemplateRead,
+  GenerationTemplateListOutput,
 } from '@/api/contracts'
 import type { RecipeData } from '@/features/builder/types'
 
@@ -10,7 +10,7 @@ export type PromotionLevel = 'featured' | 'personal' | 'system'
 
 export type HomeTemplatePreviewStatus = 'ready' | 'no_record' | 'error'
 
-export type HomeTemplateSource = 'own' | 'featured'
+export type HomeTemplateSource = 'own' | 'featured' | 'global'
 
 export type HomeTemplateFilter =
   | 'all'
@@ -54,7 +54,7 @@ export interface HomeTemplatePreview {
   sourceLabel: string
   status: HomeTemplatePreviewStatus
   statusLabel: string
-  template: GenerationTemplateRead
+  template: GenerationTemplateListOutput
   title: string
   updatedAt: string
 }

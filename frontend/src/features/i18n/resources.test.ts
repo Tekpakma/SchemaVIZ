@@ -74,6 +74,31 @@ const schemaDiscoveryKeys = [
   'yes',
 ] as const
 
+const builderPublishKeys = [
+  'cancel',
+  'confirm',
+  'copied',
+  'copy',
+  'description',
+  'featureRank',
+  'featureRankPlaceholder',
+  'featuredHint',
+  'featuredLabel',
+  'nameTaken',
+  'open',
+  'publishing',
+  'saveAndPublish',
+  'shareLink',
+  'shareSlug',
+  'shareSlugPlaceholder',
+  'slugTaken',
+  'targetLabel',
+  'templateLabel',
+  'title',
+  'visibilityGlobal',
+  'visibilityHint',
+  'visibilityPrivate',
+] as const
 describe('i18n resources', () => {
   it('defaults to English unless another locale is selected', () => {
     expect(DEFAULT_LOCALE).toBe('en')
@@ -125,6 +150,19 @@ describe('i18n resources', () => {
     )
   })
 
+  it('provides builder publish dialog copy in English and German', () => {
+    for (const key of builderPublishKeys) {
+      expect(resources.en.translation.builder.publish[key]).toBeTruthy()
+      expect(resources.de.translation.builder.publish[key]).toBeTruthy()
+    }
+
+    expect(resources.en.translation.builder.publish.featuredLabel).toBe(
+      'Featured template',
+    )
+    expect(resources.de.translation.builder.publish.featuredLabel).toBe(
+      'Empfohlenes Template',
+    )
+  })
   it('keeps export dialog visible copy in resource files', () => {
     const source = readFileSync(
       new URL('../canvas/components/CanvasExportDialog.tsx', import.meta.url),

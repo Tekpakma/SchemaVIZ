@@ -1,29 +1,20 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GenerationTemplateQuickAccessEntry } from '@/api/contracts'
-import {
-  schemaVizGenerationTemplateQuickAccessFeaturedList,
-  schemaVizGenerationTemplateQuickAccessRetrieve,
-} from '@/api/generated/schema-viz'
 import {
   HOME_QUICK_ACCESS_QUERIES,
   HomeQuickAccessRequestError,
   shouldRetryHomeQuickAccessRequest,
 } from './homeQuickAccessQueries'
 
-vi.mock('@/api/generated/schema-viz', () => ({
-  schemaVizGenerationTemplateQuickAccessFeaturedList: vi.fn(),
-  schemaVizGenerationTemplateQuickAccessRetrieve: vi.fn(),
-}))
+const fetchMock = vi.fn<typeof fetch>()
 
-const featuredListMock =
-  schemaVizGenerationTemplateQuickAccessFeaturedList as unknown as ReturnType<
-    typeof vi.fn
-  >
-const ownRecentMock =
-  schemaVizGenerationTemplateQuickAccessRetrieve as unknown as ReturnType<
-    typeof vi.fn
-  >
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    headers: { 'content-type': 'application/json' },
+    status,
+  })
+}
 
 function createQuickAccessEntry() {
   return GenerationTemplateQuickAccessEntry.parse({
@@ -57,13 +48,53 @@ function createQuickAccessEntry() {
 }
 
 describe('home quick-access queries', () => {
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetches all accessible templates with samples for the all templates section', async () => {
+    const entry = createQuickAccessEntry()
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          ...entry.template,
+          ownedByCurrentUser: false,
+          featured: { enabled: false, rank: null },
+          sample: {
+            recordId: null,
+            recordDisplayName: null,
+            status: 'no_record',
+          },
+        },
+      ]),
+    )
+
+    const query = HOME_QUICK_ACCESS_QUERIES.all()
+
+    await expect(query.queryFn!({} as never)).resolves.toMatchObject([
+      {
+        previewStatus: 'no_record',
+        source: 'global',
+        template: { name: 'Cloud overview' },
+      },
+    ])
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/schema-viz/generation-templates/?includeSample=true',
+      {
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+      },
+    )
+  })
+
   it('parses own recent quick-access responses at the API boundary', async () => {
     const entry = createQuickAccessEntry()
-    ownRecentMock.mockResolvedValueOnce({
-      data: { ownRecent: [entry] },
-      headers: new Headers(),
-      status: 200,
-    })
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ownRecent: [entry] }))
 
     const query = HOME_QUICK_ACCESS_QUERIES.ownRecent()
 
@@ -75,20 +106,25 @@ describe('home quick-access queries', () => {
         },
       ],
     })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/schema-viz/generation-template-quick-access/',
+      {
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+      },
+    )
   })
 
   it('passes pagination params to the featured quick-access endpoint', async () => {
     const entry = createQuickAccessEntry()
-    featuredListMock.mockResolvedValueOnce({
-      data: {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
         count: 1,
         next: null,
         previous: null,
         results: [entry],
-      },
-      headers: new Headers(),
-      status: 200,
-    })
+      }),
+    )
 
     const query = HOME_QUICK_ACCESS_QUERIES.featured({ limit: 4, offset: 2 })
 
@@ -96,15 +132,19 @@ describe('home quick-access queries', () => {
       count: 1,
       results: [{ template: { shareSlug: 'cloud-overview' } }],
     })
-    expect(featuredListMock).toHaveBeenCalledWith({ limit: 4, offset: 2 })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/schema-viz/generation-template-quick-access/featured/?limit=4&offset=2',
+      {
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+      },
+    )
   })
 
   it('uses backend detail text for quick-access request failures', async () => {
-    ownRecentMock.mockResolvedValueOnce({
-      data: { detail: 'Permission denied' },
-      headers: new Headers(),
-      status: 403,
-    })
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ detail: 'Permission denied' }, 403),
+    )
 
     const query = HOME_QUICK_ACCESS_QUERIES.ownRecent()
 

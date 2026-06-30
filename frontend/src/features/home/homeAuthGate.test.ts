@@ -29,10 +29,15 @@ describe('home auth gate', () => {
     expect(shouldRedirectHomeToLogin(createSession())).toBe(true)
   })
 
-  it('allows quick-access requests for dev mode or authenticated OIDC users', () => {
+  it('allows quick-access requests for dev/session mode or authenticated OIDC users', () => {
     expect(
       canLoadHomeQuickAccess(
         createSession({ mode: 'dev', authRequired: false }),
+      ),
+    ).toBe(true)
+    expect(
+      canLoadHomeQuickAccess(
+        createSession({ mode: 'session', authRequired: false }),
       ),
     ).toBe(true)
     expect(

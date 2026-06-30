@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowRight, Pencil, RefreshCw } from 'lucide-react'
+import { AlertCircle, ArrowRight, Pencil, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { START_AUTH_SESSION_QUERY } from '@/api/startAuthSession'
@@ -62,6 +62,16 @@ export function HomePage() {
   const canLoadTemplates =
     hasResolvedAuthSession && canLoadHomeQuickAccess(authSession)
   const {
+    data: allTemplateEntries = [],
+    error: allTemplatesError,
+    isError: isAllTemplatesError,
+    isLoading: isAllTemplatesLoading,
+    refetch: refetchAllTemplates,
+  } = useQuery({
+    ...HOME_QUICK_ACCESS_QUERIES.all(),
+    enabled: canLoadTemplates,
+  })
+  const {
     data: ownRecentData,
     error: ownRecentError,
     isError: isOwnRecentError,
@@ -96,10 +106,9 @@ export function HomePage() {
   const featuredTemplates = createHomeTemplatePreviews(
     featuredData?.results ?? [],
   )
-  const allTemplates = uniqueHomeTemplatePreviews([
-    ...featuredTemplates,
-    ...ownRecentTemplates,
-  ])
+  const allTemplates = uniqueHomeTemplatePreviews(
+    createHomeTemplatePreviews(allTemplateEntries),
+  )
   const filteredTemplates = filterHomeTemplatePreviews(
     allTemplates,
     activeFilter,
@@ -115,11 +124,12 @@ export function HomePage() {
   const attentionCount = allTemplates.filter(
     (template) => template.status !== 'ready',
   ).length
-  const isLoading = isOwnRecentLoading || isFeaturedLoading
+  const isLoading =
+    isOwnRecentLoading || isFeaturedLoading || isAllTemplatesLoading
   const errorMessage =
-    isOwnRecentError || isFeaturedError
+    isOwnRecentError || isFeaturedError || isAllTemplatesError
       ? getQueryErrorMessage(
-          ownRecentError ?? featuredError,
+          ownRecentError ?? featuredError ?? allTemplatesError,
           t('home.error.loadTemplates'),
         )
       : null
@@ -184,6 +194,7 @@ export function HomePage() {
           authSessionError,
           t('home.error.loadTemplates'),
         )}
+        status="error"
         onRetry={() => void refetchAuthSession()}
       />
     )
@@ -200,15 +211,15 @@ export function HomePage() {
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
       <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto max-w-[1480px] px-6 pb-20 pt-7">
+        <div className="mx-auto max-w-[1480px] px-4 pb-20 pt-5 sm:px-6 sm:pt-7">
           <section className="mb-2 border-b border-border pb-6 pt-2">
-            <div className="flex items-end justify-between gap-6">
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end sm:gap-6">
               <div>
                 <h1 className="text-[32px] font-semibold leading-tight tracking-tight">
                   {t('home.hero.title')}
                 </h1>
               </div>
-              <div className="flex gap-2.5">
+              <div className="flex flex-wrap gap-2.5">
                 <Button
                   variant="outline"
                   className="rounded-[10px] border-border bg-background px-3.5 text-[13.5px] text-foreground hover:bg-accent"
@@ -231,7 +242,7 @@ export function HomePage() {
               </div>
             </div>
 
-            <div className="mt-[18px] flex items-center gap-7">
+            <div className="mt-[18px] flex flex-wrap items-center gap-x-7 gap-y-3">
               <StatBlock
                 value={featuredTemplates.length}
                 label={t('home.stats.featured')}
@@ -256,7 +267,11 @@ export function HomePage() {
             <ErrorBanner
               message={errorMessage}
               onRetry={() =>
-                void Promise.all([refetchOwnRecent(), refetchFeatured()])
+                void Promise.all([
+                  refetchOwnRecent(),
+                  refetchFeatured(),
+                  refetchAllTemplates(),
+                ])
               }
             />
           ) : null}
@@ -275,7 +290,7 @@ export function HomePage() {
             />
           )}
 
-          <section className="mt-9 flex items-center justify-between gap-6 rounded-[10px] border border-border bg-card px-[22px] py-[18px]">
+          <section className="mt-9 flex flex-col items-start justify-between gap-4 rounded-[10px] border border-border bg-card px-4 py-[18px] sm:flex-row sm:items-center sm:gap-6 sm:px-[22px]">
             <div className="flex items-center gap-3.5">
               <Pencil className="size-[18px] text-muted-foreground" />
               <div>
@@ -315,15 +330,23 @@ export function HomePage() {
 function AuthGateStatus({
   label,
   onRetry,
+  status = 'loading',
 }: {
   label: string
   onRetry?: () => void
+  status?: 'error' | 'loading'
 }) {
   const { t } = useTranslation()
+  const Icon = status === 'error' ? AlertCircle : RefreshCw
   return (
     <div className="grid h-full place-items-center bg-background px-6 text-foreground">
       <div className="flex items-center gap-3 text-[13px] text-muted-foreground">
-        <RefreshCw className="size-4 animate-spin" />
+        <Icon
+          className={cn(
+            'size-4',
+            status === 'error' ? 'text-destructive' : 'animate-spin',
+          )}
+        />
         <span>{label}</span>
         {onRetry ? (
           <Button
@@ -362,7 +385,7 @@ function HomeTemplateSections({
       <PromotedRow templates={featuredTemplates} onOpen={onSelectTemplate} />
 
       <section className="border-t border-border pb-2 pt-[22px]">
-        <div className="mb-3.5 flex items-start justify-between gap-6">
+        <div className="mb-3.5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-6">
           <h2 className="text-base font-semibold tracking-tight">
             {t('home.sections.recent')}
           </h2>
@@ -382,11 +405,11 @@ function HomeTemplateSections({
       </section>
 
       <section className="border-t border-border pb-2 pt-[22px]">
-        <div className="mb-3.5 flex items-start justify-between gap-6">
+        <div className="mb-3.5 flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-6">
           <h2 className="text-base font-semibold tracking-tight">
             {t('home.sections.allTemplates')}
           </h2>
-          <div className="inline-flex rounded-[8px] border border-border bg-background p-0.5">
+          <div className="flex flex-wrap rounded-[8px] border border-border bg-background p-0.5">
             {FILTER_CHIPS.map((chip) => (
               <button
                 key={chip.id}
@@ -428,7 +451,7 @@ function TemplateCardGrid({
   templates: HomeTemplatePreview[]
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] gap-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,220px),1fr))] gap-3">
       {templates.map((template) => (
         <TemplateCard
           key={template.id}
@@ -452,8 +475,10 @@ function ErrorBanner({
   message: string
   onRetry: () => void
 }) {
+  const { t } = useTranslation()
+
   return (
-    <section className="mt-4 flex items-center justify-between gap-4 rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive">
+    <section className="mt-4 flex flex-col items-start justify-between gap-3 rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 py-3 text-destructive sm:flex-row sm:items-center sm:gap-4">
       <span className="text-[13px]">{message}</span>
       <Button
         variant="outline"
@@ -479,7 +504,7 @@ function TemplateSectionSkeleton() {
   return (
     <section className="border-t border-border pb-4 pt-7">
       <div className="mb-4 h-6 w-56 rounded bg-muted" />
-      <div className="grid grid-cols-[1.4fr_1fr] gap-4">
+      <div className="grid gap-4 sm:grid-cols-[1.4fr_1fr]">
         <div className="h-[220px] rounded-[10px] border border-border bg-muted" />
         <div className="flex flex-col gap-2">
           {Array.from({ length: 3 }).map((_, index) => (

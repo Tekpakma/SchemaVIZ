@@ -37,6 +37,36 @@ describe('fetchStartAuthSession', () => {
     })
   })
 
+  it('parses Django session auth mode', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            mode: 'session',
+            authRequired: false,
+            user: null,
+            auth: {
+              providerLabel: 'Schema Viz',
+              loginUrl: '/_schema-viz/auth/login',
+              logoutUrl: '/_schema-viz/auth/logout',
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      ),
+    )
+
+    await expect(fetchStartAuthSession()).resolves.toMatchObject({
+      authRequired: false,
+      mode: 'session',
+      user: null,
+    })
+  })
+
   it('uses endpoint detail text for session request failures', async () => {
     vi.stubGlobal(
       'fetch',

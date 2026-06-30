@@ -9,7 +9,6 @@ import {
   Search,
   X,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -20,8 +19,9 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoading,
 } from '@/components/ui/command'
-import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
+import { usePaginatedRecords } from '@/features/lexical/dataReference/usePaginatedRecords'
 import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
 import { cn } from '@/lib/utils'
 import { TemplatePreviewCanvas } from './TemplatePreviewCanvas'
@@ -80,17 +80,16 @@ export function TemplateDetailPanel({
   const isEditable = canEditTemplate(template)
   const canPickRecord = Boolean(template.shareSlug && rootModel)
 
-  const { data: recordsData, isLoading: recordsLoading } = useQuery({
-    ...SCHEMA_QUERIES.records({
+  const recordsQuery = usePaginatedRecords(
+    {
       appLabel: rootModel?.appLabel ?? '',
       modelName: rootModel?.modelName ?? '',
       page: 1,
-      pageSize: 50,
-    }),
-    enabled: recordPickerOpen && canPickRecord,
-  })
-  const records = recordsData?.results ?? []
-
+    },
+    { enabled: recordPickerOpen && canPickRecord },
+  )
+  const records = recordsQuery.records
+  const recordsLoading = recordsQuery.isLoading
   async function handleCopy() {
     if (!generationUrl) return
     await navigator.clipboard.writeText(generationUrl)
@@ -115,7 +114,7 @@ export function TemplateDetailPanel({
   return (
     <aside
       className={cn(
-        'flex h-full w-[380px] shrink-0 flex-col border-l border-border bg-background text-foreground',
+        'fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[380px] shrink-0 flex-col border-l border-border bg-background text-foreground shadow-xl md:relative md:inset-auto md:z-auto md:w-[380px] md:shadow-none',
         className,
       )}
     >
@@ -152,10 +151,10 @@ export function TemplateDetailPanel({
             <span className="h-3 w-px bg-border" />
             <span>{t(`home.status.${template.status}`)}</span>
           </div>
-          <h3 className="mt-1.5 text-[18px] font-semibold leading-snug tracking-tight">
+          <h3 className="mt-1.5 break-words text-[18px] font-semibold leading-snug tracking-tight">
             {template.title}
           </h3>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+          <p className="mt-1 break-words text-[13px] leading-relaxed text-muted-foreground">
             {template.description}
           </p>
 
@@ -237,7 +236,7 @@ export function TemplateDetailPanel({
         ) : null}
 
         {/* Actions */}
-        <div className="mt-3 flex gap-2 px-4">
+        <div className="mt-3 flex flex-col gap-2 px-4 sm:flex-row">
           <Button
             className="h-9 flex-1 gap-1.5 rounded-[8px] text-[13px]"
             type="button"
@@ -296,10 +295,10 @@ export function TemplateDetailPanel({
           <CommandInput placeholder={t('home.detail.searchRecords')} />
           <CommandList>
             {recordsLoading ? (
-              <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+              <CommandLoading>
                 <Loader2 className="size-4 animate-spin" />
                 {t('home.detail.loadingRecords')}
-              </div>
+              </CommandLoading>
             ) : null}
             <CommandEmpty>{t('home.detail.noRecords')}</CommandEmpty>
             {records.length > 0 ? (
@@ -325,6 +324,23 @@ export function TemplateDetailPanel({
                   )
                 })}
               </CommandGroup>
+            ) : null}
+            {recordsQuery.hasNextPage ? (
+              <CommandItem
+                forceMount
+                value="__load-more-home-records"
+                disabled={recordsQuery.isFetchingNextPage}
+                onSelect={() => void recordsQuery.fetchNextPage()}
+              >
+                {recordsQuery.isFetchingNextPage ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Search className="size-4" />
+                )}
+                {recordsQuery.isFetchingNextPage
+                  ? t('home.detail.loadingMoreRecords')
+                  : t('home.detail.loadMoreRecords')}
+              </CommandItem>
             ) : null}
           </CommandList>
         </CommandDialog>

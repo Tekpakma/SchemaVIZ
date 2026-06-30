@@ -45,21 +45,19 @@ export function TemplateCard({
           large ? 'gap-2 px-[22px] py-5' : 'gap-0.5 px-3 py-2',
         )}
       >
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span className="text-foreground">{template.author}</span>
           <span className="h-3 w-px bg-border" />
-          <span>
-            {t('home.count.nodes', { count: template.nodeCount })}
-          </span>
-          <span>
-            {t('home.count.edges', { count: template.edgeCount })}
-          </span>
+          <span>{t('home.count.nodes', { count: template.nodeCount })}</span>
+          <span>{t('home.count.edges', { count: template.edgeCount })}</span>
           <PromotionBadge promotion={template.promotion} compact />
         </div>
         <h3
           className={cn(
             'font-semibold tracking-tight',
-            large ? 'text-[22px] leading-tight' : 'text-[14.5px] leading-snug',
+            large
+              ? 'text-[22px] leading-tight break-words'
+              : 'truncate text-[14.5px] leading-snug',
           )}
         >
           {template.title}

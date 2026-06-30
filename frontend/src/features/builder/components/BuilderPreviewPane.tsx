@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Eye, EyeOff, Loader2, RefreshCw, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -12,9 +12,10 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoading,
 } from '@/components/ui/command'
 import { cn } from '@/lib/utils'
-import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
+import { usePaginatedRecords } from '@/features/lexical/dataReference/usePaginatedRecords'
 import { BuilderPreview } from '../BuilderPreview'
 import { FilterImpactNotice } from '../FilterImpactNotice'
 import type {
@@ -144,32 +145,24 @@ export function BuilderPreviewPane({
     : null
   const flushInlineNodeEditRef = useRef<FlushInlineNodeEdit | null>(null)
 
-  const handleRegisterFlushInlineEdit = useCallback(
-    (flush: FlushInlineNodeEdit | null) => {
-      flushInlineNodeEditRef.current = flush
-      onRegisterFlushInlineEdit?.(flush)
-    },
-    [onRegisterFlushInlineEdit],
-  )
+  function handleRegisterFlushInlineEdit(flush: FlushInlineNodeEdit | null) {
+    flushInlineNodeEditRef.current = flush
+    onRegisterFlushInlineEdit?.(flush)
+  }
 
-  const existingIds = useMemo(
-    () => new Set(examples.map((ex) => ex.idValue)),
-    [examples],
-  )
+  const existingIds = new Set(examples.map((ex) => ex.idValue))
 
-  const recordsQuery = useQuery({
-    ...SCHEMA_QUERIES.records({
+  const recordsQuery = usePaginatedRecords(
+    {
       appLabel: startModel?.appLabel ?? '',
       modelName: startModel?.modelName ?? '',
       page: 1,
-      pageSize: 50,
-    }),
-    enabled: pickerOpen && !!startModel,
-  })
+    },
+    { enabled: pickerOpen && !!startModel },
+  )
 
-  const records = recordsQuery.data?.results ?? []
-
-  const handlePreviewToggle = useCallback(() => {
+  const records = recordsQuery.records
+  function handlePreviewToggle() {
     flushInlineNodeEditRef.current?.()
     if (typeof document !== 'undefined') {
       const activeElement = document.activeElement
@@ -183,33 +176,26 @@ export function BuilderPreviewPane({
     } else if (startModel) {
       setPickerOpen(true)
     }
-  }, [actions, isPreviewActive, startModel])
+  }
 
-  const handlePickExistingExample = useCallback(
-    (exampleId: string) => {
-      actions.setActiveExample(exampleId)
-      setPickerOpen(false)
-    },
-    [actions],
-  )
+  function handlePickExistingExample(exampleId: string) {
+    actions.setActiveExample(exampleId)
+    setPickerOpen(false)
+  }
 
-  const handlePickNewRecord = useCallback(
-    (record: ExampleRecord) => {
-      actions.addExample(record)
-      actions.setActiveExample(record.id)
-      setPickerOpen(false)
-    },
-    [actions],
-  )
+  function handlePickNewRecord(record: ExampleRecord) {
+    actions.addExample(record)
+    actions.setActiveExample(record.id)
+    setPickerOpen(false)
+  }
 
   // ---------------------------------------------------------------------------
   // Live preview: resolve the active example against the generation engine
   // ---------------------------------------------------------------------------
   const hasActiveExample = activeExampleId != null
-  const inlineSource = useMemo(
-    () => (hasActiveExample ? recipeToInlineDefinition(recipe) : null),
-    [hasActiveExample, recipe],
-  )
+  const inlineSource = hasActiveExample
+    ? recipeToInlineDefinition(recipe)
+    : null
   const recordPk = getRecordPkFromExample(recipe, activeExampleId)
 
   const queryClient = useQueryClient()
@@ -217,14 +203,18 @@ export function BuilderPreviewPane({
     hasActiveExample ? inlineSource : null,
     recordPk,
   )
-  const generationQuery = useQuery(queryOptions)
+  const {
+    data: generationData,
+    error: generationError,
+    fetchStatus: generationFetchStatus,
+    isError: generationIsError,
+  } = useQuery(queryOptions)
 
   const isResolving =
     hasActiveExample && Boolean(inlineSource) && Boolean(recordPk)
-  const previewErrorMessage = getPreviewErrorMessage(generationQuery.error)
-  const isPreviewLoading =
-    isResolving && generationQuery.fetchStatus === 'fetching'
-  const exportFilterNotice = hasFilterImpact(generationQuery.data)
+  const previewErrorMessage = getPreviewErrorMessage(generationError)
+  const isPreviewLoading = isResolving && generationFetchStatus === 'fetching'
+  const exportFilterNotice = hasFilterImpact(generationData)
     ? t('filterImpact.exportNotice')
     : undefined
 
@@ -288,7 +278,7 @@ export function BuilderPreviewPane({
 
       {isPreviewLoading && <BareLoader nodes={3} speed={280} />}
 
-      {isResolving && generationQuery.isError && (
+      {isResolving && generationIsError && (
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
           <p className="text-[13px] text-destructive">
             {t('builder.preview.resolveError')}
@@ -319,15 +309,15 @@ export function BuilderPreviewPane({
         </div>
       )}
 
-      {isResolving && generationQuery.data && (
+      {isResolving && generationData && (
         <>
-          <FilterImpactNotice response={generationQuery.data} />
+          <FilterImpactNotice response={generationData} />
           <BuilderPreview
             autoLayout
             className="min-h-0 flex-1"
             exportFilterNotice={exportFilterNotice}
             exportOpen={exportOpen}
-            generationResponse={generationQuery.data}
+            generationResponse={generationData}
             interactionMode="viewport"
             onExportOpenChange={onExportOpenChange}
             recipe={recipe}
@@ -389,12 +379,11 @@ export function BuilderPreviewPane({
                 ))}
               </CommandGroup>
             )}
-
             {recordsQuery.isLoading && (
-              <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+              <CommandLoading>
                 <Loader2 className="size-4 animate-spin" />
                 {t('builder.header.loadingRecords')}
-              </div>
+              </CommandLoading>
             )}
             <CommandEmpty>{t('builder.header.noRecordsFound')}</CommandEmpty>
             {records.length > 0 && (
@@ -442,6 +431,23 @@ export function BuilderPreviewPane({
                   )
                 })}
               </CommandGroup>
+            )}
+            {recordsQuery.hasNextPage && (
+              <CommandItem
+                forceMount
+                value="__load-more-preview-records"
+                disabled={recordsQuery.isFetchingNextPage}
+                onSelect={() => void recordsQuery.fetchNextPage()}
+              >
+                {recordsQuery.isFetchingNextPage ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Search className="size-4" />
+                )}
+                {recordsQuery.isFetchingNextPage
+                  ? t('builder.header.loadingMoreRecords')
+                  : t('builder.header.loadMoreRecords')}
+              </CommandItem>
             )}
           </CommandList>
         </CommandDialog>

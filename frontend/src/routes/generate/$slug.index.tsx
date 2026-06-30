@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { Check, ChevronsUpDown, Loader2, Play, Search } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoading,
 } from '@/components/ui/command'
 import {
   Popover,
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/popover'
 import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQueries'
 import { FilterImpactNotice } from '@/features/builder/FilterImpactNotice'
-import { SCHEMA_QUERIES } from '@/features/lexical/dataReference/schemaQueries'
+import { usePaginatedRecords } from '@/features/lexical/dataReference/usePaginatedRecords'
 import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
 import { DeleteGenerationTemplateButton } from '@/features/builder/DeleteGenerationTemplateButton'
@@ -54,29 +55,24 @@ function GenerateTemplatePage() {
     template.publishedVersion?.rootModel ??
     template.draftVersion?.rootModel ??
     ''
-  const rootModelRef = useMemo(
-    () => (rootModelId ? splitModelId(rootModelId) : null),
-    [rootModelId],
-  )
+  const rootModelRef = rootModelId ? splitModelId(rootModelId) : null
 
-  const recordsQuery = useQuery({
-    ...SCHEMA_QUERIES.records({
+  const recordsQuery = usePaginatedRecords(
+    {
       appLabel: rootModelRef?.appLabel ?? '',
       modelName: rootModelRef?.modelName ?? '',
       page: 1,
-      pageSize: 50,
-    }),
-    enabled: Boolean(rootModelRef),
-  })
+    },
+    { enabled: Boolean(rootModelRef) },
+  )
 
-  const records = recordsQuery.data?.results ?? []
-
+  const records = recordsQuery.records
   const [open, setOpen] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<{
     pk: string
     displayName: string
   } | null>(null)
-  const selectedRunQuery = useQuery(
+  const { data: selectedRunData, isFetching: isSelectedRunFetching } = useQuery(
     SHARED_GENERATION_QUERIES.run(slug, selectedRecord?.pk ?? ''),
   )
 
@@ -130,10 +126,10 @@ function GenerateTemplatePage() {
                   <CommandInput placeholder={t('generate.searchRecords')} />
                   <CommandList id="generate-record-list">
                     {recordsQuery.isLoading && (
-                      <div className="flex items-center justify-center gap-2 py-6 text-[13px] text-muted-foreground">
+                      <CommandLoading>
                         <Loader2 className="size-4 animate-spin" />
                         {t('generate.loadingRecords')}
-                      </div>
+                      </CommandLoading>
                     )}
                     {recordsQuery.isError && (
                       <div className="py-6 text-center text-[13px] text-destructive">
@@ -175,6 +171,23 @@ function GenerateTemplatePage() {
                         })}
                       </CommandGroup>
                     )}
+                    {recordsQuery.hasNextPage && (
+                      <CommandItem
+                        forceMount
+                        value="__load-more-generate-records"
+                        disabled={recordsQuery.isFetchingNextPage}
+                        onSelect={() => void recordsQuery.fetchNextPage()}
+                      >
+                        {recordsQuery.isFetchingNextPage ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Search className="size-4" />
+                        )}
+                        {recordsQuery.isFetchingNextPage
+                          ? t('generate.loadingMoreRecords')
+                          : t('generate.loadMoreRecords')}
+                      </CommandItem>
+                    )}
                   </CommandList>
                 </Command>
               </PopoverContent>
@@ -198,14 +211,14 @@ function GenerateTemplatePage() {
             )}
           </div>
 
-          {selectedRunQuery.isFetching ? (
+          {isSelectedRunFetching ? (
             <p className="text-center text-[12px] text-muted-foreground">
               {t('filterImpact.checking')}
             </p>
           ) : null}
           <FilterImpactNotice
             className="rounded-md border border-amber-200 dark:border-amber-900/60"
-            response={selectedRunQuery.data}
+            response={selectedRunData}
           />
         </div>
       </main>

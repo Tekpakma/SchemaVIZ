@@ -142,6 +142,8 @@ export const resources = {
           empty: 'Keine Datensätze gefunden.',
           loadError: 'Datensätze konnten nicht geladen werden.',
           loading: 'Datensätze werden geladen...',
+          loadingMore: 'Weitere Datensätze werden geladen...',
+          loadMore: 'Mehr laden',
           needsStartModel:
             'Fügen Sie zuerst ein Startmodell in Schritt 1 hinzu.',
           openActions: 'Aktionen für {{example}} öffnen',
@@ -205,6 +207,8 @@ export const resources = {
         header: {
           back: 'Zurück',
           loadingRecords: 'Lade Datensätze…',
+          loadingMoreRecords: 'Weitere Datensätze werden geladen…',
+          loadMoreRecords: 'Mehr laden',
           noRecordsFound: 'Keine Datensätze gefunden.',
           pinnedRecords: 'Angepinnte Datensätze',
           preview: 'Vorschau',
@@ -327,6 +331,11 @@ export const resources = {
           shareLink: 'Freigabelink',
           shareSlug: 'Link-Name',
           shareSlugPlaceholder: 'cloud-provider-overview',
+          featuredLabel: 'Empfohlenes Template',
+          featuredHint:
+            'Auf der Startseite und in empfohlenen Bereichen hervorheben.',
+          featureRank: 'Feature-Rang',
+          featureRankPlaceholder: '0',
           slugTaken: 'Dieser Link-Name ist bereits vergeben.',
           nameTaken:
             'Es existiert bereits ein Template mit dem Namen "{{name}}" in diesem Sichtbarkeitsbereich.',
@@ -424,6 +433,8 @@ export const resources = {
         errorTitle: 'Fehler',
         loadError: 'Datensätze konnten nicht geladen werden.',
         loadingRecords: 'Datensätze werden geladen...',
+        loadingMoreRecords: 'Weitere Datensätze werden geladen...',
+        loadMoreRecords: 'Mehr laden',
         notFound:
           'Dieses Template wurde nicht gefunden oder ist nicht veröffentlicht.',
         noRecords: 'Keine Datensätze gefunden.',
@@ -470,6 +481,8 @@ export const resources = {
           editTemplate: 'Template bearbeiten',
           edges: 'Verbindungen',
           loadingRecords: 'Datensätze werden geladen',
+          loadingMoreRecords: 'Weitere Datensätze werden geladen',
+          loadMoreRecords: 'Mehr laden',
           noRecords: 'Keine Datensätze gefunden',
           nodes: 'Nodes',
           openInEditor: 'Im Editor öffnen',
@@ -523,6 +536,7 @@ export const resources = {
         },
         source: {
           featured: 'Empfohlen',
+          global: 'Global',
           own: 'Eigenes Template',
         },
         stats: {
@@ -681,6 +695,8 @@ export const resources = {
           empty: 'No records found.',
           loadError: 'Could not load records.',
           loading: 'Loading records...',
+          loadingMore: 'Loading more records...',
+          loadMore: 'Load more',
           needsStartModel: 'Add a start model in step 1 first.',
           openActions: 'Open actions for {{example}}',
           pickerDescription:
@@ -742,6 +758,8 @@ export const resources = {
         header: {
           back: 'Back',
           loadingRecords: 'Loading records…',
+          loadingMoreRecords: 'Loading more records…',
+          loadMoreRecords: 'Load more',
           noRecordsFound: 'No records found.',
           pinnedRecords: 'Pinned records',
           preview: 'Preview',
@@ -861,6 +879,11 @@ export const resources = {
           shareLink: 'Share link',
           shareSlug: 'Link name',
           shareSlugPlaceholder: 'cloud-provider-overview',
+          featuredLabel: 'Featured template',
+          featuredHint:
+            'Highlight this template on the home page and featured surfaces.',
+          featureRank: 'Feature rank',
+          featureRankPlaceholder: '0',
           slugTaken: 'This link name is already taken.',
           nameTaken:
             'A template with the name "{{name}}" already exists in this visibility scope.',
@@ -956,6 +979,8 @@ export const resources = {
         errorTitle: 'Error',
         loadError: 'Could not load records.',
         loadingRecords: 'Loading records...',
+        loadingMoreRecords: 'Loading more records...',
+        loadMoreRecords: 'Load more',
         notFound: 'This template was not found or is not published.',
         noRecords: 'No records found.',
         recordPlaceholder: 'Select a record...',
@@ -1000,6 +1025,8 @@ export const resources = {
           editTemplate: 'Edit template',
           edges: 'Edges',
           loadingRecords: 'Loading records',
+          loadingMoreRecords: 'Loading more records',
+          loadMoreRecords: 'Load more',
           noRecords: 'No records found',
           nodes: 'Nodes',
           openInEditor: 'Open in editor',
@@ -1051,6 +1078,7 @@ export const resources = {
         },
         source: {
           featured: 'Featured',
+          global: 'Global',
           own: 'Owned template',
         },
         stats: {

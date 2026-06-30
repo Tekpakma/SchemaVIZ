@@ -43,7 +43,7 @@ export type StartAuthBackend = {
 }
 
 export type PublicStartAuthSession = {
-  mode: 'dev' | 'oidc'
+  mode: 'dev' | 'oidc' | 'session'
   authRequired: boolean
   user: StartAuthUser | null
   auth: {
@@ -79,6 +79,7 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
 const TX_MAX_AGE_SECONDS = 60 * 10
 const DEFAULT_SCOPE = 'openid profile email'
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 30_000
+const DJANGO_SESSION_AUTH_MODES = new Set(['session', 'django-session'])
 
 const authServerCache = new Map<string, Promise<oauth.AuthorizationServer>>()
 const sessionLocks = new Map<string, Promise<unknown>>()
@@ -99,10 +100,13 @@ function getAuthSecret(): string {
   return 'schema-viz-dev-auth-secret-32chr'
 }
 
-function getAuthMode(): 'dev' | 'oidc' {
+function getAuthMode(): 'dev' | 'oidc' | 'session' {
   const configured = process.env.SCHEMA_VIZ_AUTH_MODE?.trim().toLowerCase()
   if (configured === 'dev' || configured === 'oidc') {
     return configured
+  }
+  if (configured && DJANGO_SESSION_AUTH_MODES.has(configured)) {
+    return 'session'
   }
   return isProd() ? 'oidc' : 'dev'
 }
@@ -229,9 +233,10 @@ export function getStartAuthBackend(): StartAuthBackend {
 
 function publicSession(user: StartAuthUser | null): PublicStartAuthSession {
   const backend = getStartAuthBackend()
+  const mode = getAuthMode()
   return {
-    mode: getAuthMode(),
-    authRequired: getAuthMode() === 'oidc',
+    mode,
+    authRequired: mode === 'oidc',
     user,
     auth: {
       providerLabel: backend.oidc?.providerLabel ?? backend.label,
@@ -239,6 +244,15 @@ function publicSession(user: StartAuthUser | null): PublicStartAuthSession {
       logoutUrl: '/_schema-viz/auth/logout',
     },
   }
+}
+
+function getDjangoSessionLoginUrl(request: Request): string {
+  const configured = process.env.SCHEMA_VIZ_DJANGO_LOGIN_URL?.trim()
+  if (configured) return new URL(configured, request.url).toString()
+
+  const backend = getStartAuthBackend()
+  const backendUrl = new URL(backend.backendBaseUrl, request.url)
+  return new URL('/django/admin/login/', backendUrl.origin).toString()
 }
 
 function getTokenStore(): StartAuthTokenStore {
@@ -489,8 +503,13 @@ async function handleLogin(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const backend = getStartAuthBackend()
   const next = safeNext(request, url.searchParams.get('next'))
+  const mode = getAuthMode()
 
-  if (getAuthMode() === 'dev' && !backend.oidc) {
+  if (mode === 'session') {
+    return redirect(getDjangoSessionLoginUrl(request))
+  }
+
+  if (mode === 'dev' && !backend.oidc) {
     const sessionId = randomBytes(24).toString('base64url')
     return redirect(next, [await sealSessionCookie(sessionId)])
   }
@@ -683,8 +702,12 @@ async function handleLogout(request: Request): Promise<Response> {
 }
 
 async function handleSession(request: Request): Promise<Response> {
-  if (getAuthMode() === 'dev') {
+  const mode = getAuthMode()
+  if (mode === 'dev') {
     return json(publicSession(devUser()))
+  }
+  if (mode === 'session') {
+    return json(publicSession(null))
   }
 
   const session = await readSessionCookie(request)
@@ -700,8 +723,12 @@ async function handleSession(request: Request): Promise<Response> {
 export async function authenticateBrowserRequest(
   request: Request,
 ): Promise<StartAuthContext | null> {
-  if (getAuthMode() === 'dev') {
+  const mode = getAuthMode()
+  if (mode === 'dev') {
     return { kind: 'dev', user: devUser() }
+  }
+  if (mode === 'session') {
+    return null
   }
 
   const session = await readSessionCookie(request)
@@ -742,8 +769,9 @@ export async function proxySchemaVizRequest(
   const operationPath = matchProxyPath(url.pathname)
   if (!operationPath) return null
 
+  const authMode = getAuthMode()
   const context = await authenticateBrowserRequest(request)
-  if (!context && getAuthMode() === 'oidc') {
+  if (!context && authMode === 'oidc') {
     const staleSession = await readSessionCookie(request)
     return json(
       { detail: 'Authentication credentials were not provided.' },

@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
@@ -27,6 +27,7 @@ import {
   saveGenerationTemplateDraft,
 } from './generationTemplateMutations'
 import { GENERATION_TEMPLATE_QUERIES } from './generationTemplateQueries'
+import { BUILDER_SESSION_QUERY } from './sessionQueries'
 import type { RecipeData, RecipeModel, RecipeStyleDraft } from './types'
 
 type BuilderDocumentView = NonNullable<
@@ -34,6 +35,7 @@ type BuilderDocumentView = NonNullable<
 >
 
 type SaveBuilderTemplateInput = {
+  featured?: GenerationTemplateRead['featured']
   recipe: RecipeData
   shareSlug?: string | null
 }
@@ -89,6 +91,7 @@ function BuilderPageContent({
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { data: sessionState } = useQuery(BUILDER_SESSION_QUERY)
   const [publishOpen, setPublishOpen] = useState(false)
   const [savedTemplate, setSavedTemplate] = useState<{
     tabId: WorkbenchTabId
@@ -111,46 +114,47 @@ function BuilderPageContent({
   const currentTemplate =
     savedTemplate?.tabId === tabId ? savedTemplate.template : template
   const currentTemplateId = currentTemplate?.id ?? null
+  const canManageFeaturedTemplates =
+    sessionState?.capabilities.canManageFeaturedTemplates ?? false
 
-  const handleRegisterFlushInlineEdit = useCallback(
-    (flush: FlushInlineNodeEdit | null) => {
-      flushInlineNodeEditRef.current = flush
-    },
-    [],
-  )
+  function handleRegisterFlushInlineEdit(flush: FlushInlineNodeEdit | null) {
+    flushInlineNodeEditRef.current = flush
+  }
 
-  const getRecipeAfterPendingNodeEdit = useCallback(() => {
+  function getRecipeAfterPendingNodeEdit() {
     flushInlineNodeEditRef.current?.()
     return getBuilderRecipeSnapshot(tabId)?.recipe ?? recipe
-  }, [recipe, tabId])
+  }
 
-  const handleSavedTemplate = useCallback(
-    async (nextTemplate: GenerationTemplateRead) => {
-      setSavedTemplate({ tabId, template: nextTemplate })
-      markBuilderTemplateSaved(tabId, nextTemplate)
-      // Sync recipe title if the backend changed it (e.g. name auto-increment)
-      if (nextTemplate.name && nextTemplate.name !== recipe.title) {
-        actions.setTitle(nextTemplate.name)
-      }
-      queryClient.setQueryData(
-        GENERATION_TEMPLATE_QUERIES.detail(nextTemplate.id).queryKey,
-        nextTemplate,
-      )
-      await navigate({
-        to: '/builder',
-        search: {
-          templateId: nextTemplate.id,
-        },
-        replace: true,
-      })
-    },
-    [actions, navigate, queryClient, recipe.title, tabId],
-  )
+  async function handleSavedTemplate(nextTemplate: GenerationTemplateRead) {
+    setSavedTemplate({ tabId, template: nextTemplate })
+    markBuilderTemplateSaved(tabId, nextTemplate)
+    // Sync recipe title if the backend changed it (e.g. name auto-increment)
+    if (nextTemplate.name && nextTemplate.name !== recipe.title) {
+      actions.setTitle(nextTemplate.name)
+    }
+    queryClient.setQueryData(
+      GENERATION_TEMPLATE_QUERIES.detail(nextTemplate.id).queryKey,
+      nextTemplate,
+    )
+    await navigate({
+      to: '/builder',
+      search: {
+        templateId: nextTemplate.id,
+      },
+      replace: true,
+    })
+  }
 
   const saveMutation = useMutation({
     meta: { successMessage: 'Template saved' },
-    mutationFn: ({ recipe: nextRecipe, shareSlug }: SaveBuilderTemplateInput) =>
+    mutationFn: ({
+      featured,
+      recipe: nextRecipe,
+      shareSlug,
+    }: SaveBuilderTemplateInput) =>
       saveGenerationTemplateDraft({
+        featured,
         recipe: nextRecipe,
         shareSlug,
         template: currentTemplate,
@@ -168,6 +172,7 @@ function BuilderPageContent({
     meta: { successMessage: 'Template published' },
     mutationFn: async (payload: PublishBuilderTemplateInput) => {
       const saved = await saveGenerationTemplateDraft({
+        featured: payload.featured,
         recipe: payload.recipe,
         shareSlug: payload.shareSlug,
         scope: payload.scope,
@@ -192,115 +197,112 @@ function BuilderPageContent({
       : null
 
   // Keep a ref to styleDrafts so the commit handler doesn't depend on it
-  // (avoiding a rerender cascade: commit → draft changes → new callback → prop change)
+  // (avoiding a rerender cascade: commit -> draft changes -> new callback -> prop change)
   const styleDraftsRef = useRef(recipe.styleDrafts)
-  styleDraftsRef.current = recipe.styleDrafts
   const modelsRef = useRef(recipe.models)
-  modelsRef.current = recipe.models
+
+  useEffect(() => {
+    styleDraftsRef.current = recipe.styleDrafts
+  }, [recipe.styleDrafts])
+
+  useEffect(() => {
+    modelsRef.current = recipe.models
+  }, [recipe.models])
 
   // Bridge canvas text commits back to the builder store's style drafts.
   // When a user edits node text inline and commits (blur/escape/cmd+enter),
   // we parse the committed lexicalJson back into a textContent update.
-  const handleCommitNodeText = useCallback(
-    (commit: BuilderPreviewCommit) => {
-      console.log('[BuilderPage.handleCommitNodeText] ENTERED', {
-        nodeId: commit.nodeId,
-        lexicalJsonPreview: commit.lexicalJson.slice(0, 120),
-        htmlPreview: commit.html.slice(0, 120),
-      })
-      const modelId =
-        getModelIdFromBuilderGroupNodeId(commit.nodeId) ?? commit.nodeId
-      const existingDraft = styleDraftsRef.current[modelId]
-      const model = modelsRef.current.find(
-        (candidate) => candidate.id === modelId,
+  function handleCommitNodeText(commit: BuilderPreviewCommit) {
+    console.log('[BuilderPage.handleCommitNodeText] ENTERED', {
+      nodeId: commit.nodeId,
+      lexicalJsonPreview: commit.lexicalJson.slice(0, 120),
+      htmlPreview: commit.html.slice(0, 120),
+    })
+    const modelId =
+      getModelIdFromBuilderGroupNodeId(commit.nodeId) ?? commit.nodeId
+    const existingDraft = styleDraftsRef.current[modelId]
+    const model = modelsRef.current.find(
+      (candidate) => candidate.id === modelId,
+    )
+    if (!existingDraft && !model) {
+      console.warn(
+        '[BuilderPage.handleCommitNodeText] no draft, no model - bailing',
+        { modelId },
       )
-      if (!existingDraft && !model) {
-        console.warn(
-          '[BuilderPage.handleCommitNodeText] no draft, no model — bailing',
-          { modelId },
-        )
-        return
-      }
+      return
+    }
 
-      // Parse lexicalJson back to the textContent format used by style drafts
-      let textContent: unknown =
-        existingDraft?.textContent ??
-        (model ? createTemplateTextContent(getModelLabel(model)) : null)
-      try {
-        textContent = JSON.parse(commit.lexicalJson)
-      } catch (error) {
-        console.warn(
-          '[BuilderPage.handleCommitNodeText] failed to parse lexicalJson',
-          error,
-        )
-      }
+    // Parse lexicalJson back to the textContent format used by style drafts
+    let textContent: unknown =
+      existingDraft?.textContent ??
+      (model ? createTemplateTextContent(getModelLabel(model)) : null)
+    try {
+      textContent = JSON.parse(commit.lexicalJson)
+    } catch (error) {
+      console.warn(
+        '[BuilderPage.handleCommitNodeText] failed to parse lexicalJson',
+        error,
+      )
+    }
 
-      let nextDraft = existingDraft
-      if (!nextDraft) {
-        if (!model) return
-        nextDraft = createPreviewStyleDraft(model, textContent)
-      }
+    let nextDraft = existingDraft
+    if (!nextDraft) {
+      if (!model) return
+      nextDraft = createPreviewStyleDraft(model, textContent)
+    }
 
-      console.log('[BuilderPage.handleCommitNodeText] calling setStyleDraft', {
-        modelId,
-      })
-      actions.setStyleDraft(modelId, {
-        ...nextDraft,
-        textContent,
-        dirty: true,
-        saveState: 'idle',
-        error: undefined,
-      })
-    },
-    [actions],
-  )
+    console.log('[BuilderPage.handleCommitNodeText] calling setStyleDraft', {
+      modelId,
+    })
+    actions.setStyleDraft(modelId, {
+      ...nextDraft,
+      textContent,
+      dirty: true,
+      saveState: 'idle',
+      error: undefined,
+    })
+  }
 
   // Bridge canvas resize-handle drags back to the builder store's style drafts.
   // When a user drags a Transformer handle the canvas updates node dimensions
   // internally; ResizeBridge detects the change and forwards it here so the
   // sidebar DimensionInputs stay in sync.
-  const handleNodeResize = useCallback(
-    (resize: BuilderPreviewResize) => {
-      console.log('[BuilderPage.handleNodeResize] ENTERED', resize)
-      console.trace('[BuilderPage.handleNodeResize] trace')
-      const existingDraft = styleDraftsRef.current[resize.nodeId]
-      const model = modelsRef.current.find(
-        (candidate) => candidate.id === resize.nodeId,
+  function handleNodeResize(resize: BuilderPreviewResize) {
+    console.log('[BuilderPage.handleNodeResize] ENTERED', resize)
+    console.trace('[BuilderPage.handleNodeResize] trace')
+    const existingDraft = styleDraftsRef.current[resize.nodeId]
+    const model = modelsRef.current.find(
+      (candidate) => candidate.id === resize.nodeId,
+    )
+    if (!existingDraft && !model) return
+
+    let nextDraft = existingDraft
+    if (!nextDraft) {
+      if (!model) return
+      nextDraft = createPreviewStyleDraft(
+        model,
+        createTemplateTextContent(getModelLabel(model)),
       )
-      if (!existingDraft && !model) return
+    }
 
-      let nextDraft = existingDraft
-      if (!nextDraft) {
-        if (!model) return
-        nextDraft = createPreviewStyleDraft(
-          model,
-          createTemplateTextContent(getModelLabel(model)),
-        )
-      }
-
-      const currentDims = (nextDraft.dimensions ?? {}) as Record<
-        string,
-        unknown
-      >
-      console.log('[BuilderPage.handleNodeResize] calling setStyleDraft', {
-        nodeId: resize.nodeId,
+    const currentDims = (nextDraft.dimensions ?? {}) as Record<string, unknown>
+    console.log('[BuilderPage.handleNodeResize] calling setStyleDraft', {
+      nodeId: resize.nodeId,
+      width: resize.width,
+      height: resize.height,
+    })
+    actions.setStyleDraft(resize.nodeId, {
+      ...nextDraft,
+      dimensions: {
+        ...currentDims,
         width: resize.width,
         height: resize.height,
-      })
-      actions.setStyleDraft(resize.nodeId, {
-        ...nextDraft,
-        dimensions: {
-          ...currentDims,
-          width: resize.width,
-          height: resize.height,
-        },
-        dirty: true,
-        saveState: 'idle',
-        error: undefined,
-      })
-    },
-    [actions],
-  )
+      },
+      dirty: true,
+      saveState: 'idle',
+      error: undefined,
+    })
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
@@ -352,6 +354,12 @@ function BuilderPageContent({
       </div>
 
       <PublishRecipeDialog
+        key={
+          publishOpen
+            ? `publish-open-${currentTemplateId ?? 'new'}`
+            : 'publish-closed'
+        }
+        canManageFeaturedTemplates={canManageFeaturedTemplates}
         open={publishOpen}
         publishError={publishError}
         publishing={publishMutation.isPending}

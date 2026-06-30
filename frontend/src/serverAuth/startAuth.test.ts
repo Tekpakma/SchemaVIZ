@@ -5,6 +5,7 @@ import {
   __createStartAuthSessionCookieForTests,
   __setStartAuthTestOverrides,
   getValidAccessToken,
+  handleStartAuthRequest,
   proxySchemaVizRequest,
 } from './startAuth'
 import type { StartAuthUser } from './startAuth'
@@ -16,6 +17,7 @@ const AUTH_ENV_KEYS = [
   'SCHEMA_VIZ_AUTH_MODE',
   'SCHEMA_VIZ_AUTH_SECRET',
   'SCHEMA_VIZ_AUTH_STORE_DIR',
+  'SCHEMA_VIZ_DJANGO_LOGIN_URL',
   'SCHEMA_VIZ_OIDC_CLIENT_ID',
   'SCHEMA_VIZ_OIDC_CLIENT_SECRET',
   'SCHEMA_VIZ_OIDC_ISSUER',
@@ -57,6 +59,11 @@ function configureOidcEnv(clientSecret?: string) {
   }
 }
 
+function configureSessionEnv() {
+  process.env.NODE_ENV = 'test'
+  process.env.SCHEMA_VIZ_AUTH_MODE = 'session'
+  process.env.SCHEMA_VIZ_SERVER_BASE_URL = 'http://127.0.0.1:8000/schema-viz'
+}
 function tokenRecord(
   overrides: Partial<StartAuthTokenRecord> = {},
 ): StartAuthTokenRecord {
@@ -186,7 +193,8 @@ describe('proxySchemaVizRequest', () => {
     configureOidcEnv()
     const store = new MemoryStartAuthTokenStore()
     __setStartAuthTestOverrides({ tokenStore: store })
-    const sessionCookie = await __createStartAuthSessionCookieForTests('missing')
+    const sessionCookie =
+      await __createStartAuthSessionCookieForTests('missing')
 
     const response = await proxySchemaVizRequest(
       new Request('http://app.test/schema-viz/graph/', {
@@ -199,6 +207,49 @@ describe('proxySchemaVizRequest', () => {
     expect(response?.status).toBe(401)
     expect(response?.headers.get('set-cookie')).toContain('sv_session=')
     expect(response?.headers.get('set-cookie')).toContain('Max-Age=0')
+  })
+
+  it('forwards Django session cookies in session auth mode', async () => {
+    configureSessionEnv()
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response('{}', { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await proxySchemaVizRequest(
+      new Request('http://127.0.0.1:3000/schema-viz/drawings/', {
+        headers: {
+          cookie: 'sessionid=django-session; csrftoken=csrf-token',
+          'x-csrftoken': 'csrf-token',
+        },
+      }),
+    )
+
+    expect(response?.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [target, init] = fetchMock.mock.calls[0]!
+    expect(String(target)).toBe('http://127.0.0.1:8000/schema-viz/drawings/')
+    const headers = init?.headers as Headers
+    expect(headers.get('authorization')).toBeNull()
+    expect(headers.get('cookie')).toBe(
+      'sessionid=django-session; csrftoken=csrf-token',
+    )
+    expect(headers.get('x-csrftoken')).toBe('csrf-token')
+  })
+
+  it('redirects session auth login to the Django admin login', async () => {
+    configureSessionEnv()
+    process.env.SCHEMA_VIZ_DJANGO_LOGIN_URL =
+      'http://127.0.0.1:8000/django/admin/login/'
+
+    const response = await handleStartAuthRequest(
+      new Request('http://127.0.0.1:3000/_schema-viz/auth/login?next=/builder'),
+    )
+
+    expect(response?.status).toBe(302)
+    expect(response?.headers.get('location')).toBe(
+      'http://127.0.0.1:8000/django/admin/login/',
+    )
   })
 
   it('forwards DOT bearer tokens to Django and strips browser cookies', async () => {
