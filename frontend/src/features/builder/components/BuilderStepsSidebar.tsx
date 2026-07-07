@@ -17,8 +17,8 @@ export function BuilderStepsSidebar({
   const { t } = useTranslation()
 
   return (
-    <aside className="flex w-[300px] shrink-0 flex-col border-r border-border bg-background">
-      <div className="border-b border-border px-4 py-4">
+    <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col overflow-hidden border-r border-border bg-background">
+      <div className="shrink-0 border-b border-border px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-[14px] font-semibold tracking-tight">
             {t('builder.sidebar.title')}
@@ -29,7 +29,7 @@ export function BuilderStepsSidebar({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-2">
         {steps.map((step, index) => (
           <StepCard
             key={step.id}

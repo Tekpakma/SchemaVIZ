@@ -15,12 +15,12 @@ import {
 } from './layoutAdapters'
 
 export const layoutCanvasGraph = createServerFn({ method: 'POST' })
-  .inputValidator(canvasLayoutInputSchema)
+  .validator(canvasLayoutInputSchema)
   .handler(async ({ data }) => runElkLayout(data))
 
 export const layoutSchemaGraph = createServerFn({ method: 'POST' })
   .middleware([authFunctionMiddleware])
-  .inputValidator(schemaLayoutInputSchema)
+  .validator(schemaLayoutInputSchema)
   .handler(async ({ context, data }) => {
     const response = await schemaVizGraphRetrieve({
       headers: getForwardedBackendHeaders(context.auth),

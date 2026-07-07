@@ -193,6 +193,45 @@ describe('builderStore workbench documents', () => {
     })
   })
 
+  it('replaces an existing group rule when the same relation switches mode', () => {
+    const tabId = getWorkbenchActionsSnapshot().openTab({
+      kind: 'generation-builder',
+      title: 'Draft',
+      resource: {
+        type: 'draft',
+        localId: 'group-mode-draft',
+      },
+    })
+    const builderActions = getBuilderActionsSnapshot()
+
+    builderActions.ensureDocument(tabId)
+    builderActions.addGroupRule(tabId, {
+      id: 'group-region',
+      parentModelId: 'provider',
+      childModelId: 'region',
+      via: 'regions',
+      mode: 'group',
+      layout: { mode: 'auto-pack' },
+    })
+    builderActions.addGroupRule(tabId, {
+      id: 'breakout-region',
+      parentModelId: 'provider',
+      childModelId: 'region',
+      via: 'regions',
+      mode: 'breakout',
+    })
+
+    expect(getBuilderRecipeSnapshot(tabId)?.groupRules).toEqual([
+      {
+        id: 'breakout-region',
+        parentModelId: 'provider',
+        childModelId: 'region',
+        via: 'regions',
+        mode: 'breakout',
+      },
+    ])
+  })
+
   it('stores Step 6 layout direction independently from algorithm', () => {
     const tabId = getWorkbenchActionsSnapshot().openTab({
       kind: 'generation-builder',

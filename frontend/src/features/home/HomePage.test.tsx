@@ -158,7 +158,7 @@ vi.mock('react-i18next', () => ({
       if (key === 'home.hero.title') return 'Landscapes'
       if (key === 'home.hero.newFromScratch') return 'New from scratch'
       if (key === 'home.hero.reviewFeatured') return 'Review featured'
-      if (key === 'home.hero.reviewLastOpened') return 'Review owned template'
+      if (key === 'home.hero.reviewLastOpened') return 'Open recent template'
       if (key === 'home.promoted.kicker') return 'Promoted templates'
       if (key === 'home.promoted.title') return 'Curated templates'
       if (key === 'home.stats.featured') return 'featured'

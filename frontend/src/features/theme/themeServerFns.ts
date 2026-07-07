@@ -27,7 +27,7 @@ export const getThemePreference = createServerFn({ method: 'GET' }).handler(
 )
 
 export const setThemePreference = createServerFn({ method: 'POST' })
-  .inputValidator((data: ThemeMode) => parseThemeMode(data))
+  .validator((data: ThemeMode) => parseThemeMode(data))
   .handler(async ({ data }) => {
     if (data === DEFAULT_THEME_MODE) {
       deleteCookie(THEME_COOKIE_NAME, {

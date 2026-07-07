@@ -547,6 +547,253 @@ describe('builder preview layout', () => {
     })
   })
 
+  it('nests promoted group parents when consecutive line relations are grouped', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [{ id: 'service', label: 'Services' }],
+        models: [
+          createModel({
+            id: 'business',
+            displayName: 'Business',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'network',
+            displayName: 'Network',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'provider',
+            displayName: 'Provider',
+            layerId: 'service',
+          }),
+        ],
+        edges: [
+          {
+            id: 'edge-business-network',
+            from: 'Business',
+            to: 'Network',
+            fromModelId: 'business',
+            toModelId: 'network',
+            via: 'networks',
+            auto: true,
+            cost: 1,
+          },
+          {
+            id: 'edge-network-provider',
+            from: 'Network',
+            to: 'Provider',
+            fromModelId: 'network',
+            toModelId: 'provider',
+            via: 'provider',
+            auto: true,
+            cost: 1,
+          },
+        ],
+        groupRules: [
+          {
+            id: 'group-network',
+            parentModelId: 'business',
+            childModelId: 'network',
+            via: 'networks',
+            mode: 'group',
+          },
+          {
+            id: 'group-provider',
+            parentModelId: 'network',
+            childModelId: 'provider',
+            via: 'provider',
+            mode: 'group',
+          },
+        ],
+      }),
+    )
+
+    expect(graph.nodes).toMatchObject([
+      {
+        id: 'builder-model-group:business',
+        kind: 'group',
+      },
+      {
+        id: 'builder-model-group:network',
+        kind: 'group',
+        parentGroupId: 'builder-model-group:business',
+      },
+      {
+        id: 'provider',
+        kind: 'editable',
+        parentGroupId: 'builder-model-group:network',
+      },
+    ])
+    expect(
+      graph.nodes.find((node) => node.id === 'builder-model-group:business')
+        ?.parentGroupId,
+    ).toBeUndefined()
+    expect(graph.edges).toEqual([])
+  })
+
+  it('keeps breakout children at the canvas root after an earlier line relation is grouped', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [{ id: 'service', label: 'Services' }],
+        models: [
+          createModel({
+            id: 'business',
+            displayName: 'Business',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'network',
+            displayName: 'Network',
+            layerId: 'service',
+          }),
+          createModel({
+            id: 'provider',
+            displayName: 'Provider',
+            layerId: 'service',
+          }),
+        ],
+        edges: [
+          {
+            id: 'edge-business-network',
+            from: 'Business',
+            to: 'Network',
+            fromModelId: 'business',
+            toModelId: 'network',
+            via: 'networks',
+            auto: true,
+            cost: 1,
+          },
+          {
+            id: 'edge-network-provider',
+            from: 'Network',
+            to: 'Provider',
+            fromModelId: 'network',
+            toModelId: 'provider',
+            via: 'provider',
+            auto: true,
+            cost: 1,
+          },
+        ],
+        groupRules: [
+          {
+            id: 'group-network',
+            parentModelId: 'business',
+            childModelId: 'network',
+            via: 'networks',
+            mode: 'group',
+          },
+          {
+            id: 'group-provider-stale',
+            parentModelId: 'network',
+            childModelId: 'provider',
+            via: 'provider',
+            mode: 'group',
+          },
+          {
+            id: 'breakout-provider',
+            parentModelId: 'network',
+            childModelId: 'provider',
+            via: 'provider',
+            mode: 'breakout',
+          },
+        ],
+      }),
+    )
+
+    expect(graph.nodes).toMatchObject([
+      {
+        id: 'builder-model-group:business',
+        kind: 'group',
+      },
+      {
+        id: 'network',
+        kind: 'editable',
+        parentGroupId: 'builder-model-group:business',
+      },
+      {
+        id: 'provider',
+        kind: 'editable',
+      },
+    ])
+    expect(
+      graph.nodes.find((node) => node.id === 'provider')?.parentGroupId,
+    ).toBeUndefined()
+    // `network` is nested inside the business group, so its edge to the
+    // broken-out `provider` is promoted to the group container to avoid
+    // crossing the SEPARATE_CHILDREN boundary.
+    expect(graph.edges).toMatchObject([
+      {
+        id: 'edge-network-provider',
+        sourceNodeId: 'builder-model-group:business',
+        targetNodeId: 'provider',
+      },
+    ])
+  })
+
+  it('promotes edges from grouped children to the group container', () => {
+    const graph = getBuilderPreviewCanvasGraph(
+      createRecipe({
+        layers: [
+          { id: 'provider-layer', label: 'L1' },
+          { id: 'environment-layer', label: 'L2' },
+        ],
+        models: [
+          createModel({
+            id: 'provider',
+            displayName: 'Cloud provider',
+            layerId: 'provider-layer',
+          }),
+          createModel({
+            id: 'region',
+            displayName: 'Region',
+            layerId: 'provider-layer',
+          }),
+          createModel({
+            id: 'environment',
+            displayName: 'Environment',
+            layerId: 'environment-layer',
+          }),
+        ],
+        edges: [
+          {
+            id: 'edge-region-environment',
+            from: 'Region',
+            to: 'Environment',
+            fromModelId: 'region',
+            toModelId: 'environment',
+            via: 'environment',
+            auto: true,
+            cost: 1,
+          },
+        ],
+        groupRules: [
+          {
+            id: 'group-region',
+            parentModelId: 'provider',
+            childModelId: 'region',
+            via: 'regions',
+            mode: 'group',
+          },
+        ],
+      }),
+    )
+
+    // `region` nests inside the provider group; its edge to the root-level
+    // `environment` must attach to the container so ELK keeps the group
+    // anchored instead of detaching it across the group boundary.
+    expect(graph.edges).toMatchObject([
+      {
+        id: 'edge-region-environment',
+        sourceNodeId: 'builder-model-group:provider',
+        targetNodeId: 'environment',
+      },
+    ])
+    expect(
+      graph.nodes.find((node) => node.id === 'region')?.parentGroupId,
+    ).toBe('builder-model-group:provider')
+  })
+
   it('reflects saved style templates in node subtitles and the remount key', () => {
     const baseRecipe = createRecipe({
       layers: [{ id: 'service', label: 'Services' }],

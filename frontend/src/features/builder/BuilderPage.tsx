@@ -323,7 +323,7 @@ function BuilderPageContent({
         onTitleChange={actions.setTitle}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <BuilderStepsSidebar
           activeStepIndex={activeStepIndex}
           onPickStep={actions.setActiveStep}

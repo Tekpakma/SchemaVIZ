@@ -561,6 +561,108 @@ describe('builder template recipe conversion', () => {
     ).toBe('none')
   })
 
+  it('serializes grouping followed by breakout along a line', () => {
+    const previewSource = recipeToInlineDefinition({
+      title: 'Grouped line',
+      layers: [
+        { id: 'layer-business', label: 'Business' },
+        { id: 'layer-network', label: 'Network' },
+        { id: 'layer-provider', label: 'Provider' },
+      ],
+      models: [
+        {
+          id: 'business',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'Business',
+          modelId: 'infrastructure.Business',
+          displayName: 'Business',
+          layerId: 'layer-business',
+        },
+        {
+          id: 'network',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'Network',
+          modelId: 'infrastructure.Network',
+          displayName: 'Network',
+          layerId: 'layer-network',
+        },
+        {
+          id: 'provider',
+          appLabel: 'infrastructure',
+          appVerboseName: 'Infrastructure',
+          modelName: 'Provider',
+          modelId: 'infrastructure.Provider',
+          displayName: 'Provider',
+          layerId: 'layer-provider',
+        },
+      ],
+      examples: [],
+      edges: [
+        {
+          id: 'edge-business-network',
+          from: 'Business',
+          to: 'Network',
+          fromModelId: 'business',
+          toModelId: 'network',
+          via: 'networks',
+          auto: true,
+          cost: 1,
+        },
+        {
+          id: 'edge-network-provider',
+          from: 'Network',
+          to: 'Provider',
+          fromModelId: 'network',
+          toModelId: 'provider',
+          via: 'provider',
+          auto: true,
+          cost: 1,
+        },
+      ],
+      filters: [],
+      groupRules: [
+        {
+          id: 'group-network',
+          parentModelId: 'business',
+          childModelId: 'network',
+          via: 'networks',
+          mode: 'group',
+        },
+        {
+          id: 'breakout-provider',
+          parentModelId: 'network',
+          childModelId: 'provider',
+          via: 'provider',
+          mode: 'breakout',
+        },
+      ],
+      groupLayout: { strategy: 'auto' },
+      styleDrafts: {},
+      swatches: [],
+      layoutAlgorithm: 'Layered',
+      layoutDirection: 'LR',
+      shareSlug: '',
+      promoteTarget: '',
+      promoteVisibility: 'shared',
+      promoteAudience: '',
+    })
+
+    expect(previewSource?.inlineDefinition.stepsById.business).toMatchObject({
+      groupMode: 'group',
+      childIds: ['network'],
+    })
+    expect(previewSource?.inlineDefinition.stepsById.network).toMatchObject({
+      parentId: 'business',
+      groupMode: 'none',
+      childIds: ['provider'],
+    })
+    expect(previewSource?.inlineDefinition.stepsById.provider).toMatchObject({
+      parentId: 'network',
+      groupMode: 'breakout',
+    })
+  })
   it('imports parent group definitions as builder group rules', () => {
     const recipe = createRecipeFromTemplate(
       createTemplate({

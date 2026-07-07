@@ -209,6 +209,91 @@ describe('generation preview graph', () => {
     expect(graph.edges).toEqual([])
   })
 
+  it('renders nested live groups while keeping breakout children at the root', () => {
+    const response = createGenerationResponse()
+    response.result.nodes = [
+      {
+        id: 'business:1@root:group',
+        appLabel: 'infra',
+        modelName: 'business',
+        recordPk: '1',
+        label: 'Business',
+        displayName: 'Business',
+        fields: {},
+        styleTemplateId: null,
+        parentId: null,
+        isGroup: true,
+        stepUiIds: ['business'],
+      },
+      {
+        id: 'network:1@business:1@root:group:group',
+        appLabel: 'infra',
+        modelName: 'network',
+        recordPk: '1',
+        label: 'Network',
+        displayName: 'Network',
+        fields: {},
+        styleTemplateId: null,
+        parentId: 'business:1@root:group',
+        isGroup: true,
+        stepUiIds: ['network'],
+      },
+      {
+        id: 'provider:1@root:node',
+        appLabel: 'infra',
+        modelName: 'provider',
+        recordPk: '1',
+        label: 'Provider',
+        displayName: 'Provider',
+        fields: {},
+        styleTemplateId: null,
+        parentId: null,
+        isGroup: false,
+        stepUiIds: ['provider'],
+      },
+    ]
+    response.result.edges = [
+      {
+        source: 'business:1@root:group',
+        target: 'network:1@business:1@root:group:group',
+        relationship: 'networks',
+      },
+      {
+        source: 'network:1@business:1@root:group:group',
+        target: 'provider:1@root:node',
+        relationship: 'provider',
+      },
+    ]
+
+    const graph = getGenerationPreviewCanvasGraph(response)
+
+    expect(graph.nodes).toMatchObject([
+      {
+        id: 'business:1@root:group',
+        kind: 'group',
+      },
+      {
+        id: 'network:1@business:1@root:group:group',
+        kind: 'group',
+        parentGroupId: 'business:1@root:group',
+      },
+      {
+        id: 'provider:1@root:node',
+        kind: 'generation',
+      },
+    ])
+    expect(
+      graph.nodes.find((node) => node.id === 'provider:1@root:node')
+        ?.parentGroupId,
+    ).toBeUndefined()
+    expect(graph.edges).toMatchObject([
+      {
+        sourceNodeId: 'network:1@business:1@root:group:group',
+        targetNodeId: 'provider:1@root:node',
+        label: 'provider',
+      },
+    ])
+  })
   it('attaches recipe group layout policy to live generated group nodes', () => {
     const recipe = createRecipe({
       models: [

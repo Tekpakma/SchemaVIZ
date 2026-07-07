@@ -521,7 +521,7 @@ export const resources = {
           kicker: 'Templates',
           newFromScratch: '+ Neu erstellen',
           reviewFeatured: 'Empfohlenes prüfen',
-          reviewLastOpened: 'Eigenes Template prüfen',
+          reviewLastOpened: 'Zuletzt genutztes öffnen',
           title: 'Landscapes',
         },
         promoted: {
@@ -1063,7 +1063,7 @@ export const resources = {
           kicker: 'Templates',
           newFromScratch: '+ New from scratch',
           reviewFeatured: 'Review featured',
-          reviewLastOpened: 'Review owned template',
+          reviewLastOpened: 'Open recent template',
           title: 'Landscapes',
         },
         promoted: {

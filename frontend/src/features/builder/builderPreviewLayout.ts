@@ -11,9 +11,7 @@ import type {
   CanvasNodeStyleOverrides,
 } from '@/features/canvas/model/types'
 import { CANVAS_NODE_SHAPES } from '@/features/canvas/nodeShapes'
-import {
-  builderEditableTemplateNodeHtml,
-} from './builderPreviewHtml'
+import { builderEditableTemplateNodeHtml } from './builderPreviewHtml'
 import {
   createTemplateTextContent,
   renderTemplateTextContent,
@@ -239,9 +237,7 @@ function hashTextContent(textContent: unknown): string {
   // is already in the key, so we can return a fixed sentinel.
   if (textContent == null) return '_'
   const json =
-    typeof textContent === 'string'
-      ? textContent
-      : JSON.stringify(textContent)
+    typeof textContent === 'string' ? textContent : JSON.stringify(textContent)
   let h = 5381
   for (let i = 0; i < json.length; i++) {
     h = ((h << 5) + h + json.charCodeAt(i)) | 0
@@ -385,6 +381,16 @@ function resolveGroupParents(
   // model node IDs that are group containers
   const groupParentIds = new Set<string>()
   const groupLayoutByParentId = new Map<string, CanvasGroupLayoutPolicy>()
+  const breakoutChildIds = new Set<string>()
+
+  for (const rule of groupRules) {
+    if (rule.mode !== 'breakout') continue
+    const child =
+      nodesById[rule.childModelId] ?? nodesByModelId[rule.childModelId]
+    if (child) {
+      breakoutChildIds.add(child.id)
+    }
+  }
 
   for (const rule of groupRules) {
     if (rule.mode !== 'group') continue
@@ -393,12 +399,12 @@ function resolveGroupParents(
     const child =
       nodesById[rule.childModelId] ?? nodesByModelId[rule.childModelId]
     if (!parent || !child || parent.id === child.id) continue
+    if (breakoutChildIds.has(child.id)) continue
 
     childToGroupParent.set(child.id, parent.id)
     groupParentIds.add(parent.id)
     groupLayoutByParentId.set(parent.id, rule.layout ?? groupLayout)
   }
-
   return { childToGroupParent, groupLayoutByParentId, groupParentIds }
 }
 
@@ -450,6 +456,33 @@ function resolveCanvasNodeId(nodeId: string, groupParentIds: Set<string>) {
   return groupParentIds.has(nodeId) ? `${MODEL_GROUP_PREFIX}${nodeId}` : nodeId
 }
 
+/**
+ * Walks up the group hierarchy to the outermost container that owns a node.
+ *
+ * Group containers are laid out with ELK `SEPARATE_CHILDREN`, which treats
+ * each group as an opaque black box. Edges that reference a node nested
+ * inside a group therefore cannot be routed across the group boundary and
+ * cause ELK to detach the whole group. Promoting such endpoints to the
+ * top-level container keeps every edge between root-level ELK nodes so the
+ * group stays anchored and its children nest correctly.
+ */
+function resolveOutermostGroupNodeId(
+  nodeId: string,
+  nodesById: Map<string, CanvasNode>,
+) {
+  let currentId = nodeId
+  const visited = new Set<string>()
+
+  while (!visited.has(currentId)) {
+    visited.add(currentId)
+    const node = nodesById.get(currentId)
+    if (!node?.parentGroupId) break
+    currentId = node.parentGroupId
+  }
+
+  return currentId
+}
+
 function getLayerColumnSpacing(previewEdges: BuilderPreviewEdge[]) {
   const longestLabelLength = Math.max(
     0,
@@ -467,16 +500,12 @@ function getLayerColumnSpacing(previewEdges: BuilderPreviewEdge[]) {
 }
 
 function createBuilderPreviewEdgeRoute(
-  edge: BuilderPreviewEdge,
+  sourceNodeId: string,
+  targetNodeId: string,
   nodesById: Map<string, CanvasNode>,
-  groupParentIds: Set<string>,
 ): Array<{ x: number; y: number }> | undefined {
-  const sourceNode = nodesById.get(
-    resolveCanvasNodeId(edge.from.id, groupParentIds),
-  )
-  const targetNode = nodesById.get(
-    resolveCanvasNodeId(edge.to.id, groupParentIds),
-  )
+  const sourceNode = nodesById.get(sourceNodeId)
+  const targetNode = nodesById.get(targetNodeId)
   if (!sourceNode || !targetNode) return undefined
 
   const sourceX = sourceNode.x + sourceNode.width
@@ -573,6 +602,7 @@ export function getBuilderPreviewCanvasGraph(
     R.filter((node) => groupParentIds.has(node.id)),
     R.map((node) => {
       const textContent = textContentByNodeId.get(node.id)!
+      const groupParentNodeId = childToGroupParent.get(node.id)
 
       return {
         id: `${MODEL_GROUP_PREFIX}${node.id}`,
@@ -581,10 +611,14 @@ export function getBuilderPreviewCanvasGraph(
         layoutMode: 'auto' as const,
         appLabel: node.appLabel,
         modelName: node.modelName,
-        x: node.layerColumnIndex * layerColumnSpacing,
-        y:
-          LAYER_LABEL_RESERVED_TOP_SPACE +
-          node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
+        ...(groupParentNodeId
+          ? { parentGroupId: `${MODEL_GROUP_PREFIX}${groupParentNodeId}` }
+          : {}),
+        x: groupParentNodeId ? 0 : node.layerColumnIndex * layerColumnSpacing,
+        y: groupParentNodeId
+          ? 0
+          : LAYER_LABEL_RESERVED_TOP_SPACE +
+            node.layerRowIndex * LAYER_NODE_Y_HINT_SPACING,
         width: BUILDER_PREVIEW_GROUP_MIN_WIDTH,
         height: BUILDER_PREVIEW_GROUP_MIN_HEIGHT,
         lexicalJson: stringifyTemplateTextContent(textContent),
@@ -616,9 +650,7 @@ export function getBuilderPreviewCanvasGraph(
 
       // Use style draft dimensions if user customized them, else central defaults
       const draftDims = node.styleDraft?.dimensions as
-        | { width?: number; height?: number }
-        | null
-        | undefined
+        { width?: number; height?: number } | null | undefined
       const width =
         (draftDims?.width ?? 0) > 0
           ? draftDims!.width!
@@ -663,17 +695,29 @@ export function getBuilderPreviewCanvasGraph(
   const edges: CanvasEdge[] = R.pipe(
     previewEdges,
     R.flatMap((edge) => {
-      const routePoints = createBuilderPreviewEdgeRoute(
-        edge,
+      // Promote endpoints out of any enclosing group container. Edges that
+      // reference a node nested inside a SEPARATE_CHILDREN group cannot be
+      // routed across the group boundary and detach the group from the graph.
+      const sourceNodeId = resolveOutermostGroupNodeId(
+        resolveCanvasNodeId(edge.from.id, groupParentIds),
         nodesById,
-        groupParentIds,
+      )
+      const targetNodeId = resolveOutermostGroupNodeId(
+        resolveCanvasNodeId(edge.to.id, groupParentIds),
+        nodesById,
+      )
+
+      const routePoints = createBuilderPreviewEdgeRoute(
+        sourceNodeId,
+        targetNodeId,
+        nodesById,
       )
       const labelPoint = createBuilderPreviewEdgeLabelPoint(routePoints)
 
       const canvasEdge: CanvasEdge = {
         id: edge.id,
-        sourceNodeId: resolveCanvasNodeId(edge.from.id, groupParentIds),
-        targetNodeId: resolveCanvasNodeId(edge.to.id, groupParentIds),
+        sourceNodeId,
+        targetNodeId,
         kind: 'default' as const,
         label: edge.label || undefined,
         ...(labelPoint ? { labelPoint } : {}),

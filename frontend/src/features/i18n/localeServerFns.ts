@@ -29,7 +29,7 @@ export const getLocalePreference = createServerFn({ method: 'GET' }).handler(
 )
 
 export const setLocalePreference = createServerFn({ method: 'POST' })
-  .inputValidator((data: Locale) => parseLocale(data) ?? 'en')
+  .validator((data: Locale) => parseLocale(data) ?? 'en')
   .handler(async ({ data }) => {
     setCookie(LOCALE_COOKIE_NAME, data, {
       httpOnly: true,

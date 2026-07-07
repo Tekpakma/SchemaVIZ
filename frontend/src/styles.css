@@ -171,7 +171,9 @@ body {
 .app-shell {
   display: grid;
   grid-template-rows: var(--app-navbar-height) minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .app-navbar {
@@ -220,7 +222,10 @@ pre code {
 
 button,
 a {
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
     transform 180ms ease;
 }
 

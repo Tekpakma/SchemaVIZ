@@ -726,7 +726,14 @@ const useBuilderStore = create<BuilderState>()(
         addGroupRule: (tabId, rule) =>
           set(
             (state) => {
-              ensureBuilderDocument(state, tabId).recipe.groupRules.push({
+              const document = ensureBuilderDocument(state, tabId)
+              document.recipe.groupRules = document.recipe.groupRules.filter(
+                (existing) =>
+                  existing.parentModelId !== rule.parentModelId ||
+                  existing.childModelId !== rule.childModelId ||
+                  existing.via !== rule.via,
+              )
+              document.recipe.groupRules.push({
                 ...rule,
                 layout: cloneJsonValue(rule.layout),
               })
@@ -734,7 +741,6 @@ const useBuilderStore = create<BuilderState>()(
             false,
             'builder/addGroupRule',
           ),
-
         removeGroupRule: (tabId, id) =>
           set(
             (state) => {
