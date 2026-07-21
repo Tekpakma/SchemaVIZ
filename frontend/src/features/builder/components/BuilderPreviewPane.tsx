@@ -147,6 +147,20 @@ export function BuilderPreviewPane({
   )
 
   const records = recordsQuery.records
+  const normalizedRecordSearch = recordsQuery.search.trim().toLocaleLowerCase()
+  const visibleExamples = normalizedRecordSearch
+    ? examples.filter((example) =>
+        `${example.label} ${example.idValue}`
+          .toLocaleLowerCase()
+          .includes(normalizedRecordSearch),
+      )
+    : examples
+
+  function handlePickerOpenChange(nextOpen: boolean) {
+    if (!nextOpen) recordsQuery.setSearch('')
+    setPickerOpen(nextOpen)
+  }
+
   function handlePreviewToggle() {
     flushInlineNodeEditRef.current?.()
     if (typeof document !== 'undefined') {
@@ -165,13 +179,13 @@ export function BuilderPreviewPane({
 
   function handlePickExistingExample(exampleId: string) {
     actions.setActiveExample(exampleId)
-    setPickerOpen(false)
+    handlePickerOpenChange(false)
   }
 
   function handlePickNewRecord(record: ExampleRecord) {
     actions.addExample(record)
     actions.setActiveExample(record.id)
-    setPickerOpen(false)
+    handlePickerOpenChange(false)
   }
 
   // ---------------------------------------------------------------------------
@@ -341,14 +355,19 @@ export function BuilderPreviewPane({
             model: startModel.displayName,
           })}
           open={pickerOpen}
-          onOpenChange={setPickerOpen}
+          onOpenChange={handlePickerOpenChange}
           showCloseButton={false}
+          shouldFilter={false}
         >
-          <CommandInput placeholder={t('builder.header.previewPickerSearch')} />
+          <CommandInput
+            placeholder={t('builder.header.previewPickerSearch')}
+            value={recordsQuery.search}
+            onValueChange={recordsQuery.setSearch}
+          />
           <CommandList>
-            {examples.length > 0 && (
+            {visibleExamples.length > 0 && (
               <CommandGroup heading={t('builder.header.pinnedRecords')}>
-                {examples.map((ex) => (
+                {visibleExamples.map((ex) => (
                   <CommandItem
                     key={ex.id}
                     value={`${ex.label} ${ex.idValue}`}
@@ -373,7 +392,9 @@ export function BuilderPreviewPane({
                 {t('builder.header.loadingRecords')}
               </CommandLoading>
             )}
-            <CommandEmpty>{t('builder.header.noRecordsFound')}</CommandEmpty>
+            {!recordsQuery.isLoading && (
+              <CommandEmpty>{t('builder.header.noRecordsFound')}</CommandEmpty>
+            )}
             {records.length > 0 && (
               <CommandGroup heading={startModel.displayName}>
                 {records.map((record) => {

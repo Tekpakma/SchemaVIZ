@@ -56,6 +56,7 @@ function GenerateTemplatePage() {
     template.draftVersion?.rootModel ??
     ''
   const rootModelRef = rootModelId ? splitModelId(rootModelId) : null
+  const [open, setOpen] = useState(false)
 
   const recordsQuery = usePaginatedRecords(
     {
@@ -63,11 +64,15 @@ function GenerateTemplatePage() {
       modelName: rootModelRef?.modelName ?? '',
       page: 1,
     },
-    { enabled: Boolean(rootModelRef) },
+    { enabled: Boolean(rootModelRef) && open },
   )
 
   const records = recordsQuery.records
-  const [open, setOpen] = useState(false)
+  function handlePickerOpenChange(nextOpen: boolean) {
+    if (!nextOpen) recordsQuery.setSearch('')
+    setOpen(nextOpen)
+  }
+
   const [selectedRecord, setSelectedRecord] = useState<{
     pk: string
     displayName: string
@@ -108,7 +113,7 @@ function GenerateTemplatePage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover open={open} onOpenChange={handlePickerOpenChange}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -130,8 +135,12 @@ function GenerateTemplatePage() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                <Command>
-                  <CommandInput placeholder={t('generate.searchRecords')} />
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder={t('generate.searchRecords')}
+                    value={recordsQuery.search}
+                    onValueChange={recordsQuery.setSearch}
+                  />
                   <CommandList id="generate-record-list">
                     {recordsQuery.isLoading && (
                       <CommandLoading>
@@ -144,7 +153,9 @@ function GenerateTemplatePage() {
                         {t('generate.loadError')}
                       </div>
                     )}
-                    <CommandEmpty>{t('generate.noRecords')}</CommandEmpty>
+                    {!recordsQuery.isLoading && (
+                      <CommandEmpty>{t('generate.noRecords')}</CommandEmpty>
+                    )}
                     {records.length > 0 && (
                       <CommandGroup>
                         {records.map((record) => {
@@ -160,7 +171,7 @@ function GenerateTemplatePage() {
                                   pk,
                                   displayName: record.displayName,
                                 })
-                                setOpen(false)
+                                handlePickerOpenChange(false)
                               }}
                             >
                               {isSelected ? (

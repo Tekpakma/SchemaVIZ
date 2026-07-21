@@ -85,6 +85,22 @@ describe('SCHEMA_QUERIES.records', () => {
     expect(secondStream).not.toEqual(firstStream)
   })
 
+  it('keys record streams by server-side search', () => {
+    const allRecords = SCHEMA_QUERIES.recordPages({
+      appLabel: 'auth',
+      modelName: 'user',
+      page: 1,
+    }).queryKey
+    const matchingRecords = SCHEMA_QUERIES.recordPages({
+      appLabel: 'auth',
+      modelName: 'user',
+      page: 1,
+      search: 'alice',
+    }).queryKey
+
+    expect(matchingRecords).not.toEqual(allRecords)
+  })
+
   it('fetches every QLab page when a caller needs complete relation records', async () => {
     queryRecordsMock
       .mockResolvedValueOnce(recordsResponse(1, 2, ['1']))

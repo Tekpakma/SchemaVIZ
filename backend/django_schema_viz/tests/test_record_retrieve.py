@@ -17,6 +17,8 @@ RECORDS_URL = "/schema-viz/query/records/"
 RECORD_URL = "/schema-viz/query/record/"
 METADATA_URL = "/schema-viz/query/metadata/"
 NEIGHBORHOOD_URL = "/schema-viz/query/neighborhood/"
+
+
 class QueryRecordsViewTests(APITestCase):
     def setUp(self):
         seed_qlab_registry()
@@ -72,7 +74,11 @@ class QueryRecordsViewTests(APITestCase):
                 "filterFields": {
                     "orOperation": [
                         {"field": "username", "op": "icontains", "value": "ali"},
-                        {"field": "email", "op": "icontains", "value": "bob@example.com"},
+                        {
+                            "field": "email",
+                            "op": "icontains",
+                            "value": "bob@example.com",
+                        },
                     ]
                 },
                 "pageSize": 20,
@@ -81,10 +87,65 @@ class QueryRecordsViewTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        usernames = {result["fields"]["username"] for result in response.json()["results"]}
+        usernames = {
+            result["fields"]["username"] for result in response.json()["results"]
+        }
         self.assertIn("alice", usernames)
         self.assertIn("bob", usernames)
         self.assertNotIn("charlie", usernames)
+
+    def test_records_search_before_pagination(self):
+        response = self.client.post(
+            RECORDS_URL,
+            {
+                "appLabel": "auth",
+                "modelName": "user",
+                "search": "charlie",
+                "pageSize": 1,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["totalPages"], 1)
+        self.assertEqual(data["results"][0]["fields"]["username"], "charlie")
+
+    def test_records_combine_search_with_qlab_filters(self):
+        response = self.client.post(
+            RECORDS_URL,
+            {
+                "appLabel": "auth",
+                "modelName": "user",
+                "search": "example.com",
+                "filterFields": {
+                    "andOperation": [{"field": "username", "op": "is", "value": "bob"}]
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        usernames = [
+            result["fields"]["username"] for result in response.json()["results"]
+        ]
+        self.assertEqual(usernames, ["bob"])
+
+    def test_records_search_by_primary_key(self):
+        response = self.client.post(
+            RECORDS_URL,
+            {
+                "appLabel": "auth",
+                "modelName": "user",
+                "search": str(self.alice.pk),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        ids = [result["fields"]["id"] for result in response.json()["results"]]
+        self.assertIn(self.alice.pk, ids)
 
     def test_invalid_filter_field_returns_structured_error(self):
         response = self.client.post(
@@ -297,9 +358,7 @@ class QueryNeighborhoodViewTests(APITestCase):
         self.alice = User.objects.create_user(
             username="alice", email="alice@example.com"
         )
-        self.bob = User.objects.create_user(
-            username="bob", email="bob@example.com"
-        )
+        self.bob = User.objects.create_user(username="bob", email="bob@example.com")
 
     def tearDown(self):
         reset_qlab_registry()

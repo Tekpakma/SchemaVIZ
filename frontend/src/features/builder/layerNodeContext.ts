@@ -13,5 +13,8 @@ export function hasCompleteLayerNodeContext(
   layers: RecipeLayer[],
   models: RecipeModel[],
 ) {
-  return layers.length > 0 && getLayersWithoutNodeContext(layers, models).length === 0
+  return (
+    layers.length > 0 &&
+    getLayersWithoutNodeContext(layers, models).length === 0
+  )
 }

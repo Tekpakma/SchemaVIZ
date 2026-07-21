@@ -10,10 +10,7 @@ import { DataReferenceNode } from './DataReferenceNode'
 import { DataReferenceBrowser } from './DataReferenceBrowser'
 
 vi.mock('./useDataReferenceSuggestions', () => ({
-  useDataReferenceSuggestions: (
-    _dataScope: unknown,
-    path: string,
-  ) =>
+  useDataReferenceSuggestions: (_dataScope: unknown, path: string) =>
     path === 'owner.'
       ? [
           {
@@ -95,7 +92,9 @@ describe('DataReferenceBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Insert data' }))
 
-    expect(screen.getByRole('button', { name: /name.*Display name/ })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: /name.*Display name/ }),
+    ).toBeTruthy()
     fireEvent.click(
       screen.getByRole('button', { name: /owner.*Open relation/ }),
     )
@@ -106,6 +105,8 @@ describe('DataReferenceBrowser', () => {
     ).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByRole('button', { name: /name.*Display name/ })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: /name.*Display name/ }),
+    ).toBeTruthy()
   })
 })

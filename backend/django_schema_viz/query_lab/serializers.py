@@ -18,6 +18,12 @@ class QueryMetadataRequestSerializer(serializers.Serializer):
 
 
 class QueryRecordsRequestSerializer(QueryMetadataRequestSerializer):
+    search = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=200,
+    )
     select_fields = serializers.ListField(
         child=serializers.CharField(),
         required=False,

@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.apps import apps
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.db import models
+from qlab.helpers import get_model_metadata
 from qlab.mixins import NeighborhoodMixin, QLabMetadataMixin, QLabMixin
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
@@ -15,7 +17,10 @@ from django_schema_viz.drf import (
 )
 from django_schema_viz.mixins import SchemaVizViewMixin
 from django_schema_viz.schema_compat import extend_schema
-from django_schema_viz.serializers import DynamicModelSerializer, ErrorResponseSerializer
+from django_schema_viz.serializers import (
+    DynamicModelSerializer,
+    ErrorResponseSerializer,
+)
 from django_schema_viz.utils.qlab_access import is_model_accessible_for_user
 
 from .serializers import (
@@ -56,7 +61,9 @@ class SchemaVizQLabBaseView(SchemaVizViewMixin, GenericAPIView):
     def _error_response(message: str, status_code: int) -> Response:
         return Response({"error": message}, status=status_code)
 
-    def _resolve_model(self, app_label: str, model_name: str) -> _ResolvedModel | Response:
+    def _resolve_model(
+        self, app_label: str, model_name: str
+    ) -> _ResolvedModel | Response:
         if not is_model_accessible_for_user(self.request.user, app_label, model_name):
             return self._error_response(
                 f"Model {app_label}.{model_name} is not accessible",
@@ -149,13 +156,9 @@ class SchemaVizQLabBaseView(SchemaVizViewMixin, GenericAPIView):
                         )
                         raw_count = relation_payload.get("count")
                         count = (
-                            int(raw_count)
-                            if isinstance(raw_count, int)
-                            else len(pks)
+                            int(raw_count) if isinstance(raw_count, int) else len(pks)
                         )
-                        filter_name = relation_payload.get(
-                            "filter_name", relation_name
-                        )
+                        filter_name = relation_payload.get("filter_name", relation_name)
                         relations[relation_name] = {
                             "pks": pks,
                             "count": max(0, count),
@@ -180,11 +183,110 @@ class SchemaVizQLabBaseView(SchemaVizViewMixin, GenericAPIView):
 
 
 class QueryRecordsView(SchemaVizQLabBaseView, QLabMixin):
+    _AUTO_SEARCH_FIELD_LIMIT = 8
+    _TEXT_SEARCH_FIELD_TYPES = {
+        "string",
+        "text",
+        "email",
+        "url",
+        "slug",
+    }
+    _PREFERRED_SEARCH_FIELDS = (
+        "name",
+        "title",
+        "label",
+        "username",
+        "email",
+        "slug",
+        "hostname",
+        "code",
+    )
+
+    @classmethod
+    def _is_safe_search_path(
+        cls,
+        model: type[models.Model],
+        field_path: str,
+    ) -> bool:
+        """Only traverse single-valued forward relations during picker search."""
+        current_model = model
+        segments = field_path.split("__")
+        for segment in segments[:-1]:
+            try:
+                field = current_model._meta.get_field(segment)
+            except FieldDoesNotExist:
+                return False
+            if not isinstance(field, (models.ForeignKey, models.OneToOneField)):
+                return False
+            current_model = field.related_model
+        return True
+
+    @classmethod
+    def _build_search_query(
+        cls,
+        model: type[models.Model],
+        search: str,
+    ) -> models.Q:
+        metadata = get_model_metadata(
+            model.__name__,
+            app_label=model._meta.app_label,
+            max_depth=2,
+        )
+        fields = [
+            field
+            for field in metadata["fields"]
+            if "icontains" in field.get("allowed_operations", [])
+            and field.get("type") in cls._TEXT_SEARCH_FIELD_TYPES
+            and cls._is_safe_search_path(model, field["name"])
+        ]
+
+        preferred_indexes = {
+            name: index for index, name in enumerate(cls._PREFERRED_SEARCH_FIELDS)
+        }
+        fields.sort(
+            key=lambda field: (
+                field["name"].count("__"),
+                preferred_indexes.get(
+                    field["name"].rsplit("__", 1)[-1],
+                    len(preferred_indexes),
+                ),
+                field["name"],
+            )
+        )
+
+        query = models.Q()
+        condition_count = 0
+        for field in fields[: cls._AUTO_SEARCH_FIELD_LIMIT]:
+            query |= models.Q(**{f"{field['name']}__icontains": search})
+            condition_count += 1
+
+        primary_key_field = metadata["primary_key_field"]
+        try:
+            model._meta.pk.to_python(search)
+            primary_key_is_compatible = True
+        except (TypeError, ValueError, ValidationError):
+            primary_key_is_compatible = False
+        if primary_key_is_compatible:
+            query |= models.Q(**{primary_key_field: search})
+            condition_count += 1
+
+        if condition_count == 0:
+            return models.Q(pk__in=[])
+        return query
+
+    def get_queryset(self, model):
+        queryset = super().get_queryset(model)
+        search_query = getattr(self, "_record_search_query", None)
+        if search_query is None:
+            return queryset
+        return queryset.filter(search_query).distinct()
+
     @extend_schema(
         summary="Query Model Records",
         description=(
             "Run a QLab-backed record query against an accessible model. "
-            "Supports nested AND/OR/NOT filters and pagination."
+            "Supports nested AND/OR/NOT filters, server-side text search, "
+            "and pagination. Search is applied before pagination."
         ),
         request=QueryRecordsRequestSerializer,
         responses={
@@ -204,6 +306,11 @@ class QueryRecordsView(SchemaVizQLabBaseView, QLabMixin):
         resolved = self._resolve_model(app_label, model_name)
         if isinstance(resolved, Response):
             return resolved
+
+        search = validated.get("search", "").strip()
+        self._record_search_query = (
+            self._build_search_query(resolved.model, search) if search else None
+        )
 
         payload = {
             "model": model_name,

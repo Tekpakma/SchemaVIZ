@@ -1354,7 +1354,8 @@ paths:
     post:
       operationId: schemaVizQueryRecordsCreate
       description: Run a QLab-backed record query against an accessible model. Supports
-        nested AND/OR/NOT filters and pagination.
+        nested AND/OR/NOT filters, server-side text search, and pagination. Search
+        is applied before pagination.
       summary: Query Model Records
       tags:
       - Query
@@ -3796,6 +3797,9 @@ components:
           type: string
           minLength: 1
           maxLength: 100
+        search:
+          type: string
+          maxLength: 200
         selectFields:
           type: array
           items:

@@ -90,6 +90,12 @@ export function TemplateDetailPanel({
   )
   const records = recordsQuery.records
   const recordsLoading = recordsQuery.isLoading
+
+  function handleRecordPickerOpenChange(nextOpen: boolean) {
+    if (!nextOpen) recordsQuery.setSearch('')
+    setRecordPickerOpen(nextOpen)
+  }
+
   async function handleCopy() {
     if (!generationUrl) return
     await navigator.clipboard.writeText(generationUrl)
@@ -99,7 +105,7 @@ export function TemplateDetailPanel({
 
   function handleSelectRecord(recordId: string, displayName: string) {
     setSelectedRecord({ id: recordId, label: displayName })
-    setRecordPickerOpen(false)
+    handleRecordPickerOpenChange(false)
     setCopiedUrl(false)
   }
 
@@ -289,10 +295,15 @@ export function TemplateDetailPanel({
             title: template.title,
           })}
           open={recordPickerOpen}
-          onOpenChange={setRecordPickerOpen}
+          onOpenChange={handleRecordPickerOpenChange}
           showCloseButton={false}
+          shouldFilter={false}
         >
-          <CommandInput placeholder={t('home.detail.searchRecords')} />
+          <CommandInput
+            placeholder={t('home.detail.searchRecords')}
+            value={recordsQuery.search}
+            onValueChange={recordsQuery.setSearch}
+          />
           <CommandList>
             {recordsLoading ? (
               <CommandLoading>
@@ -300,7 +311,9 @@ export function TemplateDetailPanel({
                 {t('home.detail.loadingRecords')}
               </CommandLoading>
             ) : null}
-            <CommandEmpty>{t('home.detail.noRecords')}</CommandEmpty>
+            {!recordsLoading ? (
+              <CommandEmpty>{t('home.detail.noRecords')}</CommandEmpty>
+            ) : null}
             {records.length > 0 ? (
               <CommandGroup heading={template.rootModel}>
                 {records.map((record) => {

@@ -40,9 +40,12 @@ test('builder style step opens and commits the inline node editor', async ({
   await page.route('**/schema-viz/templates/**', async (route) => {
     await route.fulfill({ json: [] })
   })
-  await page.route('**/schema-viz/model-template-defaults/**', async (route) => {
-    await route.fulfill({ json: [] })
-  })
+  await page.route(
+    '**/schema-viz/model-template-defaults/**',
+    async (route) => {
+      await route.fulfill({ json: [] })
+    },
+  )
   await page.route('**/schema-viz/model-details/**', async (route) => {
     await route.fulfill({ json: modelDetails })
   })

@@ -127,7 +127,10 @@ class GenerationV2ApiTests(APITestCase):
             fresh_entry["sample"]["run"]["template"]["id"],
             template_id,
         )
-        self.assertEqual(fresh_entry["sample"]["run"]["sourceVersion"]["kind"], "template")
+        self.assertEqual(
+            fresh_entry["sample"]["run"]["sourceVersion"]["kind"], "template"
+        )
+
     def test_publish_snapshots_current_draft_and_enables_published_runs(self):
         self.client.force_authenticate(self.owner)
         create_response = self.client.post(
@@ -453,9 +456,11 @@ class GenerationV2ApiTests(APITestCase):
         own_recent_feed = own_recent_feed_response.json()
         self.assertEqual(
             [entry["template"]["name"] for entry in own_recent_feed["ownRecent"]],
-            ["Owner Draft Template"],
+            ["Owner Draft Template", "Featured Provider Template"],
         )
-        self.assertEqual(own_recent_feed["ownRecent"][0]["source"], "own")
+        self.assertTrue(
+            all(entry["source"] == "own" for entry in own_recent_feed["ownRecent"])
+        )
 
     def test_share_mode_rejects_draft_sources(self):
         self.client.force_authenticate(self.owner)

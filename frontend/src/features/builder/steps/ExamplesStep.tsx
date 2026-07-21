@@ -65,13 +65,21 @@ function RecordPickerDialog({
 }: RecordPickerDialogProps) {
   const { t } = useTranslation()
 
-  const recordsQuery = usePaginatedRecords({
-    appLabel: startModel.appLabel,
-    modelName: startModel.modelName,
-    page: 1,
-  })
+  const recordsQuery = usePaginatedRecords(
+    {
+      appLabel: startModel.appLabel,
+      modelName: startModel.modelName,
+      page: 1,
+    },
+    { enabled: open },
+  )
 
   const records = recordsQuery.records
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) recordsQuery.setSearch('')
+    onOpenChange(nextOpen)
+  }
+
   return (
     <CommandDialog
       title={t('builder.examples.pickerTitle')}
@@ -79,10 +87,15 @@ function RecordPickerDialog({
         model: startModel.displayName,
       })}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       showCloseButton={false}
+      shouldFilter={false}
     >
-      <CommandInput placeholder={t('builder.examples.pickerSearch')} />
+      <CommandInput
+        placeholder={t('builder.examples.pickerSearch')}
+        value={recordsQuery.search}
+        onValueChange={recordsQuery.setSearch}
+      />
       <CommandList>
         {recordsQuery.isLoading && (
           <CommandLoading>
@@ -95,7 +108,9 @@ function RecordPickerDialog({
             {t('builder.examples.loadError')}
           </div>
         )}
-        <CommandEmpty>{t('builder.examples.empty')}</CommandEmpty>
+        {!recordsQuery.isLoading && (
+          <CommandEmpty>{t('builder.examples.empty')}</CommandEmpty>
+        )}
         {records.length > 0 && (
           <CommandGroup heading={startModel.displayName}>
             {records.map((record) => {
@@ -116,7 +131,7 @@ function RecordPickerDialog({
                       idValue,
                       isDefault: false,
                     })
-                    onOpenChange(false)
+                    handleOpenChange(false)
                   }}
                 >
                   {isAdded ? (
