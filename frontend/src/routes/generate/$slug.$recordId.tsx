@@ -78,8 +78,8 @@ function GenerateViewPage() {
   }
 
   return (
-    <div className="flex h-dvh w-dvw flex-col bg-background">
-      <header className="flex items-center gap-3 border-b border-border px-3 py-2">
+    <div className="flex h-dvh w-dvw flex-col bg-background text-foreground">
+      <header className="relative z-10 flex items-center gap-3 border-b border-border/70 bg-background/90 px-3 py-2 shadow-[0_1px_0_0_color-mix(in_oklab,var(--foreground)_3%,transparent)] backdrop-blur-md">
         <BrandLogo />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[13px] font-semibold text-foreground">

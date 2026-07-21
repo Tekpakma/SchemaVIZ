@@ -203,4 +203,62 @@ describe('template text content rendering', () => {
     expect(html).toContain('font-weight: bold')
     expect(html).toContain('text-decoration: underline')
   })
+
+  it('preserves Lexical text format flags when rendering canvas HTML', () => {
+    const html = renderTemplateTextContent({
+      root: {
+        children: [
+          {
+            children: [
+              {
+                format: 1 | 2 | 4 | 8,
+                style: 'color: #dc2626; font-size: 22px',
+                text: 'Important',
+                type: 'text',
+                version: 1,
+              },
+            ],
+            type: 'paragraph',
+            version: 1,
+          },
+        ],
+        type: 'root',
+        version: 1,
+      },
+    })
+
+    expect(html).toContain(
+      '<u><s><i><b><span style="color: #dc2626; font-size: 22px">Important</span></b></i></s></u>',
+    )
+  })
+
+  it.each([
+    [16, 'code'],
+    [32, 'sub'],
+    [64, 'sup'],
+    [128, 'mark'],
+  ])('preserves Lexical format flag %i as <%s>', (format, tag) => {
+    const html = renderTemplateTextContent({
+      root: {
+        children: [
+          {
+            children: [
+              {
+                format,
+                text: 'Formatted',
+                type: 'text',
+                version: 1,
+              },
+            ],
+            type: 'paragraph',
+            version: 1,
+          },
+        ],
+        type: 'root',
+        version: 1,
+      },
+    })
+
+    expect(html).toContain(`<${tag}>Formatted</${tag}>`)
+  })
 })

@@ -48,6 +48,8 @@ type CanvasSurfaceFitWorld = {
   height: number
 }
 
+type CanvasSurfaceFitWorldMode = 'auto' | 'initial'
+
 type CanvasSurfaceProps = {
   backgroundLayer?: React.ReactNode
   /**
@@ -59,6 +61,7 @@ type CanvasSurfaceProps = {
   exportOpen?: boolean
   exportFilterNotice?: string
   fitWorld?: CanvasSurfaceFitWorld
+  fitWorldMode?: CanvasSurfaceFitWorldMode
   /**
    * Optional override for the inline rich-text editor. When undefined,
    * the default {@link LexicalOverlayWrapper} is used (mount-per-edit-session).
@@ -88,6 +91,7 @@ type CanvasSurfaceProps = {
 function useFitWorldViewport(
   fitWorld: CanvasSurfaceFitWorld | undefined,
   stageSize: { width: number; height: number },
+  mode: CanvasSurfaceFitWorldMode,
 ) {
   const { setViewport } = useCanvasActions()
   const fitWorldWidth = fitWorld?.width
@@ -104,8 +108,10 @@ function useFitWorldViewport(
       return
     }
 
+    if (mode === 'initial' && appliedFitKeyRef.current !== null) return
+
     const fitKey = `${fitWorldWidth}:${fitWorldHeight}:${stageSize.width}:${stageSize.height}`
-    if (appliedFitKeyRef.current === fitKey) return
+    if (mode === 'auto' && appliedFitKeyRef.current === fitKey) return
 
     const scale = Math.min(
       stageSize.width / fitWorldWidth,
@@ -122,6 +128,7 @@ function useFitWorldViewport(
   }, [
     fitWorldHeight,
     fitWorldWidth,
+    mode,
     setViewport,
     stageSize.height,
     stageSize.width,
@@ -134,6 +141,7 @@ export function CanvasSurface({
   exportOpen = false,
   exportFilterNotice,
   fitWorld,
+  fitWorldMode = 'auto',
   inlineEditor,
   interactionMode,
   isContentPending = false,
@@ -242,7 +250,7 @@ export function CanvasSurface({
   } = useCanvasMarqueeSelection()
   const hasStageSize = size.width > 0 && size.height > 0
 
-  useFitWorldViewport(fitWorld, size)
+  useFitWorldViewport(fitWorld, size, fitWorldMode)
 
   useEnsureDefaultCanvasNode(seedDefaultNode)
 
@@ -311,12 +319,7 @@ export function CanvasSurface({
 
       selectNode(null)
     },
-    [
-      canEditCanvas,
-      handleMarqueeMouseDown,
-      selectNode,
-      startEditingNodeAtPointer,
-    ],
+    [canEditCanvas, handleMarqueeMouseDown, selectNode],
   )
 
   const handleStageTouchStart = useCallback(
@@ -399,8 +402,11 @@ export function CanvasSurface({
   // When the stage first becomes visible (layout + viewport settled),
   // capture a PNG snapshot and hand it to the caller for caching.
   const onCaptureRef = useRef(onCapture)
-  onCaptureRef.current = onCapture
   const capturedRef = useRef(false)
+
+  useEffect(() => {
+    onCaptureRef.current = onCapture
+  }, [onCapture])
 
   useEffect(() => {
     if (isStageMasked || capturedRef.current || !onCaptureRef.current) return

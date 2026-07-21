@@ -42,8 +42,8 @@ python manage.py migrate
 `SCHEMA_VIZ` controls authentication and permission classes. Runtime model
 authorization comes from QLab `ModelRegistry`.
 
-The v1 backend uses `django-qlab==0.3.5` from PyPI. Install the package
-dependencies normally, then run:
+The backend uses `django-qlab` from PyPI. Install the package dependencies
+normally, then run:
 
 ```bash
 python manage.py migrate

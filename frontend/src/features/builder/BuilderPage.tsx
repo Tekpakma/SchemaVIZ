@@ -22,6 +22,7 @@ import {
   useBuilderDocumentView,
 } from './builderWorkbench'
 import { getModelIdFromBuilderGroupNodeId } from './builderPreviewLayout'
+import { getRecipeStepStatuses } from './builderStepStatus'
 import {
   publishGenerationTemplate,
   saveGenerationTemplateDraft,
@@ -114,6 +115,8 @@ function BuilderPageContent({
   const currentTemplate =
     savedTemplate?.tabId === tabId ? savedTemplate.template : template
   const currentTemplateId = currentTemplate?.id ?? null
+  const stepStatuses = getRecipeStepStatuses(recipe, steps)
+  const activeStepStatus = stepStatuses[activeStepIndex]!
   const canManageFeaturedTemplates =
     sessionState?.capabilities.canManageFeaturedTemplates ?? false
 
@@ -123,7 +126,7 @@ function BuilderPageContent({
 
   function getRecipeAfterPendingNodeEdit() {
     flushInlineNodeEditRef.current?.()
-    return getBuilderRecipeSnapshot(tabId)?.recipe ?? recipe
+    return getBuilderRecipeSnapshot(tabId) ?? recipe
   }
 
   async function handleSavedTemplate(nextTemplate: GenerationTemplateRead) {
@@ -327,6 +330,7 @@ function BuilderPageContent({
         <BuilderStepsSidebar
           activeStepIndex={activeStepIndex}
           onPickStep={actions.setActiveStep}
+          statuses={stepStatuses}
           steps={steps}
         />
         <BuilderPreviewPane
@@ -347,6 +351,7 @@ function BuilderPageContent({
           actions={actions}
           activeStep={activeStep}
           activeStepIndex={activeStepIndex}
+          activeStepStatus={activeStepStatus}
           recipe={recipe}
           selectedCanvasNodeId={selectedCanvasNodeId}
           stepCount={steps.length}

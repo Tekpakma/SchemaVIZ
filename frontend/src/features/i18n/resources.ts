@@ -171,9 +171,16 @@ export const resources = {
         },
         style: {
           inlineHintDescription:
-            'Doppelklicken Sie auf einen Node in der Vorschau, um den Text zu bearbeiten. Klicken Sie auf einen Node, um Template und Farbe zu ändern.',
+            'Doppelklicken Sie auf einen Node, bearbeiten Sie den Text und wählen Sie „Daten einfügen“, um Felder oder Beziehungen ohne spezielle Syntax einzusetzen. Ein einfacher Klick öffnet Template und Farben.',
           inlineHintTitle: 'Direkt bearbeiten:',
           noModels: 'Fügen Sie zuerst Modelle hinzu.',
+          nodeContextWarning:
+            '{{count}} Ebene hat keinen Modell-Node und damit keinen Datenkontext: {{layers}}. Fügen Sie in Schritt 1 ein Modell hinzu.',
+          nodeContextWarning_one:
+            '{{count}} Ebene hat keinen Modell-Node und damit keinen Datenkontext: {{layers}}. Fügen Sie in Schritt 1 ein Modell hinzu.',
+          nodeContextWarning_other:
+            '{{count}} Ebenen haben keinen Modell-Node und damit keinen Datenkontext: {{layers}}. Fügen Sie in Schritt 1 jeweils ein Modell hinzu.',
+          nodeContextWarningTitle: 'Datenkontext fehlt',
           quickStyle: 'Schneller Stil',
           saved: 'Gespeichert',
           saveError: 'Template konnte nicht gespeichert werden.',
@@ -228,8 +235,25 @@ export const resources = {
           prev: 'Zurück',
           stepProgress: 'Schritt {{current}} von {{total}}',
         },
+        stepStatus: {
+          configured: 'Konfiguriert',
+          configuredHint:
+            'Dieser Schritt hat Einstellungen, die in der Vorschau sichtbar sind.',
+          default: 'Standard',
+          defaultHint:
+            'Dieser Schritt verwendet die Standardwerte und veraendert die Vorschau erst nach einer Anpassung.',
+          needsInput: 'Offen',
+          needsInputHint:
+            'Dieser Schritt braucht Eingaben, bevor das Rezept vollstaendig ist.',
+          ready: 'Bereit',
+          readyHint:
+            'Dieser Schritt ist optional oder kann mit den aktuellen Einstellungen verwendet werden.',
+        },
         inlineToolbar: {
           bold: 'Fett',
+          insertData: 'Daten einfügen',
+          insertDataUnavailable:
+            'Datenfelder sind nur für Modell-Nodes verfügbar.',
           insertTemplate: 'Feld einfügen',
           italic: 'Kursiv',
           label: 'Textformatierung',
@@ -240,6 +264,16 @@ export const resources = {
           textSize_small: 'Klein',
           textSize_veryLarge: 'Sehr groß',
           underline: 'Unterstreichen',
+        },
+        dataReferenceBrowser: {
+          back: 'Zur vorherigen Beziehung',
+          description: 'Feld auswählen und direkt in den Node-Text einsetzen.',
+          empty: 'Keine verfügbaren Felder oder Beziehungen.',
+          fields: 'Felder',
+          loading: 'Felder werden geladen...',
+          openRelation: 'Beziehung öffnen',
+          relations: 'Beziehungen',
+          title: 'Daten einfügen',
         },
         layerManager: {
           add: 'Ebene hinzufügen',
@@ -271,6 +305,27 @@ export const resources = {
           search: 'Modelle suchen...',
           title: 'Modell hinzufügen',
         },
+        modelExplorer: {
+          addToLayer: 'Zu {{layer}} hinzufügen',
+          alreadyAdded: 'Hinzugefügt',
+          back: 'Zum vorherigen Modell',
+          description:
+            'Durchsuchen Sie Modelle oder folgen Sie direkten Beziehungen. Erst „Hinzufügen“ ändert das Template.',
+          directRelations: 'Direkte Beziehungen',
+          exploreFrom: 'Erkunden von',
+          forward: 'ausgehend',
+          loadingRelations: 'Beziehungen werden geladen...',
+          noRelations: 'Keine zugänglichen direkten Beziehungen gefunden.',
+          noSearchResults: 'Keine passenden Modelle gefunden.',
+          noSelection: 'Modell zum Erkunden auswählen',
+          relationsError: 'Beziehungen konnten nicht geladen werden.',
+          reverse: 'eingehend',
+          search: 'Modelle und Apps durchsuchen...',
+          selectHint:
+            'Wählen Sie links ein Modell. Danach können Sie dessen direkte Beziehungen schrittweise erkunden.',
+          targetLayer: 'Ziel: {{layer}}',
+          title: 'Modell-Explorer',
+        },
         models: {
           addLayer: 'Ebene hinzufügen',
           addModel: 'Modell hinzufügen',
@@ -278,6 +333,7 @@ export const resources = {
           addStartModel: 'Startmodell hinzufügen',
           empty:
             'Noch keine Modelle hinzugefügt. Klicken Sie hier, um eines hinzuzufügen.',
+          exploreModels: 'Modelle erkunden',
           groupModelCount: '{{count}}',
           groupModelCount_one: '{{count}}',
           groupModelCount_other: '{{count}}',
@@ -723,9 +779,16 @@ export const resources = {
         },
         style: {
           inlineHintDescription:
-            'Double-click a node in the preview to edit its text. Click a node to change its template and color.',
+            'Double-click a node, edit its text, and choose “Insert data” to add fields or relations without special syntax. A single click opens its template and colors.',
           inlineHintTitle: 'Edit inline:',
           noModels: 'Add models first.',
+          nodeContextWarning:
+            '{{count}} layer has no model node and therefore no data context: {{layers}}. Add a model in step 1.',
+          nodeContextWarning_one:
+            '{{count}} layer has no model node and therefore no data context: {{layers}}. Add a model in step 1.',
+          nodeContextWarning_other:
+            '{{count}} layers have no model node and therefore no data context: {{layers}}. Add a model to each one in step 1.',
+          nodeContextWarningTitle: 'Data context missing',
           quickStyle: 'Quick style',
           saved: 'Saved',
           saveError: 'Could not save template.',
@@ -778,8 +841,24 @@ export const resources = {
           prev: 'Prev',
           stepProgress: 'Step {{current}} of {{total}}',
         },
+        stepStatus: {
+          configured: 'Configured',
+          configuredHint:
+            'This step has settings that are reflected in the preview.',
+          default: 'Default',
+          defaultHint:
+            'This step is using defaults and will only change the preview after you adjust it.',
+          needsInput: 'Needs input',
+          needsInputHint:
+            'This step needs input before the recipe is complete.',
+          ready: 'Ready',
+          readyHint: 'This step is optional or can use the current defaults.',
+        },
         inlineToolbar: {
           bold: 'Bold',
+          insertData: 'Insert data',
+          insertDataUnavailable:
+            'Data fields are only available for model nodes.',
           insertTemplate: 'Insert field',
           italic: 'Italic',
           label: 'Text formatting',
@@ -790,6 +869,16 @@ export const resources = {
           textSize_small: 'Small',
           textSize_veryLarge: 'Very large',
           underline: 'Underline',
+        },
+        dataReferenceBrowser: {
+          back: 'Back to the previous relation',
+          description: 'Choose a field to insert into the node text.',
+          empty: 'No fields or relations are available.',
+          fields: 'Fields',
+          loading: 'Loading fields...',
+          openRelation: 'Open relation',
+          relations: 'Relations',
+          title: 'Insert data',
         },
         layerManager: {
           add: 'Add layer',
@@ -820,12 +909,34 @@ export const resources = {
           search: 'Search models...',
           title: 'Add model',
         },
+        modelExplorer: {
+          addToLayer: 'Add to {{layer}}',
+          alreadyAdded: 'Added',
+          back: 'Back to the previous model',
+          description:
+            'Browse models or follow direct relations. The template only changes when you choose Add.',
+          directRelations: 'Direct relations',
+          exploreFrom: 'Explore from',
+          forward: 'outgoing',
+          loadingRelations: 'Loading relations...',
+          noRelations: 'No accessible direct relations found.',
+          noSearchResults: 'No matching models found.',
+          noSelection: 'Select a model to explore',
+          relationsError: 'Could not load relations.',
+          reverse: 'incoming',
+          search: 'Search models and apps...',
+          selectHint:
+            'Choose a model on the left, then explore its direct relations step by step.',
+          targetLayer: 'Target: {{layer}}',
+          title: 'Model explorer',
+        },
         models: {
           addLayer: 'Add layer',
           addModel: 'Add model',
           addModelToLayer: 'Add model to {{layer}}',
           addStartModel: 'Add start model',
           empty: 'No models added yet. Click to add one.',
+          exploreModels: 'Explore models',
           groupModelCount: '{{count}}',
           groupModelCount_one: '{{count}}',
           groupModelCount_other: '{{count}}',

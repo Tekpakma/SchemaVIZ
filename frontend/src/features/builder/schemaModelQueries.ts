@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query'
 import * as R from 'remeda'
 
 import {
+  schemaVizModelDetailsRetrieve,
   schemaVizModelsList,
   schemaVizQueryMetadataCreate,
   schemaVizRouteList,
@@ -115,6 +116,30 @@ export const BUILDER_SCHEMA_QUERIES = {
           R.prop('verboseName'),
         )
       },
+      staleTime: 1000 * 60 * 10,
+    }),
+
+  modelDetails: (appLabel: string, modelName: string) =>
+    queryOptions({
+      queryKey: [
+        ...BUILDER_SCHEMA_QUERIES._base.queryKey,
+        'model-details',
+        appLabel,
+        modelName,
+      ] as const,
+      queryFn: async () => {
+        const response = await schemaVizModelDetailsRetrieve({
+          appLabel,
+          modelName,
+        })
+
+        if (response.status !== 200) {
+          throw new Error(`Failed to fetch model details: ${response.status}`)
+        }
+
+        return response.data
+      },
+      enabled: Boolean(appLabel && modelName),
       staleTime: 1000 * 60 * 10,
     }),
 

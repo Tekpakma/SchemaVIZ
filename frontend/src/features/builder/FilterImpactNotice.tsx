@@ -21,7 +21,7 @@ export function FilterImpactNotice({
   return (
     <div
       className={cn(
-        'flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] leading-relaxed text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100',
+        'flex items-start gap-2 border-b border-amber-500/20 bg-amber-500/8 px-4 py-2 text-[12px] leading-relaxed text-amber-950 dark:border-amber-300/15 dark:bg-amber-400/10 dark:text-amber-100',
         className,
       )}
       role="status"

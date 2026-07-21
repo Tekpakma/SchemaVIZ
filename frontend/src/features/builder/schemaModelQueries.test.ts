@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  schemaVizModelDetailsRetrieve,
   schemaVizTemplateUniquenessCreate,
   schemaVizTemplatesCreate,
   schemaVizTemplatesPartialUpdate,
 } from '@/api/generated/schema-viz'
-import { saveBuilderStyleTemplateDraft } from './schemaModelQueries'
+import {
+  BUILDER_SCHEMA_QUERIES,
+  saveBuilderStyleTemplateDraft,
+} from './schemaModelQueries'
 
 vi.mock('@/api/generated/schema-viz', () => ({
+  schemaVizModelDetailsRetrieve: vi.fn(),
   schemaVizModelsList: vi.fn(),
   schemaVizQueryMetadataCreate: vi.fn(),
   schemaVizRouteList: vi.fn(),
@@ -18,6 +23,7 @@ vi.mock('@/api/generated/schema-viz', () => ({
 }))
 
 const createTemplateMock = vi.mocked(schemaVizTemplatesCreate)
+const modelDetailsMock = vi.mocked(schemaVizModelDetailsRetrieve)
 const patchTemplateMock = vi.mocked(schemaVizTemplatesPartialUpdate)
 const uniquenessMock = vi.mocked(schemaVizTemplateUniquenessCreate)
 
@@ -112,5 +118,35 @@ describe('builder schema model mutations', () => {
       }),
     )
     expect(createTemplateMock).not.toHaveBeenCalled()
+  })
+
+  it('loads relation details for the model explorer', async () => {
+    const details = {
+      abstract: false,
+      appLabel: 'catalog',
+      appVerboseName: 'Catalog',
+      dbTable: 'catalog_service',
+      fields: [],
+      managed: true,
+      methods: [],
+      modelName: 'service',
+      relations: [],
+      verboseName: 'Service',
+      verboseNamePlural: 'Services',
+    }
+    modelDetailsMock.mockResolvedValue({
+      data: details,
+      headers: new Headers(),
+      status: 200,
+    })
+
+    const query = BUILDER_SCHEMA_QUERIES.modelDetails('catalog', 'service')
+    const result = await query.queryFn?.({} as never)
+
+    expect(modelDetailsMock).toHaveBeenCalledWith({
+      appLabel: 'catalog',
+      modelName: 'service',
+    })
+    expect(result).toEqual(details)
   })
 })

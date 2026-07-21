@@ -6,12 +6,12 @@ import { SortableKeyboardPlugin } from '@dnd-kit/dom/sortable'
 import {
   DatabaseIcon,
   GripVertical,
-  InfoIcon,
   LayersIcon,
   PlusIcon,
+  SearchIcon,
   X,
 } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -19,7 +19,8 @@ import type { ModelInfoShort } from '@/api/contracts'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { createRecipeLayer } from '../recipeDefaults'
-import { ModelPickerDialog } from '../model-selection/ModelPickerDialog'
+import { ModelExplorerDialog } from '../model-selection/ModelPickerDialog'
+import { getExplorerSourceModels } from '../model-selection/modelExplorer'
 import type { BuilderDocumentActions } from '../builderWorkbench'
 import { BUILDER_SCHEMA_QUERIES } from '../schemaModelQueries'
 import type { RecipeLayer, RecipeModel } from '../types'
@@ -207,9 +208,9 @@ function SortableModelRow({
     <div
       ref={sortable.ref}
       className={cn(
-        'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5 transition-colors',
+        'group grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-accent/50 focus-within:bg-accent/50',
         sortable.isDragSource && 'opacity-60',
-        sortable.isDropTarget && 'border-brand/40 bg-brand-muted',
+        sortable.isDropTarget && 'bg-brand-muted',
       )}
     >
       <DatabaseIcon className="size-3.5 text-muted-foreground" />
@@ -224,7 +225,7 @@ function SortableModelRow({
       <button
         ref={sortable.handleRef}
         type="button"
-        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label={t('builder.models.reorderModel', {
           model: model.displayName,
         })}
@@ -233,7 +234,7 @@ function SortableModelRow({
       </button>
       <button
         type="button"
-        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         aria-label={t('builder.models.removeModel', {
           model: model.displayName,
         })}
@@ -273,11 +274,11 @@ function LayerGroup({
   return (
     <section
       className={cn(
-        'rounded-xl border bg-background p-3',
-        isStartLayer ? 'border-brand/25 bg-brand-muted/25' : 'border-border',
+        'border-b border-border/70 py-1.5 first:border-t',
+        isStartLayer && 'border-brand/20 bg-brand-muted/15',
       )}
     >
-      <div className="flex items-center gap-2 border-b border-border/70 pb-2">
+      <div className="flex min-h-9 items-center gap-2 px-2">
         <span
           className={cn(
             'shrink-0 rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold',
@@ -291,7 +292,7 @@ function LayerGroup({
         <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
           {layer.label}
         </span>
-        <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+        <span className="px-1 text-[11px] tabular-nums text-muted-foreground">
           {t('builder.models.groupModelCount', { count: models.length })}
         </span>
         {isStartLayer ? (
@@ -320,7 +321,7 @@ function LayerGroup({
       </div>
 
       <LayerDropTarget
-        className="mt-3 flex flex-col gap-2"
+        className="ml-5 flex flex-col border-l border-border/70 pl-2"
         index={models.length}
         layerId={layer.id}
       >
@@ -336,10 +337,11 @@ function LayerGroup({
         {models.length === 0 ? (
           <button
             type="button"
-            className="rounded-lg border border-dashed border-border p-3 text-left text-[12.5px] text-muted-foreground transition-colors hover:border-brand/40 hover:bg-brand-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            className="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-brand-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
             disabled={!hasSchemaModels || !canAddToLayer}
             onClick={() => onAddModel(layer.id)}
           >
+            <SearchIcon className="size-3.5" />
             {isStartLayer
               ? t('builder.models.addStartModel')
               : t('builder.models.addModelToLayer', { layer: title })}
@@ -350,7 +352,7 @@ function LayerGroup({
           <Button
             variant="ghost"
             size="sm"
-            className="mt-0.5 justify-start gap-1.5 text-[13px] text-muted-foreground"
+            className="h-8 justify-start gap-1.5 px-2 text-[12px] text-muted-foreground"
             type="button"
             onClick={() => onAddModel(layer.id)}
           >
@@ -359,13 +361,6 @@ function LayerGroup({
           </Button>
         ) : null}
       </LayerDropTarget>
-
-      {isStartLayer && models.length > 0 ? (
-        <p className="mt-3 flex gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
-          <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
-          <span>{t('builder.models.startLayerHint')}</span>
-        </p>
-      ) : null}
     </section>
   )
 }
@@ -374,14 +369,14 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
   const { t } = useTranslation()
   const modelsQuery = useQuery(BUILDER_SCHEMA_QUERIES.models())
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
-  const targetLayerIdRef = useRef<string | null>(null)
+  const [targetLayerId, setTargetLayerId] = useState<string | null>(null)
 
   const modelsByLayerId = useMemo(
     () => getModelsByLayerId(layers, models),
     [layers, models],
   )
   const addedModelIds = useMemo(
-    () => new Set(models.map((model) => model.modelId)),
+    () => new Set(models.map((model) => model.modelId.toLowerCase())),
     [models],
   )
   const startLayer = layers[0]
@@ -391,6 +386,19 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
   const startModel = startLayerModels[0]
   const hasSchemaModels =
     modelsQuery.data !== undefined && modelsQuery.data.length > 0
+  const explorerSourceModelIds = useMemo(
+    () =>
+      getExplorerSourceModels(layers, models, targetLayerId).map((model) =>
+        model.modelId.toLowerCase(),
+      ),
+    [layers, models, targetLayerId],
+  )
+  const explorerTargetLayerLabel = useMemo(() => {
+    const targetLayer = layers.find((layer) => layer.id === targetLayerId)
+    if (targetLayer) return targetLayer.label
+    if (startLayerModels.length === 0 && startLayer) return startLayer.label
+    return getNextLayerLabel(layers)
+  }, [layers, startLayer, startLayerModels.length, targetLayerId])
 
   const openModelPickerForLayer = useCallback(
     (layerId?: string) => {
@@ -400,7 +408,7 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
         return
       }
 
-      targetLayerIdRef.current = layerId ?? null
+      setTargetLayerId(layerId ?? null)
       setModelPickerOpen(true)
     },
     [hasSchemaModels, startLayer, startLayerModels.length],
@@ -412,7 +420,7 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
 
   const handlePickModel = useCallback(
     (schemaModel: ModelInfoShort) => {
-      let layerId = targetLayerIdRef.current
+      let layerId = targetLayerId
       if (!layerId) {
         if (startLayer && startLayerModels.length === 0) {
           layerId = startLayer.id
@@ -427,12 +435,12 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
 
       actions.addModel(toRecipeModel(schemaModel, layerId))
     },
-    [actions, layers, startLayer, startLayerModels.length],
+    [actions, layers, startLayer, startLayerModels.length, targetLayerId],
   )
 
   const handleModelPickerOpenChange = useCallback((open: boolean) => {
     setModelPickerOpen(open)
-    if (!open) targetLayerIdRef.current = null
+    if (!open) setTargetLayerId(null)
   }, [])
 
   const handleDragEnd: ComponentProps<typeof DragDropProvider>['onDragEnd'] =
@@ -480,7 +488,7 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
       </div>
 
       <DragDropProvider onDragEnd={handleDragEnd}>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col">
           {layers.map((layer, index) => (
             <LayerGroup
               key={layer.id}
@@ -508,24 +516,24 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2 border-t border-border pt-3">
+      <div className="flex flex-wrap items-center gap-1 border-t border-border pt-2">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="justify-start gap-1.5 border-dashed text-[13px]"
+          className="justify-start gap-1.5 text-[12.5px] text-muted-foreground"
           disabled={!hasSchemaModels}
           type="button"
           onClick={() => openModelPickerForLayer()}
         >
-          <PlusIcon className="size-3.5" />
+          <SearchIcon className="size-3.5" />
           <span className="min-w-0 truncate">
-            {t('builder.models.addModel')}
+            {t('builder.models.exploreModels')}
           </span>
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="justify-start gap-1.5 text-[13px]"
+          className="justify-start gap-1.5 text-[12.5px] text-muted-foreground"
           type="button"
           onClick={handleAddLayer}
         >
@@ -536,10 +544,12 @@ export function ModelsStep({ actions, layers, models }: ModelsStepProps) {
         </Button>
       </div>
 
-      <ModelPickerDialog
+      <ModelExplorerDialog
         addedModelIds={addedModelIds}
         models={modelsQuery.data ?? []}
         open={modelPickerOpen}
+        sourceModelIds={explorerSourceModelIds}
+        targetLayerLabel={explorerTargetLayerLabel}
         onOpenChange={handleModelPickerOpenChange}
         onPickModel={handlePickModel}
       />

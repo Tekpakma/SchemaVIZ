@@ -7,8 +7,13 @@ import {
 import { authenticateBrowserRequest } from './serverAuth/startAuth'
 import type { StartAuthContext } from './serverAuth/startAuth'
 
+function isDevelopmentCsrfBypassEnabled() {
+  return process.env.NODE_ENV === 'development'
+}
+
 const csrfMiddleware = createCsrfMiddleware({
-  filter: (ctx) => ctx.handlerType === 'serverFn',
+  filter: (ctx) =>
+    !isDevelopmentCsrfBypassEnabled() && ctx.handlerType === 'serverFn',
 })
 
 const authRequestMiddleware = createMiddleware().server(

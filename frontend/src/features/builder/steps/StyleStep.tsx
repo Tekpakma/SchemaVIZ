@@ -4,8 +4,13 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { CheckIcon, MousePointerClickIcon, SaveIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  MousePointerClickIcon,
+  SaveIcon,
+} from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { StyleTemplate } from '@/api/contracts'
@@ -22,6 +27,7 @@ import { CANVAS_NODE_SHAPES } from '@/features/canvas/nodeShapes'
 import { createTemplateTextContent } from '@/features/lexical/templateTextContent'
 import type { BuilderDocumentActions } from '../builderWorkbench'
 import { getModelIdFromBuilderGroupNodeId } from '../builderPreviewLayout'
+import { getLayersWithoutNodeContext } from '../layerNodeContext'
 import { GroupingControls } from './GroupingControls'
 import {
   BUILDER_SCHEMA_QUERIES,
@@ -241,19 +247,21 @@ function DimensionInput({
   onCommit: (value: number) => void
   value: number
 }) {
-  const [local, setLocal] = useState(String(value))
+  const valueText = String(value)
+  const [local, setLocal] = useState(valueText)
+  const [prevValue, setPrevValue] = useState(value)
 
-  // Sync from parent when the upstream value changes (e.g. node selection changes)
-  useEffect(() => {
-    setLocal(String(value))
-  }, [value])
+  if (value !== prevValue) {
+    setPrevValue(value)
+    setLocal(valueText)
+  }
 
   const commitValue = () => {
     const v = parseInt(local, 10)
     if (!isNaN(v) && v >= min) {
       onCommit(v)
     } else {
-      setLocal(String(value))
+      setLocal(valueText)
     }
   }
 
@@ -411,9 +419,7 @@ function SelectedNodePanel({
   const accent = getModelAccent(activeModel, layers, swatches)
 
   const dims = activeDraft.dimensions as
-    | { width?: number; height?: number }
-    | null
-    | undefined
+    { width?: number; height?: number } | null | undefined
   const typeSpecific = readTypeSpecificData(activeDraft.typeSpecificData)
   const activeShape = shapes.find(
     (s) => s.key === (typeSpecific.shapeKey || 'default'),
@@ -550,6 +556,10 @@ export function StyleStep({
   swatches,
 }: StyleStepProps) {
   const { t } = useTranslation()
+  const layersWithoutNodeContext = useMemo(
+    () => getLayersWithoutNodeContext(layers, models),
+    [layers, models],
+  )
   const queryClient = useQueryClient()
 
   // The active model is driven by canvas selection. Promoted group nodes map
@@ -569,8 +579,7 @@ export function StyleStep({
   )
   const showGroupingControls = visibleGroupingEdges.length > 0
 
-  const shapesQuery = useQuery(BUILDER_SCHEMA_QUERIES.shapes())
-  const shapes = shapesQuery.data ?? []
+  const { data: shapes = [] } = useQuery(BUILDER_SCHEMA_QUERIES.shapes())
   const templateQueries = useQueries({
     queries: models.map((model) =>
       BUILDER_SCHEMA_QUERIES.styleTemplates(model.appLabel, model.modelName),
@@ -588,31 +597,22 @@ export function StyleStep({
   const activeTemplates = activeModel
     ? (templatesByModelId.get(activeModel.id) ?? [])
     : []
+  const activeModelIndex = activeModel
+    ? models.findIndex((model) => model.id === activeModel.id)
+    : -1
   const activeDraft = activeModel
-    ? (styleDrafts[activeModel.id] ?? createQuickDraft(activeModel))
+    ? (styleDrafts[activeModel.id] ??
+      resolveStyleDraftForModelInitialization({
+        existingDraft: undefined,
+        model: activeModel,
+        templates: activeTemplates,
+        templatesPending:
+          activeModelIndex >= 0
+            ? (templateQueries[activeModelIndex]?.isPending ?? false)
+            : false,
+      }) ??
+      createQuickDraft(activeModel))
     : null
-  // Ensure all models have a style draft initialized
-  useEffect(() => {
-    const missingIds: string[] = []
-    for (const [index, model] of models.entries()) {
-      const draft = resolveStyleDraftForModelInitialization({
-        existingDraft: styleDrafts[model.id],
-        model,
-        templates: templatesByModelId.get(model.id) ?? [],
-        templatesPending: templateQueries[index]?.isPending ?? false,
-      })
-      if (!draft) continue
-      missingIds.push(model.id)
-      actions.setStyleDraft(model.id, draft)
-    }
-
-    if (missingIds.length > 0) {
-      console.log('[StyleStep.initDrafts] creating default drafts', {
-        missingIds,
-      })
-    }
-  }, [models, styleDrafts, actions, templateQueries, templatesByModelId])
-
   const saveMutation = useMutation({
     mutationFn: async ({
       draft,
@@ -758,6 +758,28 @@ export function StyleStep({
           {t('builder.style.inlineHintDescription')}
         </div>
       </div>
+
+      {layersWithoutNodeContext.length > 0 ? (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-amber-800 dark:text-amber-200"
+        >
+          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+          <div className="text-[12px] leading-relaxed">
+            <div className="font-medium">
+              {t('builder.style.nodeContextWarningTitle')}
+            </div>
+            <div className="mt-0.5 opacity-90">
+              {t('builder.style.nodeContextWarning', {
+                count: layersWithoutNodeContext.length,
+                layers: layersWithoutNodeContext
+                  .map((layer) => layer.label)
+                  .join(', '),
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Selected node panel — shows when a node is selected on canvas */}
       {activeModel && activeDraft ? (

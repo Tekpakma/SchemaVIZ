@@ -1,3 +1,13 @@
+import {
+  IS_BOLD,
+  IS_CODE,
+  IS_HIGHLIGHT,
+  IS_ITALIC,
+  IS_STRIKETHROUGH,
+  IS_SUBSCRIPT,
+  IS_SUPERSCRIPT,
+  IS_UNDERLINE,
+} from 'lexical'
 import { escapeHtml } from '@/utils/html'
 import { renderTagCss, wrapRenderTagHtml } from './exportRenderTagHtml'
 import { styleObjectToString } from './dataReference/styles'
@@ -100,7 +110,23 @@ function renderTextNode(
 ) {
   const text = renderTemplateText(node.text ?? '', recordFields)
   const style = sanitizeStyleAttribute(node.style)
-  return style ? `<span style="${style}">${text}</span>` : text
+  let html = style ? `<span style="${style}">${text}</span>` : text
+  const format = typeof node.format === 'number' ? node.format : 0
+
+  // Lexical serializes inline formats as a bitmask, independently from the
+  // free-form CSS in `style`. Mirror TextNode.exportDOM() here so the tolerant
+  // JSON renderer used to rebuild canvas previews does not discard formatting.
+  if (format & IS_CODE) html = `<code>${html}</code>`
+  else if (format & IS_HIGHLIGHT) html = `<mark>${html}</mark>`
+  else if (format & IS_SUBSCRIPT) html = `<sub>${html}</sub>`
+  else if (format & IS_SUPERSCRIPT) html = `<sup>${html}</sup>`
+
+  if (format & IS_BOLD) html = `<b>${html}</b>`
+  if (format & IS_ITALIC) html = `<i>${html}</i>`
+  if (format & IS_STRIKETHROUGH) html = `<s>${html}</s>`
+  if (format & IS_UNDERLINE) html = `<u>${html}</u>`
+
+  return html
 }
 
 const COLLECTION_MAX_ITEMS = 5

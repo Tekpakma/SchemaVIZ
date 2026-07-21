@@ -31,6 +31,7 @@ import {
 import type { BuilderPreviewCanvasLayer } from './builderPreviewLayout'
 import { BuilderInlineEditor } from './BuilderInlineEditor'
 import type { FlushInlineNodeEdit } from './BuilderInlineEditor'
+import { getBuilderPreviewRelayoutSignature } from './builderPreviewMode'
 import { getGenerationPreviewCanvasGraph } from './generationPreviewGraph'
 import { LayerLabelsOverlay } from './LayerLabelsOverlay'
 import type { LayerLabelCommit } from './LayerLabelsOverlay'
@@ -96,8 +97,7 @@ function extractLabelStyleFromTextContent(
 
   try {
     const root = (textContent as Record<string, unknown>).root as
-      | Record<string, unknown>
-      | undefined
+      Record<string, unknown> | undefined
     if (!root) return DEFAULT_LABEL_STYLE
 
     // Walk children to find the first text node
@@ -232,14 +232,18 @@ function BuilderPreviewAutoLayout({
   layoutKey,
   layoutSignature,
   nodeCount,
+  fitViewportOnLayout,
   onLayoutSettled,
+  onLayoutViewportApplied,
 }: {
   layoutAlgorithm: RecipeData['layoutAlgorithm']
   layoutDirection: RecipeData['layoutDirection']
   layoutKey: string
   layoutSignature: string
   nodeCount: number
+  fitViewportOnLayout: boolean
   onLayoutSettled: (layoutSignature: string) => void
+  onLayoutViewportApplied: () => void
 }) {
   const { applyGraphLayout } = useCanvasActions()
   const { getActiveCanvasTabIdSnapshot, getCanvasLayoutSnapshot } =
@@ -254,6 +258,13 @@ function BuilderPreviewAutoLayout({
     () => getBuilderPreviewFlowDirection(layoutDirection),
     [layoutDirection],
   )
+  const fitViewportOnLayoutRef = useRef(fitViewportOnLayout)
+  const onLayoutViewportAppliedRef = useRef(onLayoutViewportApplied)
+
+  useEffect(() => {
+    fitViewportOnLayoutRef.current = fitViewportOnLayout
+    onLayoutViewportAppliedRef.current = onLayoutViewportApplied
+  }, [fitViewportOnLayout, onLayoutViewportApplied])
 
   // useMutation gives us automatic last-write-wins: calling mutate()
   // while a previous call is in-flight resets the mutation state so the
@@ -279,11 +290,12 @@ function BuilderPreviewAutoLayout({
         stageSize.width > 0 && stageSize.height > 0
           ? stageSize
           : BUILDER_PREVIEW_FIT_WORLD
-      const nextViewport = getCanvasFitViewportForFrames(
-        result.nodeFrames,
-        fitWorld,
-      )
+      const shouldFitViewport = fitViewportOnLayoutRef.current
+      const nextViewport = shouldFitViewport
+        ? getCanvasFitViewportForFrames(result.nodeFrames, fitWorld)
+        : undefined
       applyGraphLayout(result, { tabId, viewport: nextViewport })
+      if (shouldFitViewport) onLayoutViewportAppliedRef.current()
       onLayoutSettled(completedLayoutSignature)
     },
     onError: (_error, { layoutSignature: completedLayoutSignature }) => {
@@ -354,67 +366,11 @@ function SelectionBridge({
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Commit bridge: intercepts canvas text commits and forwards to parent
-// ---------------------------------------------------------------------------
-
 export type BuilderPreviewCommit = {
   nodeId: string
   lexicalJson: string
   html: string
   contentHeight: number
-}
-
-function CommitBridge({
-  onCommitNodeText,
-}: {
-  onCommitNodeText?: (commit: BuilderPreviewCommit) => void
-}) {
-  const store = useCanvasStoreInstance()
-  const callbackRef = useRef(onCommitNodeText)
-  callbackRef.current = onCommitNodeText
-
-  useEffect(() => {
-    if (!callbackRef.current) return
-
-    // Subscribe to canvas store changes — detect commitNodeText by watching
-    // node version bumps while editingNodeId clears (stopEditing follows commit)
-    let prevEditingNodeId: string | null = store.getState().editingNodeId
-
-    const unsub = store.subscribe((state) => {
-      const wasEditing = prevEditingNodeId
-      const nowEditing = state.editingNodeId
-      if (wasEditing !== nowEditing) {
-        console.log('[CommitBridge] editingNodeId transition', {
-          wasEditing,
-          nowEditing,
-        })
-      }
-      prevEditingNodeId = nowEditing
-
-      // Commit happened: was editing a node, now not editing
-      if (wasEditing && !nowEditing && callbackRef.current) {
-        const activeTab = state.tabsById[state.activeTabId]
-        if (!activeTab) return
-        const node = activeTab.document.nodesById[wasEditing]
-        if (!node) return
-
-        console.log('[CommitBridge] FIRING onCommitNodeText', {
-          nodeId: wasEditing,
-        })
-        callbackRef.current({
-          nodeId: wasEditing,
-          lexicalJson: node.lexicalJson,
-          html: node.html,
-          contentHeight: node.contentHeight,
-        })
-      }
-    })
-
-    return unsub
-  }, [store])
-
-  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -434,7 +390,10 @@ function ResizeBridge({
 }) {
   const store = useCanvasStoreInstance()
   const callbackRef = useRef(onNodeResize)
-  callbackRef.current = onNodeResize
+
+  useEffect(() => {
+    callbackRef.current = onNodeResize
+  }, [onNodeResize])
 
   useEffect(() => {
     if (!callbackRef.current) return
@@ -538,6 +497,7 @@ function BuilderPreviewCanvas({
   onRegisterFlushInlineEdit,
   onRenameLayer,
   onSetLayerTextContent,
+  preserveViewportAfterInitialFit,
 }: {
   graph: { nodes: CanvasNode[]; edges: CanvasEdge[]; key: string }
   layoutAlgorithm: RecipeData['layoutAlgorithm']
@@ -556,18 +516,31 @@ function BuilderPreviewCanvas({
   onRegisterFlushInlineEdit?: (flush: FlushInlineNodeEdit | null) => void
   onRenameLayer?: (layerId: string, label: string) => void
   onSetLayerTextContent?: (layerId: string, textContent: unknown) => void
+  preserveViewportAfterInitialFit: boolean
 }) {
   const fitWorld = useMemo(() => getGraphFitWorld(graph.nodes), [graph.nodes])
-  const layoutSignature = `${graph.key}:${layoutAlgorithm}:${layoutDirection}:${nodeCount}`
+  const layoutSignature = useMemo(
+    () =>
+      getBuilderPreviewRelayoutSignature({
+        edges: graph.edges,
+        layoutAlgorithm,
+        layoutDirection,
+        nodes: graph.nodes,
+      }),
+    [graph.edges, graph.nodes, layoutAlgorithm, layoutDirection],
+  )
+  const [hasAppliedInitialLayoutViewport, setHasAppliedInitialLayoutViewport] =
+    useState(false)
+  const fitViewportOnLayout =
+    !preserveViewportAfterInitialFit || !hasAppliedInitialLayoutViewport
+  const handleLayoutViewportApplied = useCallback(() => {
+    setHasAppliedInitialLayoutViewport(true)
+  }, [])
   const [settledLayoutSignature, setSettledLayoutSignature] = useState<
     string | null
   >(null)
   const isAutoLayoutPending =
     autoLayout && nodeCount > 0 && settledLayoutSignature !== layoutSignature
-
-  useEffect(() => {
-    if (!autoLayout) setSettledLayoutSignature(null)
-  }, [autoLayout])
 
   // ── Layer label editing ──────────────────────────────────────────
   const [editingLayerLabelId, setEditingLayerLabelId] = useState<string | null>(
@@ -598,20 +571,17 @@ function BuilderPreviewCanvas({
       <GraphReconciler graph={graph} preserveGeometry={autoLayout} />
       {autoLayout ? (
         <BuilderPreviewAutoLayout
+          fitViewportOnLayout={fitViewportOnLayout}
           layoutAlgorithm={layoutAlgorithm}
           layoutDirection={layoutDirection}
-          layoutKey={graph.key}
+          layoutKey={layoutSignature}
           layoutSignature={layoutSignature}
           nodeCount={nodeCount}
           onLayoutSettled={setSettledLayoutSignature}
+          onLayoutViewportApplied={handleLayoutViewportApplied}
         />
       ) : null}
       <SelectionBridge onNodeSelect={onNodeSelect} />
-      {/* CommitBridge is intentionally NOT rendered here. The new
-          persistent <BuilderInlineEditor /> calls `onCommitNodeText`
-          directly via its `onCommit` prop, which is the reliable path
-          (canvas-store subscription was racey and easy to break under
-          preview remount). */}
       <ResizeBridge onNodeResize={onNodeResize} />
       <CanvasSurface
         backgroundLayer={
@@ -626,6 +596,7 @@ function BuilderPreviewCanvas({
         exportOpen={exportOpen}
         exportFilterNotice={exportFilterNotice}
         fitWorld={fitWorld}
+        fitWorldMode={preserveViewportAfterInitialFit ? 'initial' : 'auto'}
         inlineEditor={
           <BuilderInlineEditor
             onCommit={onCommitNodeText}
@@ -666,6 +637,7 @@ export function BuilderPreview({
   onRegisterFlushInlineEdit,
   onRenameLayer,
   onSetLayerTextContent,
+  preserveViewportAfterInitialFit = false,
   recipe,
   showEdges = true,
 }: {
@@ -684,6 +656,7 @@ export function BuilderPreview({
   onRegisterFlushInlineEdit?: (flush: FlushInlineNodeEdit | null) => void
   onRenameLayer?: (layerId: string, label: string) => void
   onSetLayerTextContent?: (layerId: string, textContent: unknown) => void
+  preserveViewportAfterInitialFit?: boolean
   recipe: RecipeData
   showEdges?: boolean
 }) {
@@ -742,6 +715,7 @@ export function BuilderPreview({
           onRegisterFlushInlineEdit={onRegisterFlushInlineEdit}
           onRenameLayer={onRenameLayer}
           onSetLayerTextContent={onSetLayerTextContent}
+          preserveViewportAfterInitialFit={preserveViewportAfterInitialFit}
         />
       </CanvasStoreProvider>
     </div>

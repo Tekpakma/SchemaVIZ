@@ -2,7 +2,9 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { StepDetail } from '../StepDetail'
+import type { BuilderStepStatus } from '../builderStepStatus'
 import type { BuilderDocumentActions } from '../builderWorkbench'
 import type { RecipeData, RecipeStep } from '../types'
 
@@ -10,6 +12,7 @@ type BuilderInspectorProps = {
   actions: BuilderDocumentActions
   activeStep: RecipeStep
   activeStepIndex: number
+  activeStepStatus: BuilderStepStatus
   recipe: RecipeData
   selectedCanvasNodeId?: string | null
   stepCount: number
@@ -19,6 +22,7 @@ export function BuilderInspector({
   actions,
   activeStep,
   activeStepIndex,
+  activeStepStatus,
   recipe,
   selectedCanvasNodeId,
   stepCount,
@@ -34,11 +38,30 @@ export function BuilderInspector({
             total: stepCount,
           })}
         </div>
-        <h2 className="text-[15px] font-semibold tracking-tight">
-          {t(activeStep.title)}
-        </h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="min-w-0 text-[15px] font-semibold tracking-tight">
+            {t(activeStep.title)}
+          </h2>
+          <span
+            className={cn(
+              'inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
+              activeStepStatus.kind === 'configured' &&
+                'border-emerald-600/20 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300',
+              activeStepStatus.kind === 'needs-input' &&
+                'border-amber-600/20 bg-amber-600/10 text-amber-700 dark:text-amber-300',
+              (activeStepStatus.kind === 'ready' ||
+                activeStepStatus.kind === 'default') &&
+                'border-border bg-muted text-muted-foreground',
+            )}
+          >
+            {t(activeStepStatus.labelKey)}
+          </span>
+        </div>
         <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
           {t(activeStep.detail)}
+        </p>
+        <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+          {t(activeStepStatus.hintKey)}
         </p>
       </div>
 

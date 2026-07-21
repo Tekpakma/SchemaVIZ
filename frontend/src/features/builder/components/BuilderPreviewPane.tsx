@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils'
 import { usePaginatedRecords } from '@/features/lexical/dataReference/usePaginatedRecords'
 import { BuilderPreview } from '../BuilderPreview'
+import { shouldAutoLayout, shouldShowEdges } from '../builderPreviewMode'
 import { FilterImpactNotice } from '../FilterImpactNotice'
 import type {
   BuilderPreviewCommit,
@@ -53,13 +54,6 @@ type BuilderPreviewPaneProps = {
 }
 
 /**
- * Whether the current step should show traversal edges in the static preview.
- */
-function shouldShowEdges(stepKind: RecipeStepKind): boolean {
-  return stepKind !== 'layers'
-}
-
-/**
  * Extracts the backend record PK from an example's `idValue` ("appLabel:pk").
  */
 function getRecordPkFromExample(
@@ -85,15 +79,6 @@ function getInteractionMode(
   stepKind: RecipeStepKind,
 ): 'edit' | 'viewport' | 'static' {
   return stepKind === 'style' ? 'edit' : 'viewport'
-}
-
-/**
- * Early modelling steps use deterministic client-side grid positions.
- * The style step also needs the real grouped graph so group labels can be
- * edited in-place; the layout step uses the same path for algorithm previews.
- */
-export function shouldAutoLayout(stepKind: RecipeStepKind): boolean {
-  return stepKind === 'style' || stepKind === 'layout'
 }
 
 function getStartModel(models: RecipeModel[]): RecipeModel | undefined {
@@ -298,6 +283,7 @@ export function BuilderPreviewPane({
             {t('builder.preview.retry')}
           </Button>
           <BuilderPreview
+            preserveViewportAfterInitialFit
             autoLayout={autoLayout}
             className="min-h-0 flex-1"
             exportOpen={exportOpen}
@@ -313,6 +299,7 @@ export function BuilderPreviewPane({
         <>
           <FilterImpactNotice response={generationData} />
           <BuilderPreview
+            preserveViewportAfterInitialFit
             autoLayout
             className="min-h-0 flex-1"
             exportFilterNotice={exportFilterNotice}
@@ -328,6 +315,7 @@ export function BuilderPreviewPane({
 
       {!isResolving && (
         <BuilderPreview
+          preserveViewportAfterInitialFit
           autoLayout={autoLayout}
           className="min-h-0 flex-1"
           exportOpen={exportOpen}

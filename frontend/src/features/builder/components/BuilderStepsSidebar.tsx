@@ -1,17 +1,20 @@
 import { useTranslation } from 'react-i18next'
 
 import { StepCard } from '../StepCard'
+import type { BuilderStepStatus } from '../builderStepStatus'
 import type { RecipeStep } from '../types'
 
 type BuilderStepsSidebarProps = {
   activeStepIndex: number
   onPickStep: (index: number) => void
+  statuses: BuilderStepStatus[]
   steps: RecipeStep[]
 }
 
 export function BuilderStepsSidebar({
   activeStepIndex,
   onPickStep,
+  statuses,
   steps,
 }: BuilderStepsSidebarProps) {
   const { t } = useTranslation()
@@ -34,6 +37,7 @@ export function BuilderStepsSidebar({
           <StepCard
             key={step.id}
             step={step}
+            status={statuses[index]!}
             index={index}
             active={index === activeStepIndex}
             onPick={onPickStep}

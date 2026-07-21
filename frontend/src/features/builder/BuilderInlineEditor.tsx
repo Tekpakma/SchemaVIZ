@@ -86,14 +86,15 @@ import {
 } from '@/features/lexical/exportRenderTagHtml'
 import { DataReferenceNode } from '@/features/lexical/dataReference/DataReferenceNode'
 import { APPLY_INLINE_TEXT_STYLE_COMMAND } from '@/features/lexical/dataReference/commands'
+import { DataReferenceBrowser } from '@/features/lexical/dataReference/DataReferenceBrowser'
 import { DataReferencePlugin } from '@/features/lexical/dataReference/DataReferencePlugin'
 import { DataReferenceAutocomplete } from '@/features/lexical/dataReference/DataReferenceAutocomplete'
 import { TextSizeDropdown } from '@/features/lexical/TextSizeDropdown'
 import {
   applyTextSize,
   readSelectionTextSize,
-  type TextSizePreset,
 } from '@/features/lexical/textSizePresets'
+import type { TextSizePreset } from '@/features/lexical/textSizePresets'
 import { LexicalOverlayRuntimeProvider } from '@/features/lexical/LexicalOverlayRuntimeContext'
 import type { LexicalOverlayRuntime } from '@/features/lexical/LexicalOverlayRuntimeContext'
 import { hasDataScope } from '@/features/canvas/model/types'
@@ -201,13 +202,6 @@ function areInlineToolbarFormatStatesEqual(
 
 function preventEditorBlur(event: MouseEvent) {
   event.preventDefault()
-}
-
-function insertTemplateToken() {
-  const selection = $getSelection()
-  if ($isRangeSelection(selection)) {
-    selection.insertText('{{')
-  }
 }
 
 const INITIAL_CONFIG = {
@@ -326,7 +320,12 @@ function BuilderInlineEditorBody({
   // (chips) use `useOptionalLexicalOverlayRuntime` and degrade gracefully.
   return (
     <LexicalOverlayRuntimeProvider value={runtime}>
-      {isEditing ? <InlineLexicalToolbar style={toolbarStyle} /> : null}
+      {isEditing ? (
+        <InlineLexicalToolbar
+          onInteract={cancelPendingBlur}
+          style={toolbarStyle}
+        />
+      ) : null}
       <div
         className="absolute top-0 left-0"
         data-testid={TEST_IDS.LEXICAL_OVERLAY}
@@ -653,7 +652,13 @@ function useInlineEditorStyles({
   }, [node, resolvedTheme, viewport])
 }
 
-function InlineLexicalToolbar({ style }: { style: CSSProperties }) {
+function InlineLexicalToolbar({
+  onInteract,
+  style,
+}: {
+  onInteract: () => void
+  style: CSSProperties
+}) {
   const [editor] = useLexicalComposerContext()
   const { t } = useTranslation()
   const [formatState, setFormatState] = useState(
@@ -702,12 +707,6 @@ function InlineLexicalToolbar({ style }: { style: CSSProperties }) {
     [editor],
   )
 
-  const insertFieldToken = useCallback(() => {
-    editor.focus(() => {
-      editor.update(insertTemplateToken)
-    })
-  }, [editor])
-
   const applyTextColor = useCallback(
     (color: string) => {
       editor.focus(() => {
@@ -731,6 +730,7 @@ function InlineLexicalToolbar({ style }: { style: CSSProperties }) {
       role="toolbar"
       aria-label={t('builder.inlineToolbar.label')}
       className="absolute flex items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 shadow-[0_1px_3px_rgba(0,0,0,0.12)]"
+      onFocusCapture={onInteract}
       onMouseDown={preventEditorBlur}
       style={style}
     >
@@ -779,15 +779,10 @@ function InlineLexicalToolbar({ style }: { style: CSSProperties }) {
           onChange={(event) => applyTextColor(event.target.value)}
         />
       </label>
-      <button
-        type="button"
-        className={cn(controlClass, 'font-mono text-[11px]')}
-        aria-label={t('builder.inlineToolbar.insertTemplate')}
-        title={t('builder.inlineToolbar.insertTemplate')}
-        onClick={insertFieldToken}
-      >
-        <span>{'{{'}</span>
-      </button>
+      <DataReferenceBrowser
+        controlClass={controlClass}
+        onInteract={onInteract}
+      />
     </div>
   )
 }

@@ -50,7 +50,8 @@ test('builder style step opens and commits the inline node editor', async ({
   await page.goto('/builder')
 
   await page.getByRole('button', { name: 'Add start model' }).click()
-  await page.getByRole('option', { name: 'Server Server' }).click()
+  await page.getByRole('button', { name: 'Server', exact: true }).click()
+  await page.getByRole('button', { name: 'Add to L1' }).click()
   await expect(page.getByText('infra.Server')).toBeVisible()
 
   await page.getByRole('button', { name: 'Style each layer' }).click()
@@ -89,4 +90,57 @@ test('builder style step opens and commits the inline node editor', async ({
   await expect(
     page.getByTestId('lexical-overlay').locator('[contenteditable="true"]'),
   ).toContainText('edited')
+})
+
+test('builder explores a direct relation before adding its model', async ({
+  page,
+}) => {
+  const environment = {
+    ...model,
+    dbTable: 'infra_environment',
+    modelName: 'environment',
+    verboseName: 'Environment',
+    verboseNamePlural: 'Environments',
+  }
+
+  await page.route('**/schema-viz/models/**', async (route) => {
+    await route.fulfill({ json: [model, environment] })
+  })
+  await page.route('**/schema-viz/model-details/**', async (route) => {
+    const url = new URL(route.request().url())
+    const requestedModel = url.searchParams.get('modelName')
+    await route.fulfill({
+      json:
+        requestedModel === 'environment'
+          ? { ...environment, fields: [], methods: [], relations: [] }
+          : {
+              ...modelDetails,
+              relations: [
+                {
+                  name: 'environment',
+                  type: 'ForeignKey',
+                  relatedModel: 'infra.environment',
+                  relatedName: 'servers',
+                  reverse: false,
+                },
+              ],
+            },
+    })
+  })
+
+  await page.goto('/builder')
+  await page.getByRole('button', { name: 'Add start model' }).click()
+  await page.getByRole('button', { name: 'Server', exact: true }).click()
+  await page.getByRole('button', { name: 'Add to L1' }).click()
+
+  await page.getByRole('button', { name: 'Add layer' }).last().click()
+  await page.getByRole('button', { name: 'Add model to L2' }).click()
+  await page
+    .getByRole('button', { name: /Environment.*outgoing.*ForeignKey/ })
+    .click()
+
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button', { name: 'Add to L2' }).click()
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(page.getByText('infra.environment')).toBeVisible()
 })

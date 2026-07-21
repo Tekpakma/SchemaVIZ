@@ -71,6 +71,30 @@ describe('startInstance middleware', () => {
     expect((result as Response).status).toBe(403)
   })
 
+  it('allows unsafe server function requests without same-origin proof in development', async () => {
+    const previousNodeEnv = process.env.NODE_ENV
+
+    vi.resetModules()
+    process.env.NODE_ENV = 'development'
+
+    try {
+      const { startInstance: developmentStartInstance } =
+        await import('./start')
+      const options = await developmentStartInstance.getOptions()
+      const middleware = getFirstRequestMiddleware(options)
+      const request = new Request('http://app.test/_server/test', {
+        method: 'POST',
+      })
+
+      const { next, result } = await runRequestMiddleware(middleware, request)
+
+      expect(next).toHaveBeenCalledOnce()
+      expect(result).toHaveProperty('response')
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv
+      vi.resetModules()
+    }
+  })
   it('allows same-origin server function requests', async () => {
     const options = await startInstance.getOptions()
     const middleware = getFirstRequestMiddleware(options)

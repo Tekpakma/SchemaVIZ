@@ -77,8 +77,8 @@ function GenerateTemplatePage() {
   )
 
   return (
-    <div className="flex h-dvh w-dvw flex-col bg-background">
-      <header className="flex items-center gap-3 border-b border-border px-3 py-2">
+    <div className="flex h-dvh w-dvw flex-col bg-background text-foreground">
+      <header className="relative z-10 flex items-center gap-3 border-b border-border/70 bg-background/90 px-3 py-2 shadow-[0_1px_0_0_color-mix(in_oklab,var(--foreground)_3%,transparent)] backdrop-blur-md">
         <BrandLogo />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[13px] font-semibold text-foreground">
@@ -88,8 +88,16 @@ function GenerateTemplatePage() {
         <DeleteGenerationTemplateButton template={template} />
       </header>
 
-      <main className="flex flex-1 items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-6">
+      <main className="relative isolate flex flex-1 items-center justify-center overflow-hidden p-6">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-32 left-1/2 -z-10 size-96 -translate-x-1/2 rounded-full bg-brand/8 blur-3xl dark:bg-brand/10"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-28 bottom-0 -z-10 size-72 rounded-full bg-canvas-edge/6 blur-3xl dark:bg-canvas-edge/8"
+        />
+        <div className="w-full max-w-md space-y-6 rounded-2xl border border-border/70 bg-card/90 p-6 shadow-[0_18px_55px_-36px_color-mix(in_oklab,var(--foreground)_35%,transparent)] backdrop-blur-sm dark:bg-secondary/20 dark:shadow-black/30 sm:p-7">
           <div className="space-y-2 text-center">
             <h2 className="text-lg font-semibold text-foreground">
               {template.name || t('builder.header.titlePlaceholder')}
@@ -107,7 +115,7 @@ function GenerateTemplatePage() {
                   role="combobox"
                   aria-expanded={open}
                   aria-controls="generate-record-list"
-                  className="min-w-0 flex-1 justify-between font-normal"
+                  className="min-w-0 flex-1 justify-between bg-background/70 font-normal shadow-none dark:bg-background/55"
                 >
                   {selectedRecord ? (
                     <span className="truncate">
@@ -194,7 +202,10 @@ function GenerateTemplatePage() {
             </Popover>
 
             {selectedRecord ? (
-              <Button asChild>
+              <Button
+                asChild
+                className="bg-brand text-brand-foreground shadow-sm hover:bg-brand/90 hover:text-brand-foreground"
+              >
                 <Link
                   to="/generate/$slug/$recordId"
                   params={{ slug, recordId: selectedRecord.pk }}
@@ -204,7 +215,7 @@ function GenerateTemplatePage() {
                 </Link>
               </Button>
             ) : (
-              <Button disabled>
+              <Button className="bg-brand text-brand-foreground" disabled>
                 <Play className="size-4" />
                 {t('generate.run')}
               </Button>
@@ -217,7 +228,7 @@ function GenerateTemplatePage() {
             </p>
           ) : null}
           <FilterImpactNotice
-            className="rounded-md border border-amber-200 dark:border-amber-900/60"
+            className="rounded-lg border"
             response={selectedRunData}
           />
         </div>

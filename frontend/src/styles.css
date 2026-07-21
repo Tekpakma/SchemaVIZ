@@ -185,14 +185,14 @@ body {
   overflow: hidden;
 }
 
-a {
+a:not([data-slot='button']) {
   color: var(--brand);
   text-decoration-color: color-mix(in oklab, var(--brand) 42%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
-a:hover {
+a:not([data-slot='button']):hover {
   color: color-mix(in oklab, var(--brand) 82%, var(--foreground));
 }
 
