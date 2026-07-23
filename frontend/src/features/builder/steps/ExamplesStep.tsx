@@ -19,6 +19,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandLoadMore,
   CommandLoading,
 } from '@/components/ui/command'
 import {
@@ -150,24 +151,23 @@ function RecordPickerDialog({
             })}
           </CommandGroup>
         )}
-        {recordsQuery.hasNextPage && (
-          <CommandItem
-            forceMount
-            value="__load-more-records"
-            disabled={recordsQuery.isFetchingNextPage}
-            onSelect={() => void recordsQuery.fetchNextPage()}
-          >
-            {recordsQuery.isFetchingNextPage ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Search className="size-4" />
-            )}
-            {recordsQuery.isFetchingNextPage
-              ? t('builder.examples.loadingMore')
-              : t('builder.examples.loadMore')}
-          </CommandItem>
-        )}
       </CommandList>
+      {recordsQuery.hasNextPage && (
+        <CommandLoadMore
+          aria-busy={recordsQuery.isFetchingNextPage}
+          disabled={recordsQuery.isFetchingNextPage}
+          onClick={() => void recordsQuery.fetchNextPage()}
+        >
+          {recordsQuery.isFetchingNextPage ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Search className="size-4" />
+          )}
+          {recordsQuery.isFetchingNextPage
+            ? t('builder.examples.loadingMore')
+            : t('builder.examples.loadMore')}
+        </CommandLoadMore>
+      )}
     </CommandDialog>
   )
 }

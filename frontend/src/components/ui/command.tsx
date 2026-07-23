@@ -136,6 +136,29 @@ function CommandLoading({
   )
 }
 
+function CommandLoadMore({
+  className,
+  type = 'button',
+  ...props
+}: React.ComponentProps<'button'>) {
+  return (
+    <div
+      data-slot="command-pagination"
+      className="shrink-0 border-t border-border bg-popover p-1.5 shadow-[0_-8px_16px_-16px_color-mix(in_oklab,var(--foreground)_45%,transparent)]"
+    >
+      <button
+        data-slot="command-load-more"
+        type={type}
+        className={cn(
+          'flex h-9 w-full items-center justify-center gap-2 rounded-sm px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50',
+          className,
+        )}
+        {...props}
+      />
+    </div>
+  )
+}
+
 function CommandGroup({
   className,
   ...props
@@ -204,6 +227,7 @@ export {
   CommandList,
   CommandEmpty,
   CommandGroup,
+  CommandLoadMore,
   CommandLoading,
   CommandItem,
   CommandShortcut,
