@@ -334,7 +334,9 @@ export function createCanvasReactFlowState(
 export function createStatelessExportRequestFromCanvas(
   snapshot: CanvasExportSnapshot,
   options: CanvasExportRequestOptions,
-): StatelessExportRequest {
+): Omit<StatelessExportRequest, 'reactFlowState'> & {
+  reactFlowState: ReturnType<typeof createCanvasReactFlowState>
+} {
   const palette = resolveExportPalette(options)
 
   const serializedNodes = R.pipe(

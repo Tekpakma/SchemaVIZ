@@ -92,29 +92,31 @@ const SCALE_OPTIONS = [
   { value: 3, label: '3x', hintKey: 'print' },
 ]
 
-const FORMAT_HINT_KEYS: Record<ExportFormat, string> = {
+const FORMAT_HINT_KEYS = {
   png: 'canvas.export.formats.png.hint',
   svg: 'canvas.export.formats.svg.hint',
   drawio: 'canvas.export.formats.drawio.hint',
-}
+} as const satisfies Record<ExportFormat, string>
 
-const FORMAT_META_KEYS: Record<ExportFormat, string> = {
+const FORMAT_META_KEYS = {
   png: 'canvas.export.formats.png.meta',
   svg: 'canvas.export.formats.svg.meta',
   drawio: 'canvas.export.formats.drawio.meta',
-}
+} as const satisfies Record<ExportFormat, string>
 
-const FORMAT_TIP_KEYS: Record<ExportFormat, string> = {
+const FORMAT_TIP_KEYS = {
   png: 'canvas.export.tips.png',
   svg: 'canvas.export.tips.svg',
   drawio: 'canvas.export.tips.drawio',
-}
+} as const satisfies Record<ExportFormat, string>
 
-const SCALE_HINT_KEYS: Record<number, string> = {
+const SCALE_HINT_KEYS = {
   1: 'canvas.export.scale.standard',
   2: 'canvas.export.scale.retina',
   3: 'canvas.export.scale.print',
-}
+} as const satisfies Record<number, string>
+
+type ScaleHintScale = keyof typeof SCALE_HINT_KEYS
 
 type ExportDialogState = {
   busy: boolean
@@ -519,7 +521,7 @@ function ExportScaleSection({
           >
             <b className="text-[14px] font-semibold">{opt.label}</b>
             <em className="text-[10.5px] not-italic text-muted-foreground">
-              {t(SCALE_HINT_KEYS[opt.value])}
+              {t(SCALE_HINT_KEYS[opt.value as ScaleHintScale])}
             </em>
           </button>
         ))}

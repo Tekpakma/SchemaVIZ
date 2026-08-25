@@ -16,7 +16,7 @@ import type { LucideIcon } from 'lucide-react'
 import type {
   Drawing,
   GenerationTemplateList,
-  ModelInfo,
+  ModelInfoShort,
 } from '@/api/contracts'
 import type { ReleaseFeature } from '@/config/releaseFeatures'
 
@@ -290,12 +290,12 @@ export function createDrawingCommandItems(
   }))
 }
 
-export function getModelId(model: ModelInfo) {
+export function getModelId(model: ModelInfoShort) {
   return `${model.appLabel}.${model.modelName}`
 }
 
 export function createModelCommandItems(
-  models: ModelInfo[],
+  models: ModelInfoShort[],
 ): CommandCenterItem[] {
   return models.map((model) => {
     const modelId = getModelId(model)

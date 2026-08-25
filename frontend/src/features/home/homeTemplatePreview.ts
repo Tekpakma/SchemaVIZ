@@ -38,7 +38,7 @@ export type HomeTemplateEntry = Omit<
   GenerationTemplateQuickAccessEntryOutput,
   'source' | 'run'
 > & {
-  run: unknown
+  run?: unknown
   source: HomeTemplateSource
 }
 

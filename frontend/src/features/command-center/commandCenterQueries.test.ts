@@ -17,6 +17,11 @@ const drawingsListMock = vi.mocked(schemaVizDrawingsList)
 const templatesListMock = vi.mocked(schemaVizGenerationTemplatesList)
 const modelsListMock = vi.mocked(schemaVizModelsList)
 
+// queryOptions types queryFn as optional and context-taking; these queries ignore the context.
+function runQueryFn<T>(options: { queryFn?: unknown }): Promise<T> {
+  return (options.queryFn as () => Promise<T>)()
+}
+
 describe('command center queries', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -50,7 +55,7 @@ describe('command center queries', () => {
     })
 
     await expect(
-      COMMAND_CENTER_QUERIES.templates(true).queryFn(),
+      runQueryFn<unknown[]>(COMMAND_CENTER_QUERIES.templates(true)),
     ).resolves.toHaveLength(1)
     expect(templatesListMock).toHaveBeenCalledWith()
   })
@@ -71,7 +76,7 @@ describe('command center queries', () => {
     })
 
     await expect(
-      COMMAND_CENTER_QUERIES.drawings(true).queryFn(),
+      runQueryFn<unknown[]>(COMMAND_CENTER_QUERIES.drawings(true)),
     ).resolves.toHaveLength(1)
     expect(drawingsListMock).toHaveBeenCalledWith()
   })
@@ -88,9 +93,6 @@ describe('command center queries', () => {
           abstract: false,
           dbTable: 'inventory_device',
           managed: true,
-          fields: [],
-          relations: [],
-          methods: [],
         },
       ],
       headers: new Headers(),
@@ -98,7 +100,7 @@ describe('command center queries', () => {
     })
 
     await expect(
-      COMMAND_CENTER_QUERIES.models(true).queryFn(),
+      runQueryFn<unknown[]>(COMMAND_CENTER_QUERIES.models(true)),
     ).resolves.toHaveLength(1)
     expect(modelsListMock).toHaveBeenCalledWith({ excludeDjango: true })
   })

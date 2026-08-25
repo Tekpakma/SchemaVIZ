@@ -12,6 +12,7 @@ import type {
   GenerationTemplateWriteRequest,
 } from '@/api/contracts'
 import type {
+  GroupMode,
   LayoutAlgorithm,
   RecipeData,
   RecipeFilter,
@@ -415,7 +416,7 @@ export function createRecipeFromTemplate(
       const parent = stepsById[step.parentId]
       if (!parent) return []
 
-      const mode =
+      const mode: GroupMode | null =
         step.groupMode === 'breakout'
           ? 'breakout'
           : parent.groupMode === 'group' || step.groupMode === 'group'

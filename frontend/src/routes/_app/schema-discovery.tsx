@@ -14,11 +14,11 @@ import {
 import { useTranslation } from 'react-i18next'
 import * as zod from 'zod'
 
-import type { ModelInfo } from '@/api/contracts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RELEASE_FEATURES } from '@/config/releaseFeatures'
 import { BUILDER_SCHEMA_QUERIES } from '@/features/builder/schemaModelQueries'
+import type { SchemaDiscoveryModel } from '@/features/schema-discovery/schemaDiscoveryModel'
 import {
   filterSchemaModels,
   findSchemaModel,
@@ -56,7 +56,7 @@ function SchemaDiscoveryRoute() {
   const selectedModel = findSchemaModel(models, selectedModelId ?? null)
   const stats = getSchemaDiscoveryStats(models)
 
-  function selectModel(model: ModelInfo) {
+  function selectModel(model: SchemaDiscoveryModel) {
     navigate({
       to: '/schema-discovery',
       search: { model: getSchemaModelId(model) },
@@ -113,11 +113,11 @@ function SchemaDiscoveryRoute() {
 }
 
 type ModelRailProps = {
-  groups: Array<{ appName: string; models: ModelInfo[] }>
+  groups: Array<{ appName: string; models: SchemaDiscoveryModel[] }>
   isError: boolean
   isLoading: boolean
   selectedModelId: string | undefined
-  onSelectModel: (model: ModelInfo) => void
+  onSelectModel: (model: SchemaDiscoveryModel) => void
 }
 
 function ModelRail({
@@ -175,7 +175,7 @@ function ModelRail({
                       {model.verboseName}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {model.relations.length}
+                      {(model.relations ?? []).length}
                     </span>
                   </button>
                 )
@@ -244,12 +244,12 @@ function SchemaOverview({
 }
 
 type ModelRelationMapProps = {
-  model: ModelInfo
+  model: SchemaDiscoveryModel
 }
 
 function ModelRelationMap({ model }: ModelRelationMapProps) {
   const { t } = useTranslation()
-  const relations = model.relations.slice(0, 12)
+  const relations = (model.relations ?? []).slice(0, 12)
 
   return (
     <div className="grid min-h-full gap-4">
@@ -265,11 +265,13 @@ function ModelRelationMap({ model }: ModelRelationMapProps) {
           </div>
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span>
-              {t('schemaDiscovery.fieldCount', { count: model.fields.length })}
+              {t('schemaDiscovery.fieldCount', {
+                count: (model.fields ?? []).length,
+              })}
             </span>
             <span>
               {t('schemaDiscovery.relationCount', {
-                count: model.relations.length,
+                count: (model.relations ?? []).length,
               })}
             </span>
           </div>
@@ -316,7 +318,7 @@ function ModelRelationMap({ model }: ModelRelationMapProps) {
 }
 
 type ModelDetailsProps = {
-  model: ModelInfo | null
+  model: SchemaDiscoveryModel | null
 }
 
 function ModelDetails({ model }: ModelDetailsProps) {
@@ -362,7 +364,7 @@ function ModelDetails({ model }: ModelDetailsProps) {
           <DetailList
             icon={Braces}
             title={t('schemaDiscovery.fields')}
-            items={model.fields.slice(0, 12).map((field) => ({
+            items={(model.fields ?? []).slice(0, 12).map((field) => ({
               label: field.name,
               meta: field.type,
             }))}
@@ -370,7 +372,7 @@ function ModelDetails({ model }: ModelDetailsProps) {
           <DetailList
             icon={GitFork}
             title={t('schemaDiscovery.relations')}
-            items={model.relations.slice(0, 12).map((relation) => ({
+            items={(model.relations ?? []).slice(0, 12).map((relation) => ({
               label: relation.name,
               meta: relation.relatedModel,
             }))}

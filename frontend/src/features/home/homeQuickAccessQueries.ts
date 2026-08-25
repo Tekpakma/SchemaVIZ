@@ -6,11 +6,11 @@ import {
   GenerationTemplateOwnRecentQuickAccess,
   PaginatedGenerationTemplateQuickAccessEntryList,
 } from '@/api/contracts'
+import type { SchemaVizGenerationTemplateQuickAccessFeaturedListParams } from '@/api/contracts'
 import {
   getSchemaVizGenerationTemplateQuickAccessFeaturedListUrl,
   getSchemaVizGenerationTemplateQuickAccessRetrieveUrl,
 } from '@/api/generated/schema-viz'
-import type { SchemaVizGenerationTemplateQuickAccessFeaturedListParams } from '@/api/generated/schema-viz'
 import {
   createHomeTemplateEntryFromListTemplate,
   type GenerationTemplateListWithSample,

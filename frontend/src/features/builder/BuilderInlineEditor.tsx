@@ -273,7 +273,7 @@ function BuilderInlineEditorBody({
   const onCommitRef = useRef(onCommit)
   onCommitRef.current = onCommit
 
-  const node = editingNodeId ? nodes[editingNodeId] : null
+  const node = (editingNodeId ? nodes[editingNodeId] : null) ?? null
   const isEditing = !!node
   const isGroup = node?.kind === 'group'
 

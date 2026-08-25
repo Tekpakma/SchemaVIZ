@@ -49,7 +49,7 @@ const models: ModelInfo[] = [
 
 describe('schema discovery model helpers', () => {
   it('uses Django app and model names as stable ids', () => {
-    expect(getSchemaModelId(models[0])).toBe('inventory.Device')
+    expect(getSchemaModelId(models[0]!)).toBe('inventory.Device')
     expect(findSchemaModel(models, 'network.Interface')).toBe(models[1])
     expect(findSchemaModel(models, 'missing.Model')).toBeNull()
   })

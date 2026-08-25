@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   Drawing,
   GenerationTemplateList,
-  ModelInfo,
+  ModelInfoShort,
 } from '@/api/contracts'
 import { RELEASE_FEATURES } from '@/config/releaseFeatures'
 import {
@@ -68,10 +68,7 @@ describe('command center items', () => {
           abstract: false,
           dbTable: 'inventory_device',
           managed: true,
-          fields: [],
-          relations: [],
-          methods: [],
-        } satisfies ModelInfo,
+        } satisfies ModelInfoShort,
       ]),
     ]
 
@@ -121,13 +118,13 @@ describe('command center items', () => {
       }),
     ])
 
-    expect(draftItem.route).toEqual({
+    expect(draftItem!.route).toEqual({
       to: '/builder',
       search: {
         templateId: '018f3b2e-8a9a-7c6d-9e0f-123456789abc',
       },
     })
-    expect(publishedItem.route).toEqual({
+    expect(publishedItem!.route).toEqual({
       to: '/generate/$slug',
       params: {
         slug: 'network-landscape',

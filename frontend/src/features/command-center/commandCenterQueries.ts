@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import * as zod from 'zod'
 
-import { Drawing, GenerationTemplateList, ModelInfo } from '@/api/contracts'
+import { Drawing, GenerationTemplateList, ModelInfoShort } from '@/api/contracts'
 import {
   schemaVizDrawingsList,
   schemaVizGenerationTemplatesList,
@@ -27,7 +27,7 @@ async function fetchCommandCenterModels() {
     throw new Error(`Failed to fetch models: ${response.status}`)
   }
 
-  return zod.array(ModelInfo).parse(response.data)
+  return zod.array(ModelInfoShort).parse(response.data)
 }
 
 export const COMMAND_CENTER_QUERIES = {

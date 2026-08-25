@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
+import type { RecipeData } from './types'
 import {
   createRecipeFromTemplate,
   recipeToGenerationTemplateWriteRequest,
@@ -141,7 +142,7 @@ describe('builder template recipe conversion', () => {
   })
 
   it('converts builder recipes to backend write payloads', () => {
-    const recipe = {
+    const recipe: RecipeData = {
       ...createRecipeFromTemplate(
         createTemplate({
           name: 'Cloud overview',
