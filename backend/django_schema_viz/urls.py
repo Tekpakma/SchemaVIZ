@@ -22,6 +22,7 @@ from .views import (
     QLabModelRegistryViewSet,
     GenerationTemplateViewSet,
     GenerationRunView,
+    GenerationValidateView,
     SchemaRouteView,
     SchemaRouteProbeView,
     SharedGenerationTemplateView,
@@ -84,6 +85,11 @@ urlpatterns = [
         name="stateless-export",
     ),
     path("generation-runs/", GenerationRunView.as_view(), name="generation-runs"),
+    path(
+        "generation-runs/validate/",
+        GenerationValidateView.as_view(),
+        name="generation-runs-validate",
+    ),
     path(
         "generate/<slug:share_slug>/",
         SharedGenerationTemplateView.as_view(),

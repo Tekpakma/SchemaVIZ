@@ -1,3 +1,4 @@
+import re
 from dataclasses import asdict
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
@@ -58,6 +59,7 @@ from .drf import (
 )
 from rest_framework import permissions
 from .mixins import SchemaVizViewMixin
+from .record_scope import scope_model_queryset
 from .schema_compat import (
     extend_schema,
     extend_schema_view,
@@ -86,6 +88,9 @@ from .models import (
 from .serializers import (
     QueryResponseSerializer,
     ErrorResponseSerializer,
+    GenerationValidateRequestSerializer,
+    GenerationValidateResponseSerializer,
+    SchemaGraphQuerySerializer,
     SchemaRouteRequestSerializer,
     StatelessExportSerializer,
     TourProgressResourceSerializer,
@@ -98,6 +103,8 @@ from .utils.schema_discovery import (
     ModelInfoShortSerializer,
     SchemaGraphSerializer,
     SchemaRouteSerializer,
+    filter_schema_graph,
+    split_csv_param,
 )
 from .utils.qlab_access import (
     assert_registry_ready,
@@ -111,7 +118,14 @@ from .utils.style_template_compatibility import (
 from django.http import HttpResponse
 from .utils.generation_engine import GenerationEngine, GenerationResultSerializer
 from .utils.generation_types import GenerationFilterImpactSerializer
-from .utils.generation_steps import GenerationStepValidationError
+from .utils.generation_steps import (
+    GenerationStepValidationError,
+    validate_generation_root_model,
+)
+from .utils.generation_definition import (
+    normalize_generation_definition,
+    validate_generation_definition,
+)
 from .template_uniqueness import (
     build_template_uniqueness_errors,
     check_template_uniqueness,
@@ -123,6 +137,7 @@ from .i18n import (
     resolve_request_locale,
     translate_request,
 )
+from .conf import get_setting
 from . import __version__
 
 
@@ -253,7 +268,7 @@ def resolve_generation_template_sample_record(
     except LookupError:
         return None
 
-    return model._default_manager.all().first()
+    return scope_model_queryset(model, user).first()
 
 
 def build_generation_template_sample_payload(
@@ -350,7 +365,7 @@ def build_generation_quick_access_page_url(request, *, limit: int, offset: int):
 
 
 class BackendVersionView(SchemaVizViewMixin, APIView):
-    schema_viz_permission_category = "introspection"
+    schema_viz_permission_category = "public"
     renderer_classes = [CamelCaseJSONRenderer]
 
     @extend_schema(
@@ -462,7 +477,7 @@ def _serialize_shape(shape):
 
 
 class ShapesListView(SchemaVizViewMixin, APIView):
-    schema_viz_permission_category = "introspection"
+    schema_viz_permission_category = "public"
     renderer_classes = [CamelCaseJSONRenderer]
 
     @extend_schema(
@@ -479,6 +494,39 @@ class ShapesListView(SchemaVizViewMixin, APIView):
             {"shapes": shapes, "aliases": SHAPE_ALIASES},
             status=status.HTTP_200_OK,
         )
+
+
+def resolve_ai_config(preference) -> dict:
+    """
+    Effective AI configuration for a user.
+
+    The per-user preference wins; empty values fall back to the deployment-wide
+    ``SCHEMA_VIZ`` defaults. The API key is never sourced from settings.
+    """
+    return {
+        "enabled": bool(get_setting("AI_ENABLED")),
+        "base_url": preference.ai_base_url or get_setting("AI_DEFAULT_BASE_URL") or "",
+        "model": preference.ai_model or get_setting("AI_DEFAULT_MODEL") or "",
+    }
+
+
+def build_session_state(request, preference) -> dict:
+    ai_config = resolve_ai_config(preference)
+    return {
+        "capabilities": {
+            "can_manage_featured_templates": request.user.is_staff,
+            "can_manage_model_registry": request.user.is_staff,
+        },
+        "locale": preference.locale,
+        "available_locales": list(available_locales()),
+        "default_locale": DEFAULT_LOCALE,
+        "help_hints_enabled": preference.help_hints_enabled,
+        "help_hints_dismissed": preference.help_hints_dismissed or {},
+        "ai_enabled": ai_config["enabled"],
+        "has_ai_key": preference.has_ai_key,
+        "ai_base_url": ai_config["base_url"],
+        "ai_model": ai_config["model"],
+    }
 
 
 class AiConfigSecretView(SchemaVizViewMixin, APIView):
@@ -501,11 +549,13 @@ class AiConfigSecretView(SchemaVizViewMixin, APIView):
             user=request.user,
             defaults={"locale": resolve_request_locale(request)},
         )
+        ai_config = resolve_ai_config(preference)
         return Response(
             {
+                "enabled": ai_config["enabled"],
                 "api_key": preference.ai_api_key,
-                "base_url": preference.ai_base_url,
-                "model": preference.ai_model,
+                "base_url": ai_config["base_url"],
+                "model": ai_config["model"],
             },
             status=status.HTTP_200_OK,
         )
@@ -526,22 +576,7 @@ class SessionCapabilitiesView(SchemaVizViewMixin, APIView):
             user=request.user,
             defaults={"locale": resolve_request_locale(request)},
         )
-        serializer = SessionStateSerializer(
-            {
-                "capabilities": {
-                    "can_manage_featured_templates": request.user.is_staff,
-                    "can_manage_model_registry": request.user.is_staff,
-                },
-                "locale": preference.locale,
-                "available_locales": list(available_locales()),
-                "default_locale": DEFAULT_LOCALE,
-                "help_hints_enabled": preference.help_hints_enabled,
-                "help_hints_dismissed": preference.help_hints_dismissed or {},
-                "has_ai_key": preference.has_ai_key,
-                "ai_base_url": preference.ai_base_url,
-                "ai_model": preference.ai_model,
-            }
-        )
+        serializer = SessionStateSerializer(build_session_state(request, preference))
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -585,22 +620,7 @@ class SessionCapabilitiesView(SchemaVizViewMixin, APIView):
             preference.save(update_fields=update_fields)
 
         return Response(
-            SessionStateSerializer(
-                {
-                    "capabilities": {
-                        "can_manage_featured_templates": request.user.is_staff,
-                        "can_manage_model_registry": request.user.is_staff,
-                    },
-                    "locale": preference.locale,
-                    "available_locales": list(available_locales()),
-                    "default_locale": DEFAULT_LOCALE,
-                    "help_hints_enabled": preference.help_hints_enabled,
-                    "help_hints_dismissed": preference.help_hints_dismissed or {},
-                    "has_ai_key": preference.has_ai_key,
-                    "ai_base_url": preference.ai_base_url,
-                    "ai_model": preference.ai_model,
-                }
-            ).data,
+            SessionStateSerializer(build_session_state(request, preference)).data,
             status=status.HTTP_200_OK,
         )
 
@@ -1510,7 +1530,13 @@ class SchemaGraphView(SchemaVizViewMixin, APIView):
 
     @extend_schema(
         summary="Get Schema Graph",
-        description="Get complete schema graph with nodes, edges, and groups",
+        description=(
+            "Get the schema graph with nodes, edges, and groups. Without query "
+            "parameters the full graph is returned. Filters narrow the result to "
+            "a subgraph; `includeFields=false` drops the per-model field lists "
+            "for a compact digest."
+        ),
+        parameters=[SchemaGraphQuerySerializer],
         responses={
             200: SchemaGraphSerializer,
             500: inline_serializer(
@@ -1521,8 +1547,19 @@ class SchemaGraphView(SchemaVizViewMixin, APIView):
         tags=["Schema Introspection"],
     )
     def get(self, request):
+        query_serializer = SchemaGraphQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        query = query_serializer.validated_data
+
         try:
             schema_graph = SchemaDiscoveryService.get_schema(user=request.user)
+            schema_graph = filter_schema_graph(
+                schema_graph,
+                app_labels=split_csv_param(query.get("apps")),
+                model_refs=split_csv_param(query.get("models")),
+                search=query.get("search"),
+                include_fields=query.get("include_fields", True),
+            )
             response_serializer = SchemaGraphSerializer(instance=schema_graph)
             return Response(response_serializer.data)
 
@@ -1875,7 +1912,7 @@ class QueryListView(SchemaVizViewMixin, GenericAPIView):
 
     def _build_queryset(self, model, search=None, field_filters=None):
         """Build queryset with filters applied"""
-        queryset = model.objects.all()
+        queryset = scope_model_queryset(model, self.request.user)
 
         if field_filters:
             queryset = queryset.filter(**field_filters)
@@ -2373,6 +2410,96 @@ class GenerationRunView(SchemaVizViewMixin, APIView):
         )
 
 
+_STEP_ID_PATTERN = re.compile(r"definition\.stepsById\.([^.\s]+)")
+
+
+def _describe_generation_issue(message: str) -> dict:
+    """Turn a validation error message into a structured issue."""
+    match = _STEP_ID_PATTERN.search(message)
+    return {
+        "code": "invalid_definition",
+        "message": message,
+        "step_id": match.group(1) if match else None,
+        "hint": "",
+    }
+
+
+class GenerationValidateView(SchemaVizViewMixin, APIView):
+    """
+    Dry-run validation for an inline generation definition.
+
+    Always answers with HTTP 200 and a machine-readable report so callers can
+    iterate on a definition without having to interpret DRF error payloads.
+    """
+
+    schema_viz_permission_category = "user_data"
+    renderer_classes = [CamelCaseJSONRenderer]
+    parser_classes = [CamelCaseJSONParser]
+
+    @extend_schema(
+        operation_id="schemaVizGenerationRunsValidateCreate",
+        summary="Validate Generation Definition",
+        description=(
+            "Validates a root model and inline definition without executing a "
+            "generation run. Returns HTTP 200 in all cases; check the `valid` "
+            "flag and the `errors` list."
+        ),
+        request=GenerationValidateRequestSerializer,
+        responses={200: GenerationValidateResponseSerializer},
+        tags=["Generation Templates"],
+    )
+    def post(self, request):
+        serializer = GenerationValidateRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            errors = [
+                {
+                    "code": "invalid_request",
+                    "message": f"{field}: {detail}",
+                    "step_id": None,
+                    "hint": "",
+                }
+                for field, details in serializer.errors.items()
+                for detail in details
+            ]
+            return Response(
+                GenerationValidateResponseSerializer(
+                    {"valid": False, "errors": errors, "warnings": []}
+                ).data,
+                status=status.HTTP_200_OK,
+            )
+
+        payload = serializer.validated_data
+        errors: list[dict] = []
+        warnings: list[dict] = []
+
+        try:
+            root_model = validate_generation_root_model(
+                payload["root_model"], user=request.user
+            )
+            definition = normalize_generation_definition(
+                payload["inline_definition"], user=request.user
+            )
+            validate_generation_definition(root_model, definition, user=request.user)
+        except GenerationStepValidationError as exc:
+            errors.append(_describe_generation_issue(str(exc)))
+        except Exception as exc:
+            errors.append(
+                {
+                    "code": "validation_failed",
+                    "message": str(exc),
+                    "step_id": None,
+                    "hint": "",
+                }
+            )
+
+        return Response(
+            GenerationValidateResponseSerializer(
+                {"valid": not errors, "errors": errors, "warnings": warnings}
+            ).data,
+            status=status.HTTP_200_OK,
+        )
+
+
 class SharedGenerationTemplateView(SchemaVizViewMixin, APIView):
     schema_viz_permission_category = "user_data"
     renderer_classes = [CamelCaseJSONRenderer]
@@ -2708,6 +2835,7 @@ class DrawingExportView(SchemaVizViewMixin, APIView):
             mode=mode,
             scale_factor=scale_factor,
             background=background,
+            user=request.user,
         )
         filename = f"{file_base}.svg"
         response = HttpResponse(svg, content_type="image/svg+xml")
@@ -2785,6 +2913,7 @@ class StatelessExportView(SchemaVizViewMixin, APIView):
             mode=mode,
             scale_factor=scale_factor,
             background=background,
+            user=request.user,
         )
         response = HttpResponse(svg, content_type="image/svg+xml")
         response["Content-Disposition"] = f'attachment; filename="{safe_name}.svg"'
@@ -2901,13 +3030,14 @@ class SchemaRouteProbeView(SchemaVizViewMixin, GenericAPIView):
                 if is_forward:
                     # Forward: count records in from_model that have a non-null FK
                     field = from_model._meta.get_field(via_field)
+                    base_queryset = scope_model_queryset(from_model, request.user)
                     if hasattr(field, "get_attname"):
                         # FK/O2O — count non-null
                         attname = field.get_attname()
-                        qs = from_model.objects.exclude(**{f"{attname}__isnull": True})
+                        qs = base_queryset.exclude(**{f"{attname}__isnull": True})
                     else:
                         # M2M forward
-                        qs = from_model.objects.filter(
+                        qs = base_queryset.filter(
                             **{f"{via_field}__isnull": False}
                         ).distinct()
 
@@ -2919,13 +3049,12 @@ class SchemaRouteProbeView(SchemaVizViewMixin, GenericAPIView):
                     # Reverse: count records in to_model that reference from_model
                     to_parts = to_model_ref.split(".")
                     to_model = apps.get_model(to_parts[0], to_parts[1])
+                    base_queryset = scope_model_queryset(to_model, request.user)
 
                     if sample_record_id:
-                        qs = to_model.objects.filter(
-                            **{f"{via_field}": sample_record_id}
-                        )
+                        qs = base_queryset.filter(**{f"{via_field}": sample_record_id})
                     else:
-                        qs = to_model.objects.all()
+                        qs = base_queryset
 
                     count = qs[:sample_size].count()
 

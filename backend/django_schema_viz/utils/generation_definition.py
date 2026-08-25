@@ -229,9 +229,14 @@ def validate_generation_definition(
                     f"definition.stepsById.{step_id}.relationship is required."
                 )
 
-            expected_model = resolve_related_model(
-                current_model, relationship, user=user
-            )
+            try:
+                expected_model = resolve_related_model(
+                    current_model, relationship, user=user
+                )
+            except GenerationStepValidationError as exc:
+                raise GenerationStepValidationError(
+                    f"definition.stepsById.{step_id}.relationship: {exc}"
+                ) from exc
             expected_model_ref = build_model_ref(expected_model)
             if resolved_model_id != expected_model_ref:
                 raise GenerationStepValidationError(

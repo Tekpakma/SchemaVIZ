@@ -173,6 +173,7 @@ class SessionStateViewTests(APITestCase):
                 "defaultLocale": "en",
                 "helpHintsEnabled": True,
                 "helpHintsDismissed": {},
+                "aiEnabled": True,
                 "hasAiKey": False,
                 "aiModel": "",
                 "aiBaseUrl": "",

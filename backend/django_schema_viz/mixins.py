@@ -9,12 +9,14 @@ from .conf import get_setting, resolve_classes
 from .i18n import activate_request_locale
 
 _CATEGORY_TO_SETTING = {
+    "public": "PUBLIC_PERMISSION_CLASSES",
     "introspection": "INTROSPECTION_PERMISSION_CLASSES",
     "user_data": "USER_DATA_PERMISSION_CLASSES",
     "owner": "OWNER_PERMISSION_CLASSES",
 }
 
 _CATEGORY_TO_EXTRA_SETTING = {
+    "public": "EXTRA_PUBLIC_PERMISSION_CLASSES",
     "introspection": "EXTRA_INTROSPECTION_PERMISSION_CLASSES",
     "user_data": "EXTRA_USER_DATA_PERMISSION_CLASSES",
     "owner": "EXTRA_OWNER_PERMISSION_CLASSES",
@@ -26,7 +28,8 @@ class SchemaVizViewMixin:
     Drop-in mixin for DRF views / viewsets.
 
     Subclasses set ``schema_viz_permission_category`` to one of:
-      - ``"introspection"`` – public schema endpoints
+      - ``"public"``        – no project data exposed (version, shapes)
+      - ``"introspection"`` – schema/data-model endpoints
       - ``"user_data"``     – authenticated read access
       - ``"owner"``         – authenticated + ownership checks
     """

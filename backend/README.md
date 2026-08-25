@@ -95,6 +95,54 @@ SCHEMA_VIZ = {
 }
 ```
 
+### Row-level record scope
+
+The QLab registry decides which *models* a user reaches. `RECORD_SCOPE` decides
+which *rows*. It is a dotted path to a `(queryset, user) -> QuerySet` callable
+and is applied to every consumer-model read: shared generation runs (root
+records and every relation hop), the query lab, quick-access sample records,
+route probes, and `{{field}}` resolution during SVG export.
+
+```python
+SCHEMA_VIZ = {
+    "RECORD_SCOPE": "my_project.scoping.scope_to_user_groups",
+}
+```
+
+```python
+def scope_to_user_groups(queryset, user):
+    if user.is_superuser:
+        return queryset
+    if not hasattr(queryset.model, "perm_group"):
+        return queryset
+    return queryset.filter(
+        perm_group__in=user.groups.values_list("name", flat=True)
+    )
+```
+
+The default is `None`, which leaves querysets untouched. Multi-tenant
+deployments must set it — without it, any user who can reach a model can read
+every row of it.
+
+### Embedding SchemaVIZ in another application
+
+The frontend serves a chrome-less view at `/generate/<slug>/<recordId>?embed=1`
+that is meant to be put in an `<iframe>`. Two deployment details matter:
+
+- **Frames must be allowed explicitly.** Build the frontend with
+  `SCHEMA_VIZ_FRAME_ANCESTORS="https://portal.example.com"`. Every other route
+  stays `frame-ancestors 'none'`.
+- **Prefer a same-site deployment.** Serving SchemaVIZ under the host
+  application's domain via a reverse proxy (e.g. `portal.example.com/schema-viz`)
+  keeps the session cookie first-party. Cross-site embedding requires
+  `SESSION_COOKIE_SAMESITE = "None"`, `SESSION_COOKIE_SECURE = True`,
+  `CSRF_COOKIE_SAMESITE = "None"` and matching `CSRF_TRUSTED_ORIGINS`, and even
+  then browsers with third-party cookie blocking (Safari ITP, Firefox Total
+  Cookie Protection) will drop the session.
+
+Inside an iframe the frontend never redirects to the identity provider — that
+would blank the frame — and instead renders an "open in a new tab" prompt.
+
 ### OAuth2 authentication (Django OAuth Toolkit)
 
 When deployed with DOT (Django OAuth Toolkit) as the OIDC provider, TanStack Start forwards the

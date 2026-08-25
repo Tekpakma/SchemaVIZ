@@ -16,6 +16,7 @@ from django_schema_viz.drf import (
     SchemaVizCamelCaseJSONRenderer as CamelCaseJSONRenderer,
 )
 from django_schema_viz.mixins import SchemaVizViewMixin
+from django_schema_viz.record_scope import scope_model_queryset
 from django_schema_viz.schema_compat import extend_schema
 from django_schema_viz.serializers import (
     DynamicModelSerializer,
@@ -80,8 +81,14 @@ class SchemaVizQLabBaseView(SchemaVizViewMixin, GenericAPIView):
 
         return _ResolvedModel(app_label=app_label, model_name=model_name, model=model)
 
+    def scoped_queryset(self, model):
+        """Row-level boundary for *model*, without any per-request filtering."""
+        return scope_model_queryset(model, self.request.user)
+
     def get_queryset(self, model):
-        return model._default_manager.all()
+        # QLab's record and neighborhood mixins both route their lookups
+        # through this hook, so scoping here covers both endpoints.
+        return self.scoped_queryset(model)
 
     @staticmethod
     def _default_select_fields(model: type[models.Model]) -> list[str]:
@@ -111,7 +118,7 @@ class SchemaVizQLabBaseView(SchemaVizViewMixin, GenericAPIView):
             for row in raw_results
             if row.get("id", row.get(pk_field)) is not None
         ]
-        instance_map = model._default_manager.in_bulk(pk_values)
+        instance_map = self.scoped_queryset(model).in_bulk(pk_values)
         results = [
             self._normalize_record_row(
                 row,
@@ -365,7 +372,7 @@ class QueryRecordView(SchemaVizQLabBaseView, QLabMixin):
 
         if not validated.get("select_fields"):
             try:
-                instance = resolved.model._default_manager.get(pk=record_id)
+                instance = self.scoped_queryset(resolved.model).get(pk=record_id)
             except resolved.model.DoesNotExist:
                 return self._error_response(
                     f"Record with pk={record_id} not found",

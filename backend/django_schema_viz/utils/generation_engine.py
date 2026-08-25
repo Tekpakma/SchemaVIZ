@@ -10,6 +10,7 @@ nearest visible ancestor.
 from django.apps import apps
 from django.db import models
 
+from ..record_scope import scope_queryset
 from ..serializers import DynamicModelSerializer
 from .generation_definition import (
     GROUP_MODE_BREAKOUT,
@@ -235,6 +236,7 @@ class GenerationEngine:
                     relation_paths,
                     user=self.user,
                     accessibility_check=is_model_accessible_for_user,
+                    queryset_scope=scope_queryset,
                 )
                 fields_data.update(resolved)
             style_template_id = step.get(
@@ -359,6 +361,10 @@ class GenerationEngine:
         if related_model is None or related_queryset is None:
             return
 
+        # Row-level boundary — a relation hop must not hand out records the
+        # user cannot see in their own right.
+        related_queryset = scope_queryset(related_queryset, self.user)
+
         # Apply select_related / prefetch_related once per traversal hop so
         # downstream relation-path resolution doesn't trigger N+1 queries.
         related_model_ref = build_model_ref(related_model)
@@ -449,8 +455,9 @@ class GenerationEngine:
     def _build_queryset_with_prefetch(
         self, model: type[models.Model], model_ref: str
     ) -> models.QuerySet:
-        """Root-record queryset with select/prefetch applied."""
-        return self._apply_prefetch(model._default_manager.all(), model_ref)
+        """Root-record queryset with row-level scope and select/prefetch applied."""
+        queryset = scope_queryset(model._default_manager.all(), self.user)
+        return self._apply_prefetch(queryset, model_ref)
 
     def _apply_prefetch(
         self, queryset: models.QuerySet, model_ref: str

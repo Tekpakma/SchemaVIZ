@@ -98,6 +98,7 @@ def resolve_relation_paths(
     *,
     user=None,
     accessibility_check=None,
+    queryset_scope=None,
 ) -> dict[str, Any]:
     """
     Walk the union of paths on ``record`` and return nested data shaped for
@@ -113,6 +114,11 @@ def resolve_relation_paths(
     ``(user, app_label, model_name) -> bool`` used to gate related-record
     access. Pass ``is_model_accessible_for_user`` from the engine to keep
     QLab permission boundaries intact.
+
+    ``queryset_scope`` is an optional callable ``(queryset, user) -> QuerySet``
+    applied to every related-record fetch. Pass ``scope_queryset`` from the
+    engine so a data-reference chip cannot surface rows the row-level
+    boundary hides everywhere else.
     """
     relation_paths: list[list[str]] = []
     for path in paths:
@@ -125,7 +131,15 @@ def resolve_relation_paths(
     if not relation_paths:
         return {}
     nested: dict[str, Any] = {}
-    _resolve_group(nested, relation_paths, record, user, accessibility_check, depth=0)
+    _resolve_group(
+        nested,
+        relation_paths,
+        record,
+        user,
+        accessibility_check,
+        queryset_scope,
+        depth=0,
+    )
     return nested
 
 
@@ -135,6 +149,7 @@ def _resolve_group(
     record: models.Model,
     user,
     accessibility_check,
+    queryset_scope,
     *,
     depth: int,
 ) -> None:
@@ -181,7 +196,7 @@ def _resolve_group(
         ):
             continue  # permission denied — leave unresolved
 
-        related = _read_related(record, head, relation)
+        related = _read_related(record, head, relation, user, queryset_scope)
         if related is None:
             continue
 
@@ -202,6 +217,7 @@ def _resolve_group(
                     child_record,
                     user,
                     accessibility_check,
+                    queryset_scope,
                     depth=depth + 1,
                 )
             if truncated:
@@ -219,6 +235,7 @@ def _resolve_group(
                 related,
                 user,
                 accessibility_check,
+                queryset_scope,
                 depth=depth + 1,
             )
 
@@ -281,7 +298,11 @@ def _get_relation_field(
 
 
 def _read_related(
-    record: models.Model, segment: str, relation: dict[str, Any]
+    record: models.Model,
+    segment: str,
+    relation: dict[str, Any],
+    user=None,
+    queryset_scope=None,
 ) -> models.Model | list[models.Model] | None:
     try:
         value = getattr(record, segment)
@@ -292,7 +313,18 @@ def _read_related(
     if isinstance(value, models.Manager):
         # Covers RelatedManager (reverse FK) and ManyRelatedManager (M2M);
         # both subclass models.Manager. +1 lets caller detect truncation.
-        return list(value.all()[: MAX_COLLECTION_SIZE + 1])
+        queryset = value.all()
+        if queryset_scope is not None:
+            queryset = queryset_scope(queryset, user)
+        return list(queryset[: MAX_COLLECTION_SIZE + 1])
+    if queryset_scope is not None and isinstance(value, models.Model):
+        # Forward FK / O2O — the related row is fetched by the descriptor,
+        # so re-check it against the row-level boundary before exposing it.
+        in_scope = queryset_scope(
+            type(value)._default_manager.filter(pk=value.pk), user
+        ).exists()
+        if not in_scope:
+            return None
     return value
 
 

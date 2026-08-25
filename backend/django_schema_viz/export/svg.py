@@ -119,6 +119,7 @@ def export_drawing_to_svg(
     padding: int = int(DEFAULT_PADDING),
     background: str = "#ffffff",
     scale_factor: float = 1.0,
+    user=None,
 ) -> str:
     lexical_state = lexical_state or {}
     palette = _get_palette(background)
@@ -128,7 +129,7 @@ def export_drawing_to_svg(
     viewport = react_flow_state.get("viewport", {}) or {}
 
     # Pre-fetch record fields so {{field}} templates resolve to real values.
-    record_cache = _build_record_cache(raw_nodes)
+    record_cache = _build_record_cache(raw_nodes, user=user)
 
     nodes = [
         _normalize_node(node, lexical_state, record_cache, palette)
@@ -283,14 +284,23 @@ def _extract_scale(transform) -> float:
 
 def _build_record_cache(
     raw_nodes: list[dict[str, Any]],
+    *,
+    user=None,
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
     """Pre-fetch record field data for all nodes that reference a DB record.
+
+    Node references come straight off the client-supplied react-flow state, so
+    every lookup is gated by the QLab model registry *and* the row-level record
+    scope. Without both, a crafted export payload could read arbitrary rows.
 
     Returns a cache keyed by ``(app_label, model_name, model_id)`` so that
     duplicate references don't trigger repeated queries.
     """
     try:
         from django.apps import apps  # noqa: delayed import
+
+        from ..record_scope import scope_queryset
+        from ..utils.qlab_access import is_model_accessible_for_user
     except Exception:
         return {}
 
@@ -305,9 +315,15 @@ def _build_record_cache(
         cache_key = (str(app_label), str(model_name), str(model_id))
         if cache_key in seen:
             continue
+        if not is_model_accessible_for_user(user, cache_key[0], cache_key[1]):
+            seen[cache_key] = {}
+            continue
         try:
             model = apps.get_model(cache_key[0], cache_key[1])
-            instance = model._default_manager.using("default").get(pk=cache_key[2])
+            queryset = scope_queryset(
+                model._default_manager.using("default").all(), user
+            )
+            instance = queryset.get(pk=cache_key[2])
             fields: dict[str, Any] = {}
             for f in model._meta.get_fields():
                 if not hasattr(f, "attname"):

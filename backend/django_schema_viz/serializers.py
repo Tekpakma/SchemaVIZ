@@ -1496,6 +1496,33 @@ class GenerationRunResponseSerializer(serializers.Serializer):
     template = GenerationTemplateListSerializer(required=False)
 
 
+class GenerationValidateRequestSerializer(serializers.Serializer):
+    """
+    Request body for the dry-run validation endpoint.
+
+    Intentionally accepts the raw payload without rejecting it: every problem is
+    reported through :class:`GenerationValidateResponseSerializer` instead of an
+    HTTP 400, so callers (in particular AI agents) get a machine-readable list of
+    issues they can act on.
+    """
+
+    root_model = serializers.CharField()
+    inline_definition = GenerationDefinitionField()
+
+
+class GenerationValidationIssueSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    message = serializers.CharField()
+    step_id = serializers.CharField(allow_null=True)
+    hint = serializers.CharField(allow_blank=True)
+
+
+class GenerationValidateResponseSerializer(serializers.Serializer):
+    valid = serializers.BooleanField()
+    errors = GenerationValidationIssueSerializer(many=True)
+    warnings = GenerationValidationIssueSerializer(many=True)
+
+
 class TemplateUniquenessRequestSerializer(serializers.Serializer):
     template_kind = serializers.ChoiceField(
         choices=TEMPLATE_KIND_CHOICES,
@@ -1545,6 +1572,7 @@ class SessionStateSerializer(serializers.Serializer):
     default_locale = serializers.ChoiceField(choices=SUPPORTED_LOCALES)
     help_hints_enabled = serializers.BooleanField()
     help_hints_dismissed = serializers.DictField(child=serializers.CharField())
+    ai_enabled = serializers.BooleanField()
     has_ai_key = serializers.BooleanField()
     ai_base_url = serializers.CharField(allow_blank=True)
     ai_model = serializers.CharField(allow_blank=True)
@@ -1614,6 +1642,42 @@ class TourProgressUpsertSerializer(serializers.Serializer):
         if not data:
             raise serializers.ValidationError("At least one field must be provided.")
         return data
+
+
+class SchemaGraphQuerySerializer(serializers.Serializer):
+    """Optional filters for the schema graph endpoint. Omitting all of them
+    returns the full graph, so existing clients are unaffected."""
+
+    apps = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Comma-separated app labels. Only models of these apps are returned.",
+    )
+    models = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text=(
+            'Comma-separated model references, either "app_label.ModelName" '
+            'or a bare model name.'
+        ),
+    )
+    search = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Case-insensitive substring match against the model name.",
+    )
+    includeFields = serializers.BooleanField(
+        required=False,
+        default=True,
+        source="include_fields",
+        help_text=(
+            "Set to false for a digest graph without per-model field lists. "
+            "Shrinks the payload by roughly an order of magnitude."
+        ),
+    )
 
 
 class SchemaRouteRequestSerializer(serializers.Serializer):

@@ -8,6 +8,8 @@ from django_schema_viz.models import Drawing
 from django_schema_viz.export.drawio import export_drawing_to_drawio
 from django_schema_viz.export.svg import _polyline_midpoint
 
+from .qlab_registry_helpers import seed_qlab_registry
+
 User = get_user_model()
 
 
@@ -1071,6 +1073,7 @@ class DrawingExportViewTests(APITestCase):
 
     def test_svg_export_resolves_field_templates_from_db(self):
         """{{username}} should resolve to the actual record value."""
+        seed_qlab_registry(["auth.User"])
         drawing = Drawing.objects.create(
             title="Field Template",
             description="field template",

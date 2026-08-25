@@ -29,6 +29,7 @@ class QueryRecordsViewTests(APITestCase):
         self.charlie = User.objects.create_user(
             username="charlie", email="charlie@example.com"
         )
+        self.client.force_authenticate(self.alice)
 
     def tearDown(self):
         reset_qlab_registry()
@@ -235,6 +236,7 @@ class QueryRecordViewTests(APITestCase):
         self.user = User.objects.create_user(
             username="alice", email="alice@example.com"
         )
+        self.client.force_authenticate(self.user)
 
     def tearDown(self):
         reset_qlab_registry()
@@ -305,6 +307,10 @@ class QueryRecordViewTests(APITestCase):
 class QueryMetadataViewTests(APITestCase):
     def setUp(self):
         seed_qlab_registry()
+        self.user = User.objects.create_user(
+            username="alice", email="alice@example.com"
+        )
+        self.client.force_authenticate(self.user)
 
     def tearDown(self):
         reset_qlab_registry()
@@ -359,6 +365,7 @@ class QueryNeighborhoodViewTests(APITestCase):
             username="alice", email="alice@example.com"
         )
         self.bob = User.objects.create_user(username="bob", email="bob@example.com")
+        self.client.force_authenticate(self.alice)
 
     def tearDown(self):
         reset_qlab_registry()

@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
 from django_schema_viz.tests.qlab_registry_helpers import seed_qlab_registry
@@ -6,6 +7,9 @@ from django_schema_viz.tests.qlab_registry_helpers import seed_qlab_registry
 class ModelsListMetadataTests(APITestCase):
     def setUp(self):
         seed_qlab_registry(["auth.User"])
+        self.client.force_authenticate(
+            get_user_model().objects.create_user(username="alice")
+        )
 
     def test_models_list_includes_admin_style_names(self):
         response = self.client.get("/schema-viz/models/?excludeDjango=false")

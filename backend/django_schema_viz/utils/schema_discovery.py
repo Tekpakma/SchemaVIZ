@@ -9,7 +9,7 @@ from django.db.models.fields.related import (
     OneToOneRel,
 )
 from typing import Any
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from rest_framework_dataclasses.serializers import DataclassSerializer
@@ -203,6 +203,80 @@ class SchemaGraph:
 class SchemaGraphSerializer(DataclassSerializer):
     class Meta:
         dataclass = SchemaGraph
+
+
+def split_csv_param(value: str | None) -> list[str]:
+    """Split a comma-separated query parameter into non-empty, trimmed parts."""
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def filter_schema_graph(
+    graph: "SchemaGraph",
+    *,
+    app_labels: list[str] | None = None,
+    model_refs: list[str] | None = None,
+    search: str | None = None,
+    include_fields: bool = True,
+) -> "SchemaGraph":
+    """
+    Narrow a :class:`SchemaGraph` down to a subgraph.
+
+    All filters are combined with AND and matched case-insensitively. Edges are
+    kept only when both endpoints survive; groups only when still referenced.
+
+    ``schema_hash`` is deliberately carried over unchanged: it identifies the
+    underlying schema, not this particular projection, so clients can keep using
+    it for cache invalidation regardless of the filters they requested.
+    """
+    nodes = graph.nodes
+
+    if app_labels:
+        wanted_apps = {value.lower() for value in app_labels}
+        nodes = tuple(
+            node
+            for node in nodes
+            if node.app_label.lower() in wanted_apps
+            or node.group.lower() in wanted_apps
+        )
+
+    if model_refs:
+        wanted_models = {value.lower() for value in model_refs}
+        nodes = tuple(
+            node
+            for node in nodes
+            if node.id.lower() in wanted_models
+            or node.model_name.lower() in wanted_models
+        )
+
+    if search:
+        needle = search.strip().lower()
+        if needle:
+            nodes = tuple(
+                node
+                for node in nodes
+                if needle in node.id.lower() or needle in node.name.lower()
+            )
+
+    if not include_fields:
+        nodes = tuple(replace(node, fields=frozenset()) for node in nodes)
+
+    node_ids = {node.id for node in nodes}
+    edges = tuple(
+        edge
+        for edge in graph.edges
+        if edge.source in node_ids and edge.target in node_ids
+    )
+    group_ids = {node.group for node in nodes}
+    groups = tuple(group for group in graph.groups if group.id in group_ids)
+
+    return SchemaGraph(
+        schema_hash=graph.schema_hash,
+        nodes=nodes,
+        edges=edges,
+        groups=groups,
+    )
 
 
 @dataclass(frozen=True)

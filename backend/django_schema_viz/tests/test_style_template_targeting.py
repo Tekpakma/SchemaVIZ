@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from django_schema_viz.models import StyleTemplate
@@ -258,7 +259,22 @@ class StyleTemplateTargetingTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["forcedModelStatus"], "stale")
 
-    def test_preflight_allows_anonymous_introspection_access(self):
+    def test_preflight_rejects_anonymous_introspection_access_by_default(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.post(
+            COMPATIBILITY_URL,
+            {
+                "required_fields": ["username"],
+                "is_model_exclusive": False,
+            },
+            format="json",
+        )
+
+        self.assertIn(response.status_code, (401, 403))
+
+    @override_settings(SCHEMA_VIZ={"INTROSPECTION_PERMISSION_CLASSES": []})
+    def test_preflight_allows_anonymous_introspection_access_when_public(self):
         self.client.force_authenticate(user=None)
 
         response = self.client.post(
