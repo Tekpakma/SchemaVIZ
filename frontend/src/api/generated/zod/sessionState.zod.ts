@@ -17,6 +17,7 @@ export const SessionState = zod.object({
   "defaultLocale": zod.enum(['en', 'de']).describe('\* `en` - en\n\* `de` - de'),
   "helpHintsEnabled": zod.boolean(),
   "helpHintsDismissed": zod.record(zod.string(), zod.string()),
+  "aiEnabled": zod.boolean(),
   "hasAiKey": zod.boolean(),
   "aiBaseUrl": zod.string(),
   "aiModel": zod.string()

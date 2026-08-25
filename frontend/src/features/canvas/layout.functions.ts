@@ -22,7 +22,7 @@ export const layoutSchemaGraph = createServerFn({ method: 'POST' })
   .middleware([authFunctionMiddleware])
   .validator(schemaLayoutInputSchema)
   .handler(async ({ context, data }) => {
-    const response = await schemaVizGraphRetrieve({
+    const response = await schemaVizGraphRetrieve(undefined, {
       headers: getForwardedBackendHeaders(context.auth),
     })
 

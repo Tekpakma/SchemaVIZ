@@ -391,6 +391,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
           description: ''
+  /schema-viz/generation-runs/validate/:
+    post:
+      operationId: schemaVizGenerationRunsValidateCreate
+      description: Validates a root model and inline definition without executing
+        a generation run. Returns HTTP 200 in all cases; check the `valid` flag and
+        the `errors` list.
+      summary: Validate Generation Definition
+      tags:
+      - Generation Templates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationValidateRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationValidateResponse'
+          description: ''
   /schema-viz/generation-template-quick-access/:
     get:
       operationId: schemaVizGenerationTemplateQuickAccessRetrieve
@@ -631,8 +655,37 @@ paths:
   /schema-viz/graph/:
     get:
       operationId: schemaVizGraphRetrieve
-      description: Get complete schema graph with nodes, edges, and groups
+      description: Get the schema graph with nodes, edges, and groups. Without query
+        parameters the full graph is returned. Filters narrow the result to a subgraph;
+        `includeFields=false` drops the per-model field lists for a compact digest.
       summary: Get Schema Graph
+      parameters:
+      - in: query
+        name: apps
+        schema:
+          type: string
+          default: ''
+        description: Comma-separated app labels. Only models of these apps are returned.
+      - in: query
+        name: includeFields
+        schema:
+          type: boolean
+          default: true
+        description: Set to false for a digest graph without per-model field lists.
+          Shrinks the payload by roughly an order of magnitude.
+      - in: query
+        name: models
+        schema:
+          type: string
+          default: ''
+        description: Comma-separated model references, either "app_label.ModelName"
+          or a bare model name.
+      - in: query
+        name: search
+        schema:
+          type: string
+          default: ''
+        description: Case-insensitive substring match against the model name.
       tags:
       - Schema Introspection
       security:
@@ -657,7 +710,8 @@ paths:
         Drop-in mixin for DRF views / viewsets.
 
         Subclasses set ``schema_viz_permission_category`` to one of:
-          - ``"introspection"`` – public schema endpoints
+          - ``"public"``        – no project data exposed (version, shapes)
+          - ``"introspection"`` – schema/data-model endpoints
           - ``"user_data"``     – authenticated read access
           - ``"owner"``         – authenticated + ownership checks
       tags:
@@ -679,7 +733,8 @@ paths:
         Drop-in mixin for DRF views / viewsets.
 
         Subclasses set ``schema_viz_permission_category`` to one of:
-          - ``"introspection"`` – public schema endpoints
+          - ``"public"``        – no project data exposed (version, shapes)
+          - ``"introspection"`` – schema/data-model endpoints
           - ``"user_data"``     – authenticated read access
           - ``"owner"``         – authenticated + ownership checks
       tags:
@@ -706,7 +761,8 @@ paths:
         Drop-in mixin for DRF views / viewsets.
 
         Subclasses set ``schema_viz_permission_category`` to one of:
-          - ``"introspection"`` – public schema endpoints
+          - ``"public"``        – no project data exposed (version, shapes)
+          - ``"introspection"`` – schema/data-model endpoints
           - ``"user_data"``     – authenticated read access
           - ``"owner"``         – authenticated + ownership checks
       parameters:
@@ -734,7 +790,8 @@ paths:
         Drop-in mixin for DRF views / viewsets.
 
         Subclasses set ``schema_viz_permission_category`` to one of:
-          - ``"introspection"`` – public schema endpoints
+          - ``"public"``        – no project data exposed (version, shapes)
+          - ``"introspection"`` – schema/data-model endpoints
           - ``"user_data"``     – authenticated read access
           - ``"owner"``         – authenticated + ownership checks
       parameters:
@@ -768,7 +825,8 @@ paths:
         Drop-in mixin for DRF views / viewsets.
 
         Subclasses set ``schema_viz_permission_category`` to one of:
-          - ``"introspection"`` – public schema endpoints
+          - ``"public"``        – no project data exposed (version, shapes)
+          - ``"introspection"`` – schema/data-model endpoints
           - ``"user_data"``     – authenticated read access
           - ``"owner"``         – authenticated + ownership checks
       parameters:
@@ -801,7 +859,8 @@ paths:
         Drop-in mixin for DRF views / viewsets.
 
         Subclasses set ``schema_viz_permission_category`` to one of:
-          - ``"introspection"`` – public schema endpoints
+          - ``"public"``        – no project data exposed (version, shapes)
+          - ``"introspection"`` – schema/data-model endpoints
           - ``"user_data"``     – authenticated read access
           - ``"owner"``         – authenticated + ownership checks
       parameters:
@@ -2769,6 +2828,58 @@ components:
       description: |-
         * `owner` - Owner
         * `global` - Global
+    GenerationValidateRequestRequest:
+      type: object
+      description: |-
+        Request body for the dry-run validation endpoint.
+
+        Intentionally accepts the raw payload without rejecting it: every problem is
+        reported through :class:`GenerationValidateResponseSerializer` instead of an
+        HTTP 400, so callers (in particular AI agents) get a machine-readable list of
+        issues they can act on.
+      properties:
+        rootModel:
+          type: string
+          minLength: 1
+        inlineDefinition:
+          $ref: '#/components/schemas/GenerationDefinitionSchemaRequest'
+      required:
+      - inlineDefinition
+      - rootModel
+    GenerationValidateResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenerationValidationIssue'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenerationValidationIssue'
+      required:
+      - errors
+      - valid
+      - warnings
+    GenerationValidationIssue:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        stepId:
+          type: string
+          nullable: true
+        hint:
+          type: string
+      required:
+      - code
+      - hint
+      - message
+      - stepId
     GenerationVersionSelectionEnum:
       enum:
       - draft
@@ -4093,6 +4204,8 @@ components:
           type: object
           additionalProperties:
             type: string
+        aiEnabled:
+          type: boolean
         hasAiKey:
           type: boolean
         aiBaseUrl:
@@ -4101,6 +4214,7 @@ components:
           type: string
       required:
       - aiBaseUrl
+      - aiEnabled
       - aiModel
       - availableLocales
       - capabilities

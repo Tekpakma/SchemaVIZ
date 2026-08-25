@@ -20,6 +20,8 @@ import type {
   GenerationTemplateRead,
   GenerationTemplateWrite,
   GenerationTemplateWriteRequest,
+  GenerationValidateRequestRequest,
+  GenerationValidateResponse,
   GraphErrorResponse,
   GroupTemplate,
   GroupTemplateRequest,
@@ -61,6 +63,7 @@ import type {
   SchemaRoute,
   SchemaVizDrawingsExportRetrieveParams,
   SchemaVizGenerationTemplateQuickAccessFeaturedListParams,
+  SchemaVizGraphRetrieveParams,
   SchemaVizModelDetailsRetrieveParams,
   SchemaVizModelTemplateDefaultsListParams,
   SchemaVizModelsListParams,
@@ -642,6 +645,43 @@ export const schemaVizGenerationRunsCreate = async (generationRunRequestRequest:
 
 
 
+export type schemaVizGenerationRunsValidateCreateResponse200 = {
+  data: GenerationValidateResponse
+  status: 200
+}
+
+export type schemaVizGenerationRunsValidateCreateResponseSuccess = (schemaVizGenerationRunsValidateCreateResponse200) & {
+  headers: Headers;
+};
+;
+
+export type schemaVizGenerationRunsValidateCreateResponse = (schemaVizGenerationRunsValidateCreateResponseSuccess)
+
+export const getSchemaVizGenerationRunsValidateCreateUrl = () => {
+
+
+
+
+  return `/schema-viz/generation-runs/validate/`
+}
+
+/**
+ * Validates a root model and inline definition without executing a generation run. Returns HTTP 200 in all cases; check the `valid` flag and the `errors` list.
+ * @summary Validate Generation Definition
+ */
+export const schemaVizGenerationRunsValidateCreate = async (generationValidateRequestRequest: GenerationValidateRequestRequest, options?: RequestInit): Promise<schemaVizGenerationRunsValidateCreateResponse> => {
+
+  return schemaVizFetch<schemaVizGenerationRunsValidateCreateResponse>(getSchemaVizGenerationRunsValidateCreateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(generationValidateRequestRequest)
+  }
+);}
+
+
+
 export type schemaVizGenerationTemplateQuickAccessRetrieveResponse200 = {
   data: GenerationTemplateOwnRecentQuickAccess
   status: 200
@@ -1040,21 +1080,28 @@ export type schemaVizGraphRetrieveResponseError = (schemaVizGraphRetrieveRespons
 
 export type schemaVizGraphRetrieveResponse = (schemaVizGraphRetrieveResponseSuccess | schemaVizGraphRetrieveResponseError)
 
-export const getSchemaVizGraphRetrieveUrl = () => {
+export const getSchemaVizGraphRetrieveUrl = (params?: SchemaVizGraphRetrieveParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/schema-viz/graph/`
+  return stringifiedParams.length > 0 ? `/schema-viz/graph/?${stringifiedParams}` : `/schema-viz/graph/`
 }
 
 /**
- * Get complete schema graph with nodes, edges, and groups
+ * Get the schema graph with nodes, edges, and groups. Without query parameters the full graph is returned. Filters narrow the result to a subgraph; `includeFields=false` drops the per-model field lists for a compact digest.
  * @summary Get Schema Graph
  */
-export const schemaVizGraphRetrieve = async ( options?: RequestInit): Promise<schemaVizGraphRetrieveResponse> => {
+export const schemaVizGraphRetrieve = async (params?: SchemaVizGraphRetrieveParams, options?: RequestInit): Promise<schemaVizGraphRetrieveResponse> => {
 
-  return schemaVizFetch<schemaVizGraphRetrieveResponse>(getSchemaVizGraphRetrieveUrl(),
+  return schemaVizFetch<schemaVizGraphRetrieveResponse>(getSchemaVizGraphRetrieveUrl(params),
   {
     ...options,
     method: 'GET'
@@ -1089,7 +1136,8 @@ export const getSchemaVizGroupTemplatesListUrl = () => {
  * Drop-in mixin for DRF views / viewsets.
  *
  * Subclasses set ``schema_viz_permission_category`` to one of:
- *   - ``"introspection"`` – public schema endpoints
+ *   - ``"public"``        – no project data exposed (version, shapes)
+ *   - ``"introspection"`` – schema/data-model endpoints
  *   - ``"user_data"``     – authenticated read access
  *   - ``"owner"``         – authenticated + ownership checks
  */
@@ -1130,7 +1178,8 @@ export const getSchemaVizGroupTemplatesCreateUrl = () => {
  * Drop-in mixin for DRF views / viewsets.
  *
  * Subclasses set ``schema_viz_permission_category`` to one of:
- *   - ``"introspection"`` – public schema endpoints
+ *   - ``"public"``        – no project data exposed (version, shapes)
+ *   - ``"introspection"`` – schema/data-model endpoints
  *   - ``"user_data"``     – authenticated read access
  *   - ``"owner"``         – authenticated + ownership checks
  */
@@ -1171,7 +1220,8 @@ export const getSchemaVizGroupTemplatesRetrieveUrl = (id: string,) => {
  * Drop-in mixin for DRF views / viewsets.
  *
  * Subclasses set ``schema_viz_permission_category`` to one of:
- *   - ``"introspection"`` – public schema endpoints
+ *   - ``"public"``        – no project data exposed (version, shapes)
+ *   - ``"introspection"`` – schema/data-model endpoints
  *   - ``"user_data"``     – authenticated read access
  *   - ``"owner"``         – authenticated + ownership checks
  */
@@ -1212,7 +1262,8 @@ export const getSchemaVizGroupTemplatesUpdateUrl = (id: string,) => {
  * Drop-in mixin for DRF views / viewsets.
  *
  * Subclasses set ``schema_viz_permission_category`` to one of:
- *   - ``"introspection"`` – public schema endpoints
+ *   - ``"public"``        – no project data exposed (version, shapes)
+ *   - ``"introspection"`` – schema/data-model endpoints
  *   - ``"user_data"``     – authenticated read access
  *   - ``"owner"``         – authenticated + ownership checks
  */
@@ -1254,7 +1305,8 @@ export const getSchemaVizGroupTemplatesPartialUpdateUrl = (id: string,) => {
  * Drop-in mixin for DRF views / viewsets.
  *
  * Subclasses set ``schema_viz_permission_category`` to one of:
- *   - ``"introspection"`` – public schema endpoints
+ *   - ``"public"``        – no project data exposed (version, shapes)
+ *   - ``"introspection"`` – schema/data-model endpoints
  *   - ``"user_data"``     – authenticated read access
  *   - ``"owner"``         – authenticated + ownership checks
  */
@@ -1296,7 +1348,8 @@ export const getSchemaVizGroupTemplatesDestroyUrl = (id: string,) => {
  * Drop-in mixin for DRF views / viewsets.
  *
  * Subclasses set ``schema_viz_permission_category`` to one of:
- *   - ``"introspection"`` – public schema endpoints
+ *   - ``"public"``        – no project data exposed (version, shapes)
+ *   - ``"introspection"`` – schema/data-model endpoints
  *   - ``"user_data"``     – authenticated read access
  *   - ``"owner"``         – authenticated + ownership checks
  */
