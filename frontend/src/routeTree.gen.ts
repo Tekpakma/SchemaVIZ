@@ -9,22 +9,22 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
-import { Route as AppSchemaDiscoveryRouteImport } from './routes/_app/schema-discovery'
-import { Route as AppFreedrawRouteImport } from './routes/_app/freedraw'
 import { Route as AppBuilderRouteImport } from './routes/_app/builder'
+import { Route as AppFreedrawRouteImport } from './routes/_app/freedraw'
+import { Route as AppSchemaDiscoveryRouteImport } from './routes/_app/schema-discovery'
 import { Route as GenerateSlugIndexRouteImport } from './routes/generate/$slug.index'
 import { Route as GenerateSlugRecordIdRouteImport } from './routes/generate/$slug.$recordId'
 
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -32,9 +32,9 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppSchemaDiscoveryRoute = AppSchemaDiscoveryRouteImport.update({
-  id: '/schema-discovery',
-  path: '/schema-discovery',
+const AppBuilderRoute = AppBuilderRouteImport.update({
+  id: '/builder',
+  path: '/builder',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFreedrawRoute = AppFreedrawRouteImport.update({
@@ -42,9 +42,9 @@ const AppFreedrawRoute = AppFreedrawRouteImport.update({
   path: '/freedraw',
   getParentRoute: () => AppRoute,
 } as any)
-const AppBuilderRoute = AppBuilderRouteImport.update({
-  id: '/builder',
-  path: '/builder',
+const AppSchemaDiscoveryRoute = AppSchemaDiscoveryRouteImport.update({
+  id: '/schema-discovery',
+  path: '/schema-discovery',
   getParentRoute: () => AppRoute,
 } as any)
 const GenerateSlugIndexRoute = GenerateSlugIndexRouteImport.update({
@@ -127,18 +127,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_app': {
       id: '/_app'
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -148,11 +148,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/schema-discovery': {
-      id: '/_app/schema-discovery'
-      path: '/schema-discovery'
-      fullPath: '/schema-discovery'
-      preLoaderRoute: typeof AppSchemaDiscoveryRouteImport
+    '/_app/builder': {
+      id: '/_app/builder'
+      path: '/builder'
+      fullPath: '/builder'
+      preLoaderRoute: typeof AppBuilderRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/freedraw': {
@@ -162,11 +162,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFreedrawRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/builder': {
-      id: '/_app/builder'
-      path: '/builder'
-      fullPath: '/builder'
-      preLoaderRoute: typeof AppBuilderRouteImport
+    '/_app/schema-discovery': {
+      id: '/_app/schema-discovery'
+      path: '/schema-discovery'
+      fullPath: '/schema-discovery'
+      preLoaderRoute: typeof AppSchemaDiscoveryRouteImport
       parentRoute: typeof AppRoute
     }
     '/generate/$slug/': {
