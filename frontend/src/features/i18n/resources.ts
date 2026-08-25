@@ -88,6 +88,17 @@ export const resources = {
         summary_one: 'Aktive Filter blenden einige verwandte Datensätze aus.',
         summary_other: 'Aktive Filter blenden einige verwandte Datensätze aus.',
       },
+      sharedGeneration: {
+        embedError: {
+          description:
+            'Die eingebettete Ansicht kann keine Anmeldung durchführen. Öffne das Diagramm in einem neuen Tab, melde dich an und lade diese Seite neu.',
+          openInNewTab: 'In neuem Tab öffnen',
+          title: 'Anmeldung erforderlich',
+        },
+        error: {
+          title: 'Diagramm konnte nicht geladen werden',
+        },
+      },
       canvas: {
         export: {
           appearance: 'Darstellung',
@@ -500,6 +511,7 @@ export const resources = {
         searchRecords: 'Datensätze durchsuchen...',
         selectRecord:
           'Wählen Sie einen Datensatz, um die Visualisierung zu erzeugen.',
+        switchRecord: 'Datensatz wechseln',
       },
       home: {
         auth: {
@@ -696,6 +708,17 @@ export const resources = {
         summary: 'Active filters hide some related records.',
         summary_one: 'Active filters hide some related records.',
         summary_other: 'Active filters hide some related records.',
+      },
+      sharedGeneration: {
+        embedError: {
+          description:
+            'The embedded view cannot sign you in. Open the diagram in a new tab, sign in, then reload this page.',
+          openInNewTab: 'Open in a new tab',
+          title: 'Sign-in required',
+        },
+        error: {
+          title: 'The diagram could not be loaded',
+        },
       },
       canvas: {
         export: {
@@ -1099,6 +1122,7 @@ export const resources = {
         runFailed: 'Generation failed.',
         searchRecords: 'Search records...',
         selectRecord: 'Select a record to generate the visualization.',
+        switchRecord: 'Switch record',
       },
       home: {
         auth: {

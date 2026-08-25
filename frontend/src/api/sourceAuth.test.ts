@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   __resetSourceAuthRedirectStateForTests,
   buildSourceAuthRedirectUrl,
+  isEmbeddedContext,
   redirectToLogin,
 } from './sourceAuth'
 
@@ -77,6 +78,59 @@ describe('source auth redirects', () => {
         pathname: '/_schema-viz/auth/callback',
         search: '?code=test',
       },
+    })
+
+    redirectToLogin()
+
+    expect(assign).not.toHaveBeenCalled()
+  })
+})
+
+describe('embedded contexts', () => {
+  it('detects framing by comparing window.self with window.top', () => {
+    const self = {}
+    vi.stubGlobal('window', {
+      location: { hash: '', pathname: '/generate/x/1', search: '' },
+      self,
+      top: {},
+    })
+
+    expect(isEmbeddedContext()).toBe(true)
+  })
+
+  it('detects the embed search parameter for top-level frames', () => {
+    const self = {}
+    vi.stubGlobal('window', {
+      location: { hash: '', pathname: '/generate/x/1', search: '?embed=1' },
+      self,
+      top: self,
+    })
+
+    expect(isEmbeddedContext()).toBe(true)
+  })
+
+  it('treats a plain top-level page as not embedded', () => {
+    const self = {}
+    vi.stubGlobal('window', {
+      location: { hash: '', pathname: '/generate/x/1', search: '' },
+      self,
+      top: self,
+    })
+
+    expect(isEmbeddedContext()).toBe(false)
+  })
+
+  it('never navigates the top frame away from an embedded view', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('window', {
+      location: {
+        assign,
+        hash: '',
+        pathname: '/generate/x/1',
+        search: '?embed=1',
+      },
+      self: {},
+      top: {},
     })
 
     redirectToLogin()

@@ -14,6 +14,16 @@ const packageJson = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
 ) as { version: string }
 
+// Embedding SchemaVIZ into a host app (e.g. an infrastructure portal) is
+// opt-in: set SCHEMA_VIZ_FRAME_ANCESTORS to a space-separated origin list at
+// build time. Everything outside /generate/** stays unframeable, and the
+// default for /generate/** is 'none' as well.
+//
+// Nitro bakes routeRules headers into the build, so this is a deploy-time knob,
+// not a runtime one.
+const frameAncestors =
+  process.env.SCHEMA_VIZ_FRAME_ANCESTORS?.trim() || "'none'"
+
 const config = defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
@@ -61,8 +71,17 @@ const config = defineConfig({
         '/robots.txt': {
           headers: { 'cache-control': 'public, max-age=86400' },
         },
+        '/generate/**': {
+          headers: {
+            'cache-control': 'no-cache',
+            'content-security-policy': `frame-ancestors ${frameAncestors}`,
+          },
+        },
         '/**': {
-          headers: { 'cache-control': 'no-cache' },
+          headers: {
+            'cache-control': 'no-cache',
+            'content-security-policy': "frame-ancestors 'none'",
+          },
         },
       },
     }),

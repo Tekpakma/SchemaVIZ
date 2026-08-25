@@ -2,9 +2,10 @@ import { lazy, Suspense, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { z } from 'zod'
-import { DownloadIcon, Loader2 } from 'lucide-react'
+import { DownloadIcon, ExternalLinkIcon, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { isFramedContext } from '@/api/sourceAuth'
 import { Button } from '@/components/ui/button'
 import { FilterImpactNotice } from '@/features/builder/FilterImpactNotice'
 import { hasFilterImpact } from '@/features/builder/generationDiagnostics'
@@ -12,6 +13,7 @@ import { SHARED_GENERATION_QUERIES } from '@/features/builder/sharedGenerationQu
 import { createRecipeFromTemplate } from '@/features/builder/templateRecipe'
 import { BrandLogo } from '@/components/navbar/BrandLogo'
 import { DeleteGenerationTemplateButton } from '@/features/builder/DeleteGenerationTemplateButton'
+import { GenerateRecordSwitcher } from '@/features/builder/GenerateRecordSwitcher'
 
 const BuilderPreview = lazy(async () => {
   const module = await import('@/features/builder/BuilderPreview')
@@ -33,6 +35,7 @@ export const Route = createFileRoute('/generate/$slug/$recordId')({
       ),
     ]),
   pendingComponent: GenerateViewPending,
+  errorComponent: GenerateViewError,
   component: GenerateViewPage,
 })
 
@@ -40,6 +43,43 @@ function GenerateViewPending() {
   return (
     <div className="flex h-dvh w-dvw items-center justify-center bg-background">
       <Loader2 className="size-8 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
+
+function GenerateViewError({ error }: { error: Error }) {
+  const { t } = useTranslation()
+  const { embed } = Route.useSearch()
+  // Inside an iframe the login redirect is suppressed, so the failure surfaces
+  // here. Breaking out of the frame is the only way to complete a login.
+  const embedded = embed === 1 || isFramedContext()
+
+  return (
+    <div className="flex h-dvh w-dvw items-center justify-center bg-background p-6">
+      <div className="max-w-sm space-y-3 text-center">
+        <h2 className="text-sm font-semibold text-foreground">
+          {embedded
+            ? t('sharedGeneration.embedError.title')
+            : t('sharedGeneration.error.title')}
+        </h2>
+        <p className="text-[13px] text-muted-foreground">
+          {embedded
+            ? t('sharedGeneration.embedError.description')
+            : error.message}
+        </p>
+        {embedded ? (
+          <Button asChild size="sm" variant="outline">
+            <a
+              href={typeof window === 'undefined' ? '#' : window.location.href}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLinkIcon className="size-3.5" />
+              {t('sharedGeneration.embedError.openInNewTab')}
+            </a>
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -59,6 +99,10 @@ function GenerateViewPage() {
   )
 
   const recipe = createRecipeFromTemplate(template)
+  const rootModelId =
+    template.publishedVersion?.rootModel ??
+    template.draftVersion?.rootModel ??
+    ''
   const exportFilterNotice = hasFilterImpact(runData)
     ? t('filterImpact.exportNotice')
     : undefined
@@ -86,6 +130,11 @@ function GenerateViewPage() {
             {template.name || t('builder.header.titlePlaceholder')}
           </h1>
         </div>
+        <GenerateRecordSwitcher
+          recordId={recordId}
+          rootModelId={rootModelId}
+          slug={slug}
+        />
         <DeleteGenerationTemplateButton template={template} />
         <Button
           variant="ghost"
