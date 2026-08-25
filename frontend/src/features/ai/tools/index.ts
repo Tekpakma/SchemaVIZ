@@ -12,6 +12,12 @@ import {
   validateDiagram,
   validateDiagramDef,
 } from './recipeTools'
+import {
+  findRecords,
+  findRecordsDef,
+  getRecord,
+  getRecordDef,
+} from './recordTools'
 
 export type { AiToolContext } from './context'
 export type { DiagramSpec } from './recipeTools'
@@ -22,6 +28,8 @@ export const serverTools = [
   listModels,
   getModelDetails,
   getSchemaDigest,
+  findRecords,
+  getRecord,
   validateDiagram,
   createDiagram,
 ]
@@ -31,6 +39,8 @@ export const serverToolDefs = [
   listModelsDef,
   getModelDetailsDef,
   getSchemaDigestDef,
+  findRecordsDef,
+  getRecordDef,
   validateDiagramDef,
   createDiagramDef,
 ]
