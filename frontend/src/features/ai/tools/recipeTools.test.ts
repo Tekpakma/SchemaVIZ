@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { schemaVizGenerationRunsValidateCreate } from '@/api/generated/schema-viz'
+import {
+  schemaVizGenerationRunsCreate,
+  schemaVizGenerationRunsValidateCreate,
+} from '@/api/generated/schema-viz'
 import { recipeToInlineDefinition } from '@/features/builder/templateRecipe'
 
 import type { AiToolContext } from './context'
-import { specToRecipe, validateDiagram } from './recipeTools'
+import { createDiagram, specToRecipe, validateDiagram } from './recipeTools'
 
 vi.mock('@/api/generated/schema-viz', () => ({
+  schemaVizGenerationRunsCreate: vi.fn(),
   schemaVizGenerationRunsValidateCreate: vi.fn(),
 }))
 
@@ -15,6 +19,18 @@ vi.mock('@/features/canvas/layout.server', () => ({
 }))
 
 const validateMock = vi.mocked(schemaVizGenerationRunsValidateCreate)
+const runMock = vi.mocked(schemaVizGenerationRunsCreate)
+
+type RunResponse = Awaited<ReturnType<typeof schemaVizGenerationRunsCreate>>
+
+// The run response carries style and group templates the summary never reads.
+function runResponse(mode: string, nodes: Array<unknown>): RunResponse {
+  return {
+    data: { mode, result: { nodes } },
+    headers: new Headers(),
+    status: 200,
+  } as unknown as RunResponse
+}
 
 const context: AiToolContext = {
   auth: {
@@ -121,6 +137,52 @@ describe('diagram specs', () => {
     expect(validateMock).toHaveBeenCalledWith(
       expect.objectContaining({ rootModel: 'infrastructure.BusinessGroup' }),
       { headers: { authorization: 'Bearer test-token' } },
+    )
+  })
+
+  it('summarises a run instead of returning the whole graph', async () => {
+    runMock.mockResolvedValue(
+      runResponse(
+        'live',
+        Array.from({ length: 40 }, (_, index) => ({
+          id: `node-${index}`,
+          appLabel: 'infrastructure',
+          modelName: index % 2 === 0 ? 'Server' : 'Application',
+          recordPk: String(index),
+          label: `Node ${index}`,
+          displayName: `Node ${index}`,
+          fields: {},
+          styleTemplateId: null,
+        })),
+      ),
+    )
+
+    const result = await createDiagram.execute!(
+      { spec, recordId: '42' },
+      toolContext,
+    )
+
+    expect(result).toMatchObject({
+      mode: 'live',
+      nodeCount: 40,
+      modelsIncluded: ['infrastructure.Server', 'infrastructure.Application'],
+    })
+    expect(result.sampleLabels).toHaveLength(10)
+
+    expect(runMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'live', recordId: '42' }),
+      { headers: { authorization: 'Bearer test-token' } },
+    )
+  })
+
+  it('runs without a record as a structure preview', async () => {
+    runMock.mockResolvedValue(runResponse('structure', []))
+
+    await createDiagram.execute!({ spec }, toolContext)
+
+    expect(runMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'structure', recordId: null }),
+      expect.anything(),
     )
   })
 })

@@ -6,7 +6,12 @@ import {
   listModels,
   listModelsDef,
 } from './schemaTools'
-import { validateDiagram, validateDiagramDef } from './recipeTools'
+import {
+  createDiagram,
+  createDiagramDef,
+  validateDiagram,
+  validateDiagramDef,
+} from './recipeTools'
 
 export type { AiToolContext } from './context'
 export type { DiagramSpec } from './recipeTools'
@@ -18,6 +23,7 @@ export const serverTools = [
   getModelDetails,
   getSchemaDigest,
   validateDiagram,
+  createDiagram,
 ]
 
 /** Definitions without an implementation, for schema conversion and docs. */
@@ -26,4 +32,5 @@ export const serverToolDefs = [
   getModelDetailsDef,
   getSchemaDigestDef,
   validateDiagramDef,
+  createDiagramDef,
 ]

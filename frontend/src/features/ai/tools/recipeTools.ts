@@ -2,7 +2,10 @@ import { z } from 'zod'
 import { toolDefinition } from '@tanstack/ai'
 import * as R from 'remeda'
 
-import { schemaVizGenerationRunsValidateCreate } from '@/api/generated/schema-viz'
+import {
+  schemaVizGenerationRunsCreate,
+  schemaVizGenerationRunsValidateCreate,
+} from '@/api/generated/schema-viz'
 import { splitModelId } from '@/features/lexical/dataReference/modelUtils'
 import {
   createBlankRecipe,
@@ -152,3 +155,58 @@ export const validateDiagram = validateDiagramDef.server<AiToolContext>(
     return unwrapOk(response, 'validate diagram')
   },
 )
+
+export const createDiagramDef = toolDefinition({
+  name: 'createDiagram',
+  description:
+    'Run a validated diagram specification and report what it produced. Call validateDiagram first. Pass a recordId to fill the diagram with real records; without one you get the structure only.',
+  inputSchema: z.object({
+    spec: diagramSpecSchema,
+    recordId: z
+      .string()
+      .optional()
+      .describe('Primary key of the root record to start from.'),
+  }),
+  outputSchema: z.object({
+    mode: z.string(),
+    nodeCount: z.number(),
+    modelsIncluded: z.array(z.string()),
+    sampleLabels: z.array(z.string()),
+  }),
+})
+
+export const createDiagram = createDiagramDef.server<AiToolContext>(
+  async ({ spec, recordId }, { context }) => {
+    const source = recipeToInlineDefinition(specToRecipe(spec))
+    if (!source) {
+      throw new Error(
+        'The specification resolves to no models; fix it with validateDiagram first.',
+      )
+    }
+
+    const response = await schemaVizGenerationRunsCreate(
+      {
+        mode: recordId ? 'live' : 'structure',
+        recordId: recordId ?? null,
+        source,
+      },
+      backendRequestInit(context),
+    )
+    const run = unwrapOk(response, 'create diagram')
+    const nodes = run.result.nodes ?? []
+
+    // Only a summary travels back to the model; the full graph would cost far
+    // more context than it informs.
+    return {
+      mode: run.mode,
+      nodeCount: nodes.length,
+      modelsIncluded: R.unique(
+        nodes.map((node) => `${node.appLabel}.${node.modelName}`),
+      ),
+      sampleLabels: nodes
+        .slice(0, 10)
+        .map((node) => node.label ?? node.displayName),
+    }
+  },
+)
+
