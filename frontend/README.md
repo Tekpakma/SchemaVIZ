@@ -72,6 +72,86 @@ Server-side backend calls use `SCHEMA_VIZ_BACKEND_BASE_URL`.
 If you want to use the generated client directly in browser-side code against a
 separate backend origin, set the same `SCHEMA_VIZ_BACKEND_BASE_URL` variable.
 
+## MCP Server
+
+SchemaVIZ exposes its schema and diagram tools to MCP clients at `/mcp`. The
+route is disabled unless you opt in:
+
+```powershell
+$env:SCHEMA_VIZ_MCP_ENABLED='1'
+bun --bun run dev
+```
+
+Without the flag both `GET` and `POST /mcp` answer `404`.
+
+### Minting a token
+
+Every request must carry a bearer token. Tokens are OAuth2 access tokens issued
+by Django and are tied to a real user, so a client only ever sees the models and
+records that user may see:
+
+```bash
+cd backend
+uv run manage.py create_mcp_token --user <username> --expires-days 90
+```
+
+### VS Code
+
+Add the server to `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "schema-viz": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp",
+      "headers": { "Authorization": "Bearer ${input:schemaVizToken}" }
+    }
+  },
+  "inputs": [
+    {
+      "id": "schemaVizToken",
+      "type": "promptString",
+      "description": "SchemaVIZ MCP token",
+      "password": true
+    }
+  ]
+}
+```
+
+Using an `input` keeps the token out of the committed file.
+
+### Claude Desktop
+
+Claude Desktop launches MCP servers as local processes, so a remote HTTP server
+needs a bridge:
+
+```json
+{
+  "mcpServers": {
+    "schema-viz": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:3000/mcp", "--header", "Authorization:Bearer <token>"]
+    }
+  }
+}
+```
+
+### Available tools
+
+| Tool | Purpose |
+| --- | --- |
+| `listModels` | Discover models the token's user may see |
+| `getModelDetails` | Fields and exact relationship names of one model |
+| `getSchemaDigest` | Compact model/edge map without field lists |
+| `findRecords` | Turn a name into a record id |
+| `getRecord` | Read selected fields of one record |
+| `validateDiagram` | Dry-run a diagram spec, with per-step issues |
+| `createDiagram` | Run a validated spec |
+
+Tool schemas are derived from the same definitions the in-app assistant uses, so
+`tools/list` always matches what the app can do.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
