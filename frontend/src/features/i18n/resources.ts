@@ -224,6 +224,13 @@ export const resources = {
         },
         header: {
           back: 'Zurück',
+          exportError: 'Template konnte nicht exportiert werden.',
+          exportNeedsModel:
+            'Fügen Sie vor dem Export mindestens ein Modell hinzu.',
+          exportSuccess: 'Template-Datei wurde heruntergeladen.',
+          exportTemplate: 'Template exportieren',
+          importSuccess: 'Template wurde als neuer Entwurf importiert.',
+          importTemplate: 'Template importieren',
           loadingRecords: 'Lade Datensätze…',
           loadingMoreRecords: 'Weitere Datensätze werden geladen…',
           loadMoreRecords: 'Mehr laden',
@@ -843,6 +850,12 @@ export const resources = {
         },
         header: {
           back: 'Back',
+          exportError: 'Could not export template.',
+          exportNeedsModel: 'Add at least one model before exporting.',
+          exportSuccess: 'Template file downloaded.',
+          exportTemplate: 'Export template',
+          importSuccess: 'Template imported as a new draft.',
+          importTemplate: 'Import template',
           loadingRecords: 'Loading records…',
           loadingMoreRecords: 'Loading more records…',
           loadMoreRecords: 'Load more',

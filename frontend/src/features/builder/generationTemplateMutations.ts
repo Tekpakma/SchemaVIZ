@@ -1,4 +1,7 @@
-import type { GenerationTemplateRead } from '@/api/contracts'
+import type {
+  GenerationTemplateRead,
+  GenerationTemplateWriteRequest,
+} from '@/api/contracts'
 import {
   schemaVizGenerationTemplatesCreate,
   schemaVizGenerationTemplatesDestroy,
@@ -89,6 +92,17 @@ function getTemplateWriteRequest({
     )
   }
   return request
+}
+
+export async function importGenerationTemplate(
+  request: GenerationTemplateWriteRequest,
+) {
+  const response = await schemaVizGenerationTemplatesCreate(request)
+  const status = response.status as number
+  if (status !== 201) {
+    throwSaveError(`Could not import template: ${status}`, response.data)
+  }
+  return asTemplateRead(response.data)
 }
 
 export async function saveGenerationTemplateDraft({

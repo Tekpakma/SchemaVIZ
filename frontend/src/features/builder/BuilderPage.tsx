@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
 import { createTemplateTextContent } from '@/features/lexical/templateTextContent'
@@ -24,11 +26,19 @@ import {
 import { getModelIdFromBuilderGroupNodeId } from './builderPreviewLayout'
 import { getRecipeStepStatuses } from './builderStepStatus'
 import {
+  importGenerationTemplate,
   publishGenerationTemplate,
   saveGenerationTemplateDraft,
 } from './generationTemplateMutations'
 import { GENERATION_TEMPLATE_QUERIES } from './generationTemplateQueries'
+import {
+  getGenerationTemplateFilename,
+  parseGenerationTemplateFile,
+  serializeGenerationTemplate,
+} from './generationTemplateTransfer'
 import { BUILDER_SESSION_QUERY } from './sessionQueries'
+import { BUILDER_SCHEMA_QUERIES } from './schemaModelQueries'
+import { recipeToGenerationTemplateWriteRequest } from './templateRecipe'
 import type { RecipeData, RecipeModel, RecipeStyleDraft } from './types'
 
 type BuilderDocumentView = NonNullable<
@@ -67,6 +77,17 @@ function createPreviewStyleDraft(
   }
 }
 
+function downloadTemplateFile(contents: string, filename: string) {
+  const url = URL.createObjectURL(
+    new Blob([contents], { type: 'application/json' }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export function BuilderPage({
   tabId,
   template,
@@ -90,6 +111,7 @@ function BuilderPageContent({
   builder: BuilderDocumentView
   template: GenerationTemplateRead | null
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: sessionState } = useQuery(BUILDER_SESSION_QUERY)
@@ -190,6 +212,53 @@ function BuilderPageContent({
       })
       await handleSavedTemplate(nextTemplate)
     },
+  })
+
+  const importMutation = useMutation({
+    meta: { successMessage: t('builder.header.importSuccess') },
+    mutationFn: async (file: File) =>
+      importGenerationTemplate(parseGenerationTemplateFile(await file.text())),
+    onSuccess: async (nextTemplate) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['home', 'quick-access'],
+      })
+      await handleSavedTemplate(nextTemplate)
+    },
+  })
+
+  const exportMutation = useMutation({
+    mutationFn: async (nextRecipe: RecipeData) => {
+      const request = recipeToGenerationTemplateWriteRequest(nextRecipe, {
+        scope: 'owner',
+        shareSlug: null,
+        template: currentTemplate,
+      })
+      if (!request) throw new Error(t('builder.header.exportNeedsModel'))
+
+      const styleTemplates = (
+        await Promise.all(
+          nextRecipe.models.map((model) =>
+            queryClient.fetchQuery(
+              BUILDER_SCHEMA_QUERIES.styleTemplates(
+                model.appLabel,
+                model.modelName,
+              ),
+            ),
+          ),
+        )
+      ).flat()
+      downloadTemplateFile(
+        serializeGenerationTemplate(request, styleTemplates),
+        getGenerationTemplateFilename(request.name),
+      )
+    },
+    onSuccess: () => toast.success(t('builder.header.exportSuccess')),
+    onError: (error) =>
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('builder.header.exportError'),
+      ),
   })
 
   const saveError =
@@ -307,12 +376,20 @@ function BuilderPageContent({
     })
   }
 
+  function handleExport() {
+    exportMutation.mutate(getRecipeAfterPendingNodeEdit())
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
       <BuilderHeader
+        exporting={exportMutation.isPending}
+        importing={importMutation.isPending}
         saveError={saveError}
         saving={saveMutation.isPending}
         title={recipe.title}
+        onExport={handleExport}
+        onImport={(file) => importMutation.mutate(file)}
         onPublish={() => {
           flushInlineNodeEditRef.current?.()
           setPublishOpen(true)
