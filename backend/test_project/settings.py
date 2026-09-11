@@ -109,6 +109,8 @@ SPECTACULAR_SETTINGS = {
         "TemplateScopeEnum": ["owner", "global"],
         "QuickAccessStatusEnum": ["ready", "no_record", "error"],
         "GenerationVersionSelectionEnum": "django_schema_viz.api_choices.GENERATION_VERSION_SELECTION_CHOICES",
+        "GenerationRunModeEnum": "django_schema_viz.api_choices.GENERATION_RUN_MODE_CHOICES",
+        "StatelessExportModeEnum": "django_schema_viz.api_choices.STATELESS_EXPORT_MODE_CHOICES",
         "AvailableLocalesEnum": "django_schema_viz.i18n.SUPPORTED_LOCALES",
         "TourProgressStatusEnum": "django_schema_viz.models.TourProgress.STATUS_CHOICES",
     },

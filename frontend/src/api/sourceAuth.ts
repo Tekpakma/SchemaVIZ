@@ -45,8 +45,7 @@ export function isEmbeddedContext(): boolean {
   if (typeof window === 'undefined') return false
   if (isFramedContext()) return true
 
-  const search = window.location?.search ?? ''
-  return new URLSearchParams(search).get('embed') === '1'
+  return new URLSearchParams(window.location.search).get('embed') === '1'
 }
 
 export function redirectToLogin(): void {

@@ -1,8 +1,9 @@
 import {
   $getSelection,
-  $isRangeSelection,
-  type LexicalEditor,
+  $isRangeSelection
+  
 } from 'lexical'
+import type {LexicalEditor} from 'lexical';
 import {
   $getSelectionStyleValueForProperty,
   $patchStyleText,

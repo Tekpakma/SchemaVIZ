@@ -3,10 +3,7 @@ import * as R from 'remeda'
 
 import { ELK_ALGORITHMS } from '@/features/elk/algorithms'
 import { cn } from '@/lib/utils'
-import {
-  type LayoutAlgorithm,
-  type RecipeLayoutDirection,
-} from '../types'
+import type {LayoutAlgorithm, RecipeLayoutDirection} from '../types';
 
 const LAYOUT_OPTIONS = R.keys(ELK_ALGORITHMS)
 const DIRECTION_OPTIONS: RecipeLayoutDirection[] = ['LR', 'TB', 'RL', 'BT']

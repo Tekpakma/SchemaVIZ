@@ -83,11 +83,11 @@ for (const theme of ['light', 'dark'] as const) {
     )
 
     const canvasPixel = await canvas.evaluate((canvasElement, node) => {
-      const canvas = canvasElement as HTMLCanvasElement
-      const context = canvas.getContext('2d')
-      if (!context) throw new Error('Expected a 2D canvas context')
+      const canvasNode = canvasElement as HTMLCanvasElement
+      const canvasContext = canvasNode.getContext('2d')
+      if (!canvasContext) throw new Error('Expected a 2D canvas context')
 
-      const [r = 0, g = 0, b = 0, a = 0] = context.getImageData(
+      const [r = 0, g = 0, b = 0, a = 0] = canvasContext.getImageData(
         node.x + 20,
         node.y + 20,
         1,

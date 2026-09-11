@@ -91,14 +91,14 @@ function normalizeStep(id: string, raw: RawDefinitionStep): DefinitionStep {
   return {
     childIds: raw.childIds ?? [],
     filter: raw.filter ?? null,
-    groupMode: raw.groupMode ?? 'none',
+    groupMode: raw.groupMode,
     id: raw.id ?? id,
     label: raw.label ?? null,
     parentId: raw.parentId ?? null,
     relationship: raw.relationship ?? null,
     resolvedModelId: raw.resolvedModelId ?? id,
     styleTemplateId: raw.styleTemplateId ?? null,
-    visibility: raw.visibility ?? 'visible',
+    visibility: raw.visibility,
   }
 }
 

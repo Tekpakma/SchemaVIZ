@@ -16,7 +16,7 @@ export const SHARED_GENERATION_QUERIES = {
         if (response.status !== 200) {
           throw new Error('Template not found')
         }
-        return response.data as GenerationTemplateRead
+        return response.data
       },
       staleTime: 1000 * 60 * 5,
     }),

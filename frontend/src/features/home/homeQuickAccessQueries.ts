@@ -12,9 +12,10 @@ import {
   getSchemaVizGenerationTemplateQuickAccessRetrieveUrl,
 } from '@/api/generated/schema-viz'
 import {
-  createHomeTemplateEntryFromListTemplate,
-  type GenerationTemplateListWithSample,
+  createHomeTemplateEntryFromListTemplate
+  
 } from './homeTemplatePreview'
+import type {GenerationTemplateListWithSample} from './homeTemplatePreview';
 
 const HOME_QUICK_ACCESS_KEY = ['home', 'quick-access'] as const
 export const HOME_FEATURED_TEMPLATE_LIMIT = 8
@@ -93,7 +94,7 @@ async function fetchAllTemplates() {
   const response = await fetchHomeQuickAccess(
     '/schema-viz/generation-templates/?includeSample=true',
   )
-  const status = response.status as number
+  const status = response.status
 
   if (status !== 200) {
     throw new HomeQuickAccessRequestError(
@@ -116,7 +117,7 @@ async function fetchOwnRecentQuickAccess() {
   const response = await fetchHomeQuickAccess(
     getSchemaVizGenerationTemplateQuickAccessRetrieveUrl(),
   )
-  const status = response.status as number
+  const status = response.status
 
   if (status !== 200) {
     throw new HomeQuickAccessRequestError(
@@ -134,7 +135,7 @@ async function fetchFeaturedQuickAccess(
   const response = await fetchHomeQuickAccess(
     getSchemaVizGenerationTemplateQuickAccessFeaturedListUrl(params),
   )
-  const status = response.status as number
+  const status = response.status
 
   if (status !== 200) {
     throw new HomeQuickAccessRequestError(

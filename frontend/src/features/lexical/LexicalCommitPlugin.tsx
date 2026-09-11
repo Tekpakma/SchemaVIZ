@@ -13,13 +13,6 @@ import {
 } from 'lexical'
 import { mergeRegister } from '@lexical/utils'
 
-// BLUR_COMMAND is deferred by this many ms so transient blurs (notably
-// React StrictMode's dev-mode mount → unmount → remount cycle, which
-// briefly steals focus) can be cancelled by a follow-up FOCUS_COMMAND or
-// by component cleanup. Real user blurs (clicking outside) survive
-// the wait and commit normally.
-const BLUR_COMMIT_SETTLE_MS = 100
-
 import { useCanvasActions } from '@/store/canvasStore'
 import {
   exportRenderTagHtml,
@@ -30,6 +23,13 @@ import {
 import { formatReferenceDisplayValue } from './dataReference/fieldValues'
 import { useLexicalOverlayRuntime } from './LexicalOverlayRuntimeContext'
 import { SCHEMA_QUERIES } from './dataReference/schemaQueries'
+
+// BLUR_COMMAND is deferred by this many ms so transient blurs (notably
+// React StrictMode's dev-mode mount → unmount → remount cycle, which
+// briefly steals focus) can be cancelled by a follow-up FOCUS_COMMAND or
+// by component cleanup. Real user blurs (clicking outside) survive
+// the wait and commit normally.
+const BLUR_COMMIT_SETTLE_MS = 100
 
 function LexicalCommitPluginWithDataScope() {
   const [editor] = useLexicalComposerContext()

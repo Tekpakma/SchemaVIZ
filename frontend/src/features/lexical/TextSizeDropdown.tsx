@@ -5,9 +5,10 @@ import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/utils'
 import {
-  TEXT_SIZE_PRESETS,
-  type TextSizePreset,
+  TEXT_SIZE_PRESETS
+  
 } from './textSizePresets'
+import type {TextSizePreset} from './textSizePresets';
 
 type TextSizeDropdownProps = {
   activePreset: TextSizePreset

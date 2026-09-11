@@ -1,4 +1,5 @@
-import { createStorage, type Storage } from 'unstorage'
+import { createStorage  } from 'unstorage'
+import type {Storage} from 'unstorage';
 import fsLiteDriver from 'unstorage/drivers/fs-lite'
 
 import type { StartAuthUser } from './startAuth'
@@ -16,9 +17,9 @@ export type StartAuthTokenRecord = {
 }
 
 export type StartAuthTokenStore = {
-  read(sessionId: string): Promise<StartAuthTokenRecord | null>
-  write(record: StartAuthTokenRecord): Promise<void>
-  delete(sessionId: string): Promise<void>
+  read: (sessionId: string) => Promise<StartAuthTokenRecord | null>
+  write: (record: StartAuthTokenRecord) => Promise<void>
+  delete: (sessionId: string) => Promise<void>
 }
 
 type StoredTokenRecord = StartAuthTokenRecord

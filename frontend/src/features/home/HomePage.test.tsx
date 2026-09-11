@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HomePage } from './HomePage'
 
+import type * as ReactQuery from '@tanstack/react-query'
+
 const mocks = vi.hoisted(() => ({
-  mode: 'error' as 'error' | 'success',
+  mode: 'error',
   navigateMock: vi.fn(),
   refetchMock: vi.fn(),
 }))
@@ -71,7 +73,7 @@ const globalEntry = createTemplateEntry({
 })
 
 vi.mock('@tanstack/react-query', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tanstack/react-query')>()
+  const actual = await importOriginal<typeof ReactQuery>()
 
   return {
     ...actual,

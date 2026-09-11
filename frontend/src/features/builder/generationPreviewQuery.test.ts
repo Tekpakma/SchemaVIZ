@@ -65,7 +65,7 @@ function makeSource(text: string): InlineGenerationSource {
           textContent: textContent(text),
         },
       },
-    } as InlineGenerationSource['layoutSettings'],
+    },
   }
 }
 

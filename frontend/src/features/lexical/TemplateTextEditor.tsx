@@ -29,9 +29,10 @@ import { stringifyTemplateTextContent } from './templateTextContent'
 import { TextSizeDropdown } from './TextSizeDropdown'
 import {
   applyTextSize,
-  readSelectionTextSize,
-  type TextSizePreset,
+  readSelectionTextSize
+  
 } from './textSizePresets'
+import type {TextSizePreset} from './textSizePresets';
 
 type TemplateTextEditorProps = {
   dataScope: SchemaModelRef

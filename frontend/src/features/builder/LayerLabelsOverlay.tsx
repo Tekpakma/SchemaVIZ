@@ -64,9 +64,10 @@ import { createTemplateTextContent } from '@/features/lexical/templateTextConten
 import { TextSizeDropdown } from '@/features/lexical/TextSizeDropdown'
 import {
   applyTextSize,
-  readSelectionTextSize,
-  type TextSizePreset,
+  readSelectionTextSize
+  
 } from '@/features/lexical/textSizePresets'
+import type {TextSizePreset} from '@/features/lexical/textSizePresets';
 import type { BuilderPreviewCanvasLayer } from './builderPreviewLayout'
 
 // ---------------------------------------------------------------------------
@@ -374,7 +375,7 @@ function LayerLabelEditorBody({
         })
       })
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on mount
+    // Intentionally runs only on mount for the given editor instance.
   }, [editor])
 
   // Commit helper
@@ -476,7 +477,6 @@ function LayerLabelEditorBody({
   return (
     <>
       <LayerLabelToolbar style={toolbarStyle} />
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         style={wrapperStyle}
         onMouseDown={(e) => e.stopPropagation()}

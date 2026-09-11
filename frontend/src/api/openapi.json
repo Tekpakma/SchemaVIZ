@@ -2382,11 +2382,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GeneratedEdge'
+    GenerationRunModeEnum:
+      enum:
+      - structure
+      - live
+      - share
+      type: string
+      description: |-
+        * `structure` - Structure
+        * `live` - Live
+        * `share` - Share
     GenerationRunRequestRequest:
       type: object
       properties:
         mode:
-          $ref: '#/components/schemas/Mode524Enum'
+          $ref: '#/components/schemas/GenerationRunModeEnum'
         recordId:
           type: string
           nullable: true
@@ -2400,7 +2410,7 @@ components:
       type: object
       properties:
         mode:
-          $ref: '#/components/schemas/Mode524Enum'
+          $ref: '#/components/schemas/GenerationRunModeEnum'
         result:
           $ref: '#/components/schemas/GenerationResult'
         filterImpact:
@@ -3182,16 +3192,6 @@ components:
           nullable: true
       required:
       - name
-    Mode524Enum:
-      enum:
-      - structure
-      - live
-      - share
-      type: string
-      description: |-
-        * `structure` - Structure
-        * `live` - Live
-        * `share` - Share
     ModelDetailBadRequest:
       type: object
       properties:
