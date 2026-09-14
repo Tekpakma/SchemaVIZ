@@ -195,6 +195,160 @@ _SHAPES: list[ShapeDefinition] = [
             ),
         ),
     ),
+    ShapeDefinition(
+        key="hexagon",
+        label="Hexagon",
+        drawio_style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;"
+        "html=1;fixedSize=1;size=20;",
+        default_width=120,
+        default_height=70,
+        category="architecture",
+        svg_viewbox="0 0 120 100",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            SvgElement(
+                tag="path",
+                attrs={"d": "M 22,4 L 98,4 L 116,50 L 98,96 L 22,96 L 4,50 Z"},
+            ),
+        ),
+    ),
+    ShapeDefinition(
+        key="diamond",
+        label="Diamond",
+        drawio_style="rhombus;whiteSpace=wrap;html=1;",
+        default_width=100,
+        default_height=80,
+        category="architecture",
+        svg_viewbox="0 0 100 100",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            SvgElement(
+                tag="path",
+                attrs={"d": "M 50,3 L 97,50 L 50,97 L 3,50 Z"},
+            ),
+        ),
+    ),
+    ShapeDefinition(
+        key="shield",
+        label="Shield",
+        drawio_style="rounded=1;whiteSpace=wrap;html=1;arcSize=40;",
+        default_width=90,
+        default_height=100,
+        category="architecture",
+        svg_viewbox="0 0 100 110",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            SvgElement(
+                tag="path",
+                attrs={
+                    "d": (
+                        "M 50,4 L 94,18 L 94,54 Q 94,88 50,106 "
+                        "Q 6,88 6,54 L 6,18 Z"
+                    ),
+                },
+            ),
+        ),
+    ),
+    ShapeDefinition(
+        key="queue",
+        label="Queue",
+        drawio_style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;"
+        "backgroundOutline=1;size=15;direction=south;",
+        default_width=120,
+        default_height=60,
+        category="architecture",
+        svg_viewbox="0 0 120 60",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            # Left cap (drawn first so the body covers its right half)
+            SvgElement(
+                tag="ellipse",
+                attrs={"cx": "16", "cy": "30", "rx": "12", "ry": "26"},
+            ),
+            SvgElement(
+                tag="rect",
+                attrs={"x": "16", "y": "4", "width": "88", "height": "52"},
+                stroke_mode="none",
+            ),
+            SvgElement(
+                tag="line",
+                attrs={"x1": "16", "y1": "4", "x2": "104", "y2": "4"},
+                fill_mode="none",
+            ),
+            SvgElement(
+                tag="line",
+                attrs={"x1": "16", "y1": "56", "x2": "104", "y2": "56"},
+                fill_mode="none",
+            ),
+            # Right cap is the visible lid
+            SvgElement(
+                tag="ellipse",
+                attrs={"cx": "104", "cy": "30", "rx": "12", "ry": "26"},
+            ),
+        ),
+    ),
+    ShapeDefinition(
+        key="person",
+        label="Person",
+        drawio_style="shape=actor;whiteSpace=wrap;html=1;",
+        default_width=80,
+        default_height=100,
+        category="architecture",
+        svg_viewbox="0 0 100 110",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            SvgElement(
+                tag="circle",
+                attrs={"cx": "50", "cy": "26", "r": "18"},
+            ),
+            SvgElement(
+                tag="path",
+                attrs={"d": "M 10,106 Q 10,58 50,58 Q 90,58 90,106 Z"},
+            ),
+        ),
+    ),
+    ShapeDefinition(
+        key="document",
+        label="Document",
+        drawio_style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;",
+        default_width=100,
+        default_height=110,
+        category="architecture",
+        svg_viewbox="0 0 100 110",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            SvgElement(
+                tag="path",
+                attrs={
+                    "d": "M 4,4 L 96,4 L 96,90 Q 73,78 50,90 Q 27,102 4,90 Z",
+                },
+            ),
+        ),
+    ),
+    ShapeDefinition(
+        key="network",
+        label="Network",
+        drawio_style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;",
+        default_width=120,
+        default_height=80,
+        category="architecture",
+        svg_viewbox="0 0 120 80",
+        svg_stroke_width=2.0,
+        svg_elements=(
+            SvgElement(
+                tag="rect",
+                attrs={
+                    "x": "3",
+                    "y": "3",
+                    "width": "114",
+                    "height": "74",
+                    "rx": "10",
+                    "ry": "10",
+                },
+                stroke_dasharray="6 4",
+            ),
+        ),
+    ),
 ]
 
 SHAPE_REGISTRY: dict[str, ShapeDefinition] = {s.key: s for s in _SHAPES}

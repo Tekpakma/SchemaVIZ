@@ -697,6 +697,101 @@ class GenerationTemplateExecuteViewTests(APITestCase):
             returned_edges,
         )
 
+    def test_reference_steps_link_to_existing_nodes_across_containers(self):
+        """A reference step adds an edge to the record's existing node — even
+        one nested in another container — and never a second node."""
+        self.client.force_authenticate(self.other_user)
+        definition = build_definition(
+            "infrastructure.BusinessGroup",
+            root_step={"childIds": ["step-network", "step-server"]},
+            steps=[
+                build_step(
+                    step_id="step-network",
+                    parent_id="step-root",
+                    relationship="networks",
+                    resolved_model="infrastructure.Network",
+                    group_mode="group",
+                    child_ids=["step-subnet"],
+                ),
+                build_step(
+                    step_id="step-subnet",
+                    parent_id="step-network",
+                    relationship="subnets",
+                    resolved_model="infrastructure.Subnet",
+                ),
+                build_step(
+                    step_id="step-server",
+                    parent_id="step-root",
+                    relationship="servers",
+                    resolved_model="infrastructure.Server",
+                    child_ids=["step-server-subnet", "step-server-missing"],
+                ),
+                build_step(
+                    step_id="step-server-subnet",
+                    parent_id="step-server",
+                    relationship="subnet",
+                    resolved_model="infrastructure.Subnet",
+                    group_mode="reference",
+                ),
+                # References to records nobody draws are dropped silently.
+                build_step(
+                    step_id="step-server-missing",
+                    parent_id="step-server",
+                    relationship="template",
+                    resolved_model="infrastructure.ServerTemplate",
+                    group_mode="reference",
+                ),
+            ],
+        )
+        template = attach_published_version(
+            GenerationTemplate.objects.create(
+                name="Servers reference their subnet",
+                owner=self.owner,
+                is_global=True,
+                root_model="infrastructure.BusinessGroup",
+                steps=definition,
+            ),
+            definition,
+        )
+
+        response = self.run_published_template(template, self.core_group)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        nodes = body["result"]["nodes"]
+        subnet_nodes = [node for node in nodes if node["modelName"] == "subnet"]
+        self.assertEqual(len(subnet_nodes), 1)
+        self.assertFalse(any(node["modelName"] == "servertemplate" for node in nodes))
+
+        server_node_id = next(
+            node["id"]
+            for node in nodes
+            if node["modelName"] == "server"
+            and node["recordPk"] == str(self.core_server.pk)
+        )
+        edges = {
+            (edge["source"], edge["target"], edge["relationship"])
+            for edge in body["result"]["edges"]
+        }
+        self.assertIn((server_node_id, subnet_nodes[0]["id"], "subnet"), edges)
+
+        structure = self.client.post(
+            GENERATION_RUNS_URL,
+            {
+                "mode": "structure",
+                "recordId": None,
+                "source": {"templateId": str(template.pk), "version": "published"},
+            },
+            format="json",
+        )
+        self.assertEqual(structure.status_code, 200)
+        structure_edges = {
+            (edge["source"], edge["target"], edge["relationship"])
+            for edge in structure.json()["result"]["edges"]
+        }
+        self.assertIn(("struct:step-server", "struct:step-subnet", "subnet"), structure_edges)
+        self.assertNotIn("struct:step-server-subnet", {n["id"] for n in structure.json()["result"]["nodes"]})
+
     def test_create_rejects_invalid_step_filter_field(self):
         self.client.force_authenticate(self.owner)
         definition = build_definition(

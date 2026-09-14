@@ -16,10 +16,14 @@ STEP_VISIBILITY_CHOICES = {VISIBLE_STEP, HIDDEN_STEP}
 GROUP_MODE_NONE = "none"
 GROUP_MODE_GROUP = "group"
 GROUP_MODE_BREAKOUT = "breakout"
+# A reference step draws a line to the record wherever it already appears
+# instead of adding a node; nothing below it is traversed.
+GROUP_MODE_REFERENCE = "reference"
 STEP_GROUP_MODE_CHOICES = {
     GROUP_MODE_NONE,
     GROUP_MODE_GROUP,
     GROUP_MODE_BREAKOUT,
+    GROUP_MODE_REFERENCE,
 }
 
 
@@ -60,6 +64,10 @@ def is_group_step(step: dict) -> bool:
 
 def breaks_out_of_group(step: dict) -> bool:
     return get_step_group_mode(step) == GROUP_MODE_BREAKOUT
+
+
+def is_reference_step(step: dict) -> bool:
+    return get_step_group_mode(step) == GROUP_MODE_REFERENCE
 
 
 def resolve_model_ref(model_ref: str, user=None):

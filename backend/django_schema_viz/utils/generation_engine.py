@@ -19,6 +19,7 @@ from .generation_definition import (
     get_definition_steps_by_id,
     get_step_group_mode,
     is_group_step,
+    is_reference_step,
     is_step_visible,
 )
 from .generation_steps import build_step_filter
@@ -64,6 +65,9 @@ class GenerationEngine:
         self._seen_keys: set[str] = set()  # dedup: "app_label.Model:pk"
         self._seen_edge_keys: set[tuple[str, str, str]] = set()
         self._nodes_by_id: dict[str, GeneratedNode] = {}
+        # Reference steps point at records that may only be created later in
+        # the walk, so their edges are resolved once traversal is complete.
+        self._pending_references: list[tuple[str, str, str]] = []
         self._step_filter_cache: dict[tuple[str, str], object] = {}
         # Relation paths referenced by step text content (lexical state),
         # grouped by the model the path is resolved against. Drives both
@@ -88,6 +92,7 @@ class GenerationEngine:
         self._seen_keys.clear()
         self._seen_edge_keys.clear()
         self._nodes_by_id.clear()
+        self._pending_references.clear()
         app_label, model_name = self.root_model.split(".")
         if not is_model_accessible_for_user(self.user, app_label, model_name):
             raise GenerationStepValidationError(
@@ -113,8 +118,34 @@ class GenerationEngine:
             group_ancestor_id=None,
             result=result,
         )
+        self._resolve_pending_references(result)
 
         return result
+
+    def _resolve_pending_references(self, result: GenerationResult) -> None:
+        """Link reference steps to the node that renders their record.
+
+        Records inside a container carry a context suffix in their node id;
+        the bare id wins when present, otherwise the first contextual copy.
+        """
+        if not self._pending_references:
+            return
+        by_base_key: dict[str, str] = {}
+        for node_id in self._nodes_by_id:
+            base_key = node_id.split("@", 1)[0]
+            if node_id == base_key or base_key not in by_base_key:
+                by_base_key[base_key] = node_id
+        for source, base_key, relationship in self._pending_references:
+            target = by_base_key.get(base_key)
+            if target is None or target == source:
+                continue
+            self._append_edge_once(
+                source=source,
+                target=target,
+                relationship=relationship,
+                result=result,
+            )
+        self._pending_references.clear()
 
     def preview_structure(self) -> GenerationResult:
         self._seen_keys.clear()
@@ -127,6 +158,7 @@ class GenerationEngine:
             )
         root_model = apps.get_model(app_label, model_name)
         result = GenerationResult()
+        self._pending_references.clear()
 
         self._process_structure_step(
             step_id=self.root_step_id,
@@ -135,7 +167,26 @@ class GenerationEngine:
             group_ancestor_id=None,
             result=result,
         )
+        self._resolve_pending_structure_references(result)
         return result
+
+    def _resolve_pending_structure_references(self, result: GenerationResult) -> None:
+        if not self._pending_references:
+            return
+        node_id_by_model: dict[str, str] = {}
+        for node in result.nodes:
+            node_id_by_model.setdefault(f"{node.app_label}.{node.model_name}", node.id)
+        for source, model_key, relationship in self._pending_references:
+            target = node_id_by_model.get(model_key)
+            if target is None or target == source:
+                continue
+            self._append_edge_once(
+                source=source,
+                target=target,
+                relationship=relationship,
+                result=result,
+            )
+        self._pending_references.clear()
 
     def _process_step(
         self,
@@ -159,6 +210,17 @@ class GenerationEngine:
         if not is_model_accessible_for_user(self.user, app_label, model_name):
             return
         record_pk = str(record.pk)
+
+        if is_reference_step(step):
+            if visible_ancestor_id is not None:
+                self._pending_references.append(
+                    (
+                        visible_ancestor_id,
+                        f"{app_label}.{model_name}:{record_pk}",
+                        step.get("relationship") or "",
+                    )
+                )
+            return
 
         is_visible = is_step_visible(step)
         is_group = is_group_step(step)
@@ -610,6 +672,19 @@ class GenerationEngine:
         current_ancestor = visible_ancestor_id
         current_group_ancestor = effective_group_ancestor_id
         structure_node_id = f"struct:{step_id}"
+
+        if is_reference_step(step):
+            # Structure previews have one node per model step; the target may
+            # be created by a later step, so linking happens after the walk.
+            if visible_ancestor_id is not None:
+                self._pending_references.append(
+                    (
+                        visible_ancestor_id,
+                        f"{app_label}.{model_name}",
+                        step.get("relationship") or "",
+                    )
+                )
+            return
 
         if is_visible:
             label = step.get("label") or step.get("relationship") or model.__name__

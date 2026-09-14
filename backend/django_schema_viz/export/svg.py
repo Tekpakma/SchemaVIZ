@@ -35,6 +35,68 @@ _DEFAULT_RECT_RADIUS_BY_SHAPE = {
     "group": 10.0,
 }
 
+# Share of the node width that a shape leaves for text; slanted or rounded
+# silhouettes have less room than a rectangle.
+_TEXT_WIDTH_FACTOR_BY_SHAPE = {
+    "diamond": 0.55,
+    "hexagon": 0.72,
+    "cloud": 0.68,
+    "cylinder": 0.8,
+    "shield": 0.7,
+    "person": 0.78,
+    "queue": 0.74,
+    "document": 0.88,
+}
+# Share of the node height the text block may use; puffs, points and
+# caps eat into the vertical room too.
+_TEXT_HEIGHT_FACTOR_BY_SHAPE = {
+    "diamond": 0.5,
+    "cloud": 0.55,
+    "cylinder": 0.65,
+    "shield": 0.6,
+    "person": 0.45,
+    "queue": 0.7,
+    "document": 0.75,
+}
+_DEFAULT_TEXT_HEIGHT_FACTOR = 0.85
+# Where the text block is centred vertically (share of the node height);
+# a cloud's body sits below its puffs, a person's below the head, a
+# document's above the wave.
+_TEXT_CENTER_Y_BY_SHAPE = {
+    "cloud": 0.6,
+    "person": 0.72,
+    "document": 0.44,
+    "shield": 0.5,
+    "cylinder": 0.56,
+}
+# Average glyph advance relative to the font size (Arial-like sans-serif).
+_AVERAGE_GLYPH_WIDTH = 0.55
+
+
+def _wrap_text(text: str, max_chars: int) -> list[str]:
+    """Greedy word wrap; over-long words are split hard so nothing overflows."""
+    if max_chars < 4:
+        return [text]
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        while len(word) > max_chars:
+            if current:
+                lines.append(current)
+                current = ""
+            lines.append(word[:max_chars])
+            word = word[max_chars:]
+        candidate = f"{current} {word}".strip()
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [text]
+
 
 # ---------------------------------------------------------------------------
 # Color palettes for light / dark backgrounds
@@ -186,16 +248,32 @@ def export_drawing_to_svg(
     # stay proportional to node dimensions at any export resolution.
     scale = _extract_scale(world_to_screen)
 
-    # Render layers in correct z-order: edge paths → nodes → edge labels.
-    # Edge labels must sit above both edge paths AND nodes so they are
-    # never obscured, matching the frontend's EdgeLabelRenderer overlay.
+    # Render layers in correct z-order: group boxes → edge paths → leaf
+    # nodes → edge labels. Groups are filled, so an edge drawn before them
+    # disappears under the box it crosses; leaf nodes stay on top so a
+    # route running under a card is hidden by the card, as on the canvas.
+    # Edge labels must sit above everything so they are never obscured,
+    # matching the frontend's EdgeLabelRenderer overlay.
+    group_nodes = [node for node in nodes if node.get("type") == "group"]
+    leaf_nodes = [node for node in nodes if node.get("type") != "group"]
+
+    defs = SubElement(svg, "defs")
+    markers = _ArrowMarkers(defs, scale)
+
+    if group_nodes:
+        groups_group = SubElement(svg, "g", {"id": "groups"})
+        for node in group_nodes:
+            _render_node(groups_group, node, world_to_screen, scale)
+
     edges_group = SubElement(svg, "g", {"id": "edges"})
     pending_labels: list[tuple[str, float, float]] = []
     for edge in edges:
-        _render_edge_path(edges_group, edge, world_to_screen, scale, pending_labels)
+        _render_edge_path(
+            edges_group, edge, world_to_screen, scale, pending_labels, markers
+        )
 
     nodes_group = SubElement(svg, "g", {"id": "nodes"})
-    for node in nodes:
+    for node in leaf_nodes:
         _render_node(nodes_group, node, world_to_screen, scale)
 
     if pending_labels:
@@ -651,28 +729,87 @@ def _render_rect_shape(parent, node, x, y, width, height, scale: float = 1.0):
 def _render_node_label(parent, node, x, y, width, height, scale: float = 1.0):
     """Render node label as SVG text with rich formatting when available."""
     rich_lines: list[RichTextLine] = node.get("rich_lines", [])
+    is_group = node.get("type") == "group"
+    text_pad = 12.0 * scale
+
+    if is_group:
+        # Containers carry their label as a small header, leaving the body to
+        # the children, exactly like the canvas group chrome.
+        base_font_size = 13.0 * scale
+        line_height = base_font_size * 1.3
+    else:
+        # Font size is proportional to node dimensions.  The min/max clamps
+        # must also scale so text stays visually consistent across export
+        # resolutions.
+        min_font = 14.0 * scale
+        max_font = 42.0 * scale
+        base_font_size = max(
+            min_font, min(max_font, min(width / 12.0, height / 4.0))
+        )
+        line_height = base_font_size * 1.35
 
     if not rich_lines:
-        # Fall back to plain text
+        # Fall back to plain text: the first line is the title, further lines
+        # are details (the canvas card prints them smaller and muted). Lines
+        # are wrapped to the room the shape actually offers.
         plain = node.get("label", "")
         label_lines = [line for line in plain.split("\n") if line != ""]
         if not label_lines:
             return
+        shape_factor = _TEXT_WIDTH_FACTOR_BY_SHAPE.get(node.get("shape", ""))
+        # Slanted shapes already lose room to their silhouette; only
+        # rectangles need the full inner padding on both sides.
+        usable_width = (
+            width * shape_factor - text_pad
+            if shape_factor is not None
+            else width - 2 * text_pad
+        )
+        usable_height = height * _TEXT_HEIGHT_FACTOR_BY_SHAPE.get(
+            node.get("shape", ""), _DEFAULT_TEXT_HEIGHT_FACTOR
+        )
+
+        def wrap_all(title_size: float) -> list[tuple[int, str]]:
+            wrapped: list[tuple[int, str]] = []
+            for idx, line in enumerate(label_lines):
+                font_size = title_size if idx == 0 else title_size * 0.8
+                max_chars = int(usable_width / (font_size * _AVERAGE_GLYPH_WIDTH))
+                wrapped.extend((idx, part) for part in _wrap_text(line, max_chars))
+            return wrapped
+
+        # Shrink the type until the block fits the shape, but never below
+        # what stays legible in a rasterised preview.
+        min_fit_font = 10.0 * scale
+        wrapped_lines = wrap_all(base_font_size)
+        while (
+            base_font_size * 1.35 * len(wrapped_lines) > usable_height
+            and base_font_size * 0.9 >= min_fit_font
+        ):
+            base_font_size *= 0.9
+            wrapped_lines = wrap_all(base_font_size)
+        line_height = base_font_size * 1.35
+
         rich_lines = [
-            RichTextLine(spans=[RichTextSpan(text=line)]) for line in label_lines
+            RichTextLine(
+                spans=[
+                    RichTextSpan(
+                        text=part,
+                        bold=idx == 0,
+                        font_size=None if idx == 0 else "0.8em",
+                        color=None if idx == 0 else "#6b7280",
+                    )
+                ],
+                alignment="left" if is_group else "center",
+            )
+            for idx, part in wrapped_lines
         ]
 
-    # Font size is proportional to node dimensions.  The min/max clamps
-    # must also scale so text stays visually consistent across export
-    # resolutions.
-    min_font = 14.0 * scale
-    max_font = 42.0 * scale
-    base_font_size = max(min_font, min(max_font, min(width / 12.0, height / 4.0)))
-    line_height = base_font_size * 1.35
-    total_text_height = line_height * len(rich_lines)
-    start_y = y + height / 2 - total_text_height / 2 + base_font_size * 0.35
+    if is_group:
+        start_y = y + text_pad + base_font_size
+    else:
+        total_text_height = line_height * len(rich_lines)
+        center_y = y + height * _TEXT_CENTER_Y_BY_SHAPE.get(node.get("shape", ""), 0.5)
+        start_y = center_y - total_text_height / 2 + base_font_size * 0.35
 
-    text_pad = 12.0 * scale
     for line_idx, rich_line in enumerate(rich_lines):
         alignment = rich_line.alignment
         if alignment == "left":
@@ -722,12 +859,68 @@ def _render_node_label(parent, node, x, y, width, height, scale: float = 1.0):
 # ---------------------------------------------------------------------------
 
 
+# Thin scaled strokes vanish in rasterised previews; keep edges legible.
+_MIN_EDGE_STROKE_PX = 1.4
+_ARROW_SIZE = 8.0
+
+
+class _ArrowMarkers:
+    """Lazily emits one ``<marker>`` per edge colour and hands out its id.
+
+    Markers cannot inherit the referencing path's stroke in every renderer,
+    so each colour gets its own definition.
+    """
+
+    def __init__(self, defs: Element, scale: float):
+        self._defs = defs
+        self._scale = scale
+        self._ids: dict[str, str] = {}
+
+    def marker_url(self, color: str) -> str:
+        marker_id = self._ids.get(color)
+        if marker_id is None:
+            marker_id = f"arrow-{len(self._ids)}"
+            self._ids[color] = marker_id
+            marker = SubElement(
+                self._defs,
+                "marker",
+                {
+                    "id": marker_id,
+                    "viewBox": "0 0 10 10",
+                    "refX": "9",
+                    "refY": "5",
+                    "markerWidth": f"{_ARROW_SIZE:.1f}",
+                    "markerHeight": f"{_ARROW_SIZE:.1f}",
+                    "markerUnits": "userSpaceOnUse",
+                    "orient": "auto-start-reverse",
+                },
+            )
+            SubElement(
+                marker, "path", {"d": "M 0 0 L 10 5 L 0 10 z", "fill": color}
+            )
+        return f"url(#{marker_id})"
+
+
+def _edge_stroke_attrs(
+    edge: dict[str, Any], scale: float, markers: "_ArrowMarkers | None"
+) -> dict[str, str]:
+    attrs = {
+        "fill": "none",
+        "stroke": edge["stroke"],
+        "stroke-width": f"{max(edge['stroke_width'] * scale, _MIN_EDGE_STROKE_PX):.2f}",
+    }
+    if markers is not None:
+        attrs["marker-end"] = markers.marker_url(edge["stroke"])
+    return attrs
+
+
 def _render_edge_path(
     parent: Element,
     edge: dict[str, Any],
     transform,
     scale: float = 1.0,
     pending_labels: list[tuple[str, float, float]] | None = None,
+    markers: "_ArrowMarkers | None" = None,
 ):
     """Draw the edge path and collect its label for deferred rendering.
 
@@ -738,10 +931,12 @@ def _render_edge_path(
     elk_sections = edge.get("elk_sections")
     if elk_sections:
         screen_points = _render_elk_edge_path(
-            parent, edge, transform, elk_sections, scale
+            parent, edge, transform, elk_sections, scale, markers
         )
     else:
-        screen_points = _render_smooth_step_edge_path(parent, edge, transform, scale)
+        screen_points = _render_smooth_step_edge_path(
+            parent, edge, transform, scale, markers
+        )
 
     label = edge.get("label", "").strip()
     if label and screen_points and pending_labels is not None:
@@ -749,7 +944,9 @@ def _render_edge_path(
         pending_labels.append((label, midpoint[0], midpoint[1]))
 
 
-def _render_elk_edge_path(parent, edge, transform, elk_sections, scale: float = 1.0):
+def _render_elk_edge_path(
+    parent, edge, transform, elk_sections, scale: float = 1.0, markers=None
+):
     """Render an ELK edge path and return screen-space points for label placement."""
     if not elk_sections:
         return []
@@ -774,21 +971,14 @@ def _render_elk_edge_path(parent, edge, transform, elk_sections, scale: float = 
         parts.append(f"L {sx:.2f} {sy:.2f}")
     d = " ".join(parts)
 
-    SubElement(
-        parent,
-        "path",
-        {
-            "d": d,
-            "fill": "none",
-            "stroke": edge["stroke"],
-            "stroke-width": f"{edge['stroke_width'] * scale:.2f}",
-        },
-    )
+    SubElement(parent, "path", {"d": d, **_edge_stroke_attrs(edge, scale, markers)})
 
     return screen_points
 
 
-def _render_smooth_step_edge_path(parent, edge, transform, scale: float = 1.0):
+def _render_smooth_step_edge_path(
+    parent, edge, transform, scale: float = 1.0, markers=None
+):
     """Render a SmoothStep edge path and return screen-space points for label placement.
 
     Matches the frontend's ``getSmoothStepPath`` from React Flow so the
@@ -805,16 +995,7 @@ def _render_smooth_step_edge_path(parent, edge, transform, scale: float = 1.0):
     points = _smooth_step_points(ssx, ssy, source_side, stx, sty, target_side)
     d = _build_rounded_polyline(points, border_radius=5.0 * scale)
 
-    SubElement(
-        parent,
-        "path",
-        {
-            "d": d,
-            "fill": "none",
-            "stroke": edge["stroke"],
-            "stroke-width": f"{edge['stroke_width'] * scale:.2f}",
-        },
-    )
+    SubElement(parent, "path", {"d": d, **_edge_stroke_attrs(edge, scale, markers)})
 
     return points
 

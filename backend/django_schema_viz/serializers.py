@@ -43,6 +43,7 @@ from .utils.generation_definition import (
     GROUP_MODE_BREAKOUT,
     GROUP_MODE_GROUP,
     GROUP_MODE_NONE,
+    GROUP_MODE_REFERENCE,
     HIDDEN_STEP,
     normalize_generation_definition,
     VISIBLE_STEP,
@@ -990,7 +991,12 @@ class GenerationDefinitionStepSchemaSerializer(serializers.Serializer):
         default=VISIBLE_STEP,
     )
     group_mode = serializers.ChoiceField(
-        choices=[GROUP_MODE_NONE, GROUP_MODE_GROUP, GROUP_MODE_BREAKOUT],
+        choices=[
+            GROUP_MODE_NONE,
+            GROUP_MODE_GROUP,
+            GROUP_MODE_BREAKOUT,
+            GROUP_MODE_REFERENCE,
+        ],
         required=False,
         default=GROUP_MODE_NONE,
     )
