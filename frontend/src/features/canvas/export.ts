@@ -78,6 +78,12 @@ function parseLexicalState(lexicalJson: string) {
   if (!trimmed) {
     return null
   }
+  // Templates with `{{field}}` placeholders are only meaningful once rendered
+  // against a record; the backend would print them verbatim, so the rendered
+  // html label is the better source for those nodes.
+  if (trimmed.includes('{{')) {
+    return null
+  }
 
   try {
     const parsed = JSON.parse(trimmed)
@@ -108,7 +114,8 @@ function createNodeData(
   lexicalState: Record<string, unknown> | null,
 ) {
   const data: Record<string, unknown> = {
-    shape: node.shape,
+    // Custom shapes travel as the backend shape key; plain boxes keep 'box'.
+    shape: node.styleOverrides?.shapeKey ?? node.shape,
   }
 
   if (label) {
@@ -140,9 +147,19 @@ function createNodeStyle(node: CanvasNode, palette: CanvasExportPalette) {
   if (node.kind === 'group') {
     return {
       backgroundColor: palette.nodeSurfaceColor,
-      borderColor: CANVAS_SELECT_COLOR,
+      borderColor: node.styleOverrides?.borderColor ?? CANVAS_SELECT_COLOR,
       borderRadius: shapeDefinition.cornerRadius,
       borderWidth: 1.5,
+    }
+  }
+
+  const overrides = node.styleOverrides
+  if (overrides?.borderColor || overrides?.backgroundColor) {
+    return {
+      backgroundColor: overrides.backgroundColor ?? palette.nodeSurfaceColor,
+      borderColor: overrides.borderColor ?? BOX_BORDER_COLOR,
+      borderRadius: shapeDefinition.cornerRadius,
+      borderWidth: overrides.borderColor ? 2 : 0,
     }
   }
 

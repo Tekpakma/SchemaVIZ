@@ -41,7 +41,7 @@ export const SchemaVizGenerationTemplatesCreateBody = zod.object({
   "relationship": zod.string().nullish(),
   "resolvedModelId": zod.string().optional(),
   "visibility": zod.enum(['visible', 'hidden']).describe('\* `visible` - visible\n\* `hidden` - hidden').default(schemaVizGenerationTemplatesCreateBodyDefinitionStepsByIdVisibilityDefault),
-  "groupMode": zod.enum(['none', 'group', 'breakout']).describe('\* `none` - none\n\* `group` - group\n\* `breakout` - breakout').default(schemaVizGenerationTemplatesCreateBodyDefinitionStepsByIdGroupModeDefault),
+  "groupMode": zod.enum(['none', 'group', 'breakout', 'reference']).describe('\* `none` - none\n\* `group` - group\n\* `breakout` - breakout\n\* `reference` - reference').default(schemaVizGenerationTemplatesCreateBodyDefinitionStepsByIdGroupModeDefault),
   "styleTemplateId": zod.string().nullish(),
   "groupTemplateId": zod.string().nullish(),
   "label": zod.string().nullish(),

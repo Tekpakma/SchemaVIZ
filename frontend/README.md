@@ -1,4 +1,4 @@
-Welcome to your new TanStack Start app! 
+Welcome to your new TanStack Start app!
 
 # Getting Started
 
@@ -22,6 +22,7 @@ bun --bun run dev
 Log in to Django at `http://127.0.0.1:8000/django/admin/login/`, then open the frontend at `http://127.0.0.1:3000`. Keep both URLs on `127.0.0.1` so the browser sends the Django `sessionid` and `csrftoken` cookies to the frontend proxy.
 
 If your Django login lives somewhere else, set `SCHEMA_VIZ_DJANGO_LOGIN_URL`.
+
 # Building For Production
 
 To build this application for production:
@@ -131,7 +132,13 @@ needs a bridge:
   "mcpServers": {
     "schema-viz": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "http://127.0.0.1:3000/mcp", "--header", "Authorization:Bearer <token>"]
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://127.0.0.1:3000/mcp",
+        "--header",
+        "Authorization:Bearer <token>"
+      ]
     }
   }
 }
@@ -139,18 +146,88 @@ needs a bridge:
 
 ### Available tools
 
-| Tool | Purpose |
-| --- | --- |
-| `listModels` | Discover models the token's user may see |
-| `getModelDetails` | Fields and exact relationship names of one model |
-| `getSchemaDigest` | Compact model/edge map without field lists |
-| `findRecords` | Turn a name into a record id |
-| `getRecord` | Read selected fields of one record |
-| `validateDiagram` | Dry-run a diagram spec, with per-step issues |
-| `createDiagram` | Run a validated spec |
+| Tool              | Purpose                                                                                                                                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drawDiagram`     | One call from request to draft: walk the schema (or take a spec), validate, resolve the named record (asks back on ambiguity), save a draft with provenance, optionally publish, return links and a rendered SVG preview                                                                     |
+| `listModels`      | Discover models the token's user may see                                                                                                                                                                                                                                                     |
+| `getModelDetails` | Fields and exact relationship names of one model                                                                                                                                                                                                                                             |
+| `getSchemaDigest` | Compact model/edge map without field lists                                                                                                                                                                                                                                                   |
+| `findRecords`     | Turn a name into a record id                                                                                                                                                                                                                                                                 |
+| `getRecord`       | Read selected fields of one record                                                                                                                                                                                                                                                           |
+| `suggestDiagram`  | Draft a whole landscape spec by walking the schema from a root model (`maxDepth`, `apps`, `excludeModels`, `grouping`); 1:n hops become containment boxes, shared lookups break out of the boxes, cross links become reference lines and every model gets a shape, colour and telling fields |
+| `validateDiagram` | Dry-run a diagram spec, with per-step issues                                                                                                                                                                                                                                                 |
+| `createDiagram`   | Run a validated spec; `includeGraph` returns all nodes and edges                                                                                                                                                                                                                             |
+| `publishDiagram`  | Save a spec as a shared template and get canvas links (`diagramUrl`, `builderUrl`, `embedUrl`)                                                                                                                                                                                               |
 
 Tool schemas are derived from the same definitions the in-app assistant uses, so
 `tools/list` always matches what the app can do.
+
+A typical "draw my whole landscape for business group X" request is a single
+`drawDiagram` call. It answers with `status: needs_input` and record
+`candidates` when the name is ambiguous, `invalid` with per-step errors, or
+`ok` with a `builderUrl` (draft, opens with the record pre-selected) and, when
+`publish` was requested, a `diagramUrl`. Drafts store the request as provenance
+(`layoutSettings.provenance`) and the record as default example. Unless
+`includePreview: false`, the result also carries an SVG of the laid-out diagram
+which the MCP server emits as an `image/svg+xml` content block (rendered
+server-side: generation run → ELK → Django export, no browser involved). The lower-level
+tools (`suggestDiagram` → `validateDiagram` → `publishDiagram`) remain for
+step-by-step control. The links require a browser session with SchemaVIZ; the
+MCP token authenticates only the tool calls, not the browser.
+
+### Diagram specification
+
+Every diagram tool speaks the same `DiagramSpec` (`features/ai/tools/diagramSpec.ts`):
+
+- `steps[].groupMode`: `group` nests the target records inside the source
+  record's box (containment), `edge` adds the target records next to the
+  source and draws a line, `breakout` draws each target record once outside
+  every box with a line from each record pointing at it (regions, templates,
+  owners), `reference` only draws a line to the record where it already
+  appears (server → subnet when subnets live inside their network).
+  `suggestDiagram` picks `group` for plain reverse foreign keys (a record owns
+  many children) and moves a record into the most specific box that claims
+  it, `breakout` for forward keys leaving a box, `reference` for forward keys
+  to models that are already drawn, and `edge` otherwise.
+  In the recipe a `reference` step is a traversal edge plus a group rule with
+  `mode: 'reference'`; the backend engine resolves it to the existing node
+  after the walk (`generation_definition.GROUP_MODE_REFERENCE`).
+- `styles[modelId]`: `shape` (`default`, `server`, `cylinder`, `cloud`,
+  `hexagon`, `diamond`, `shield`, `queue`, `person`, `document`, `network`),
+  `color` (`#rrggbb`) and up to three `fields` printed under the record name.
+  Unstyled models get a shape guessed from the model name and a stable colour.
+- `edgeLabels`: `auto` (default, hides labels that only repeat the target
+  model), `none`, `all`.
+
+The same shapes are available in the builder's style step and in SVG/draw.io
+exports.
+
+Generated previews lay out every container with its own ELK pass
+(`SEPARATE_CHILDREN`); as soon as an edge crosses a container wall the groups
+switch to the `nested` strategy (`INCLUDE_CHILDREN` on the root pass) so ELK
+can route between hierarchy levels. ELK then reports such routes relative to
+their lowest common ancestor (`edge.container`), which
+`createGraphLayoutResult` shifts back into canvas coordinates.
+
+Links to shared lookups are bundled before layout
+(`bundleSharedLookupEdges`): when every record of one model inside a container
+points at the same root-level record (all servers of an environment run the
+same template), a single edge from the outermost such container replaces the
+fan of identical lines. Records that disagree keep their own edge.
+
+## In-app diagram assistant
+
+The builder has a chat panel (sparkles button in the header, shown when the
+Django session reports `aiEnabled`). It talks to `POST /api/ai/chat`, which
+authenticates the browser session, resolves the per-user LLM settings via
+`resolveAiConfig` and streams `chat()` over SSE. Read-only tools run on the
+server; the tools that change the diagram (`applyDiagramSpec`, `removeModels`,
+`setLayoutDirection`, `setRootRecord`) are client tools executed against the
+builder store, so the canvas updates in place. A compact snapshot of the current
+canvas travels with every message as `forwardedProps.diagram`.
+
+Set `SCHEMA_VIZ_AI_BASE_URL` for any OpenAI-compatible endpoint (Chat
+Completions API); without it the OpenAI Responses API is used.
 
 ## Styling
 
@@ -167,7 +244,6 @@ If you prefer not to use Tailwind CSS:
 
 ## Linting & Formatting
 
-
 This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
 
 ```bash
@@ -175,7 +251,6 @@ bun --bun run lint
 bun --bun run format
 bun --bun run check
 ```
-
 
 # TanStack Chat Application
 
@@ -190,18 +265,21 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 ## ✨ Features
 
 ### AI Capabilities
-- 🤖 Powered by Claude 3.5 Sonnet 
+
+- 🤖 Powered by Claude 3.5 Sonnet
 - 📝 Rich markdown formatting with syntax highlighting
 - 🎯 Customizable system prompts for tailored AI behavior
 - 🔄 Real-time message updates and streaming responses (coming soon)
 
 ### User Experience
+
 - 🎨 Modern UI with Tailwind CSS and Lucide icons
 - 🔍 Conversation management and history
 - 🔐 Secure API key management
 - 📋 Markdown rendering with code highlighting
 
 ### Technical Features
+
 - 📦 Centralized state management with TanStack Store
 - 🔌 Extensible architecture for multiple AI providers
 - 🛠️ TypeScript for type safety
@@ -209,6 +287,7 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 ## Architecture
 
 ### Tech Stack
+
 - **Frontend Framework**: TanStack Start
 - **Routing**: TanStack Router
 - **State Management**: TanStack Store
@@ -222,8 +301,6 @@ Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
 ```bash
 pnpm dlx shadcn@latest add button
 ```
-
-
 
 ## Routing
 
@@ -242,7 +319,7 @@ Now that you have two routes you can use a `Link` component to navigate between 
 To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
 
 ```tsx
-import { Link } from "@tanstack/react-router";
+import { Link } from '@tanstack/react-router'
 ```
 
 Then anywhere in your JSX you can use it like so:
@@ -310,11 +387,11 @@ const getServerTime = createServerFn({
 // Use in a component
 function MyComponent() {
   const [time, setTime] = useState('')
-  
+
   useEffect(() => {
     getServerTime().then(setTime)
   }, [])
-  
+
   return <div>Server time: {time}</div>
 }
 ```

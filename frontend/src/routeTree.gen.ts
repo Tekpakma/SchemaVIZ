@@ -15,6 +15,7 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBuilderRouteImport } from './routes/_app/builder'
 import { Route as AppFreedrawRouteImport } from './routes/_app/freedraw'
 import { Route as AppSchemaDiscoveryRouteImport } from './routes/_app/schema-discovery'
+import { Route as ApiAiChatRouteImport } from './routes/api.ai.chat'
 import { Route as GenerateSlugIndexRouteImport } from './routes/generate/$slug.index'
 import { Route as GenerateSlugRecordIdRouteImport } from './routes/generate/$slug.$recordId'
 
@@ -47,6 +48,11 @@ const AppSchemaDiscoveryRoute = AppSchemaDiscoveryRouteImport.update({
   path: '/schema-discovery',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiAiChatRoute = ApiAiChatRouteImport.update({
+  id: '/api/ai/chat',
+  path: '/api/ai/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GenerateSlugIndexRoute = GenerateSlugIndexRouteImport.update({
   id: '/generate/$slug/',
   path: '/generate/$slug/',
@@ -64,6 +70,7 @@ export interface FileRoutesByFullPath {
   '/builder': typeof AppBuilderRoute
   '/freedraw': typeof AppFreedrawRoute
   '/schema-discovery': typeof AppSchemaDiscoveryRoute
+  '/api/ai/chat': typeof ApiAiChatRoute
   '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
   '/generate/$slug/': typeof GenerateSlugIndexRoute
 }
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/freedraw': typeof AppFreedrawRoute
   '/schema-discovery': typeof AppSchemaDiscoveryRoute
   '/': typeof AppIndexRoute
+  '/api/ai/chat': typeof ApiAiChatRoute
   '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
   '/generate/$slug': typeof GenerateSlugIndexRoute
 }
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/_app/freedraw': typeof AppFreedrawRoute
   '/_app/schema-discovery': typeof AppSchemaDiscoveryRoute
   '/_app/': typeof AppIndexRoute
+  '/api/ai/chat': typeof ApiAiChatRoute
   '/generate/$slug/$recordId': typeof GenerateSlugRecordIdRoute
   '/generate/$slug/': typeof GenerateSlugIndexRoute
 }
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/builder'
     | '/freedraw'
     | '/schema-discovery'
+    | '/api/ai/chat'
     | '/generate/$slug/$recordId'
     | '/generate/$slug/'
   fileRoutesByTo: FileRoutesByTo
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/freedraw'
     | '/schema-discovery'
     | '/'
+    | '/api/ai/chat'
     | '/generate/$slug/$recordId'
     | '/generate/$slug'
   id:
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/_app/freedraw'
     | '/_app/schema-discovery'
     | '/_app/'
+    | '/api/ai/chat'
     | '/generate/$slug/$recordId'
     | '/generate/$slug/'
   fileRoutesById: FileRoutesById
@@ -121,6 +133,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   McpRoute: typeof McpRoute
+  ApiAiChatRoute: typeof ApiAiChatRoute
   GenerateSlugRecordIdRoute: typeof GenerateSlugRecordIdRoute
   GenerateSlugIndexRoute: typeof GenerateSlugIndexRoute
 }
@@ -169,6 +182,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSchemaDiscoveryRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/ai/chat': {
+      id: '/api/ai/chat'
+      path: '/api/ai/chat'
+      fullPath: '/api/ai/chat'
+      preLoaderRoute: typeof ApiAiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/generate/$slug/': {
       id: '/generate/$slug/'
       path: '/generate/$slug'
@@ -205,6 +225,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   McpRoute: McpRoute,
+  ApiAiChatRoute: ApiAiChatRoute,
   GenerateSlugRecordIdRoute: GenerateSlugRecordIdRoute,
   GenerateSlugIndexRoute: GenerateSlugIndexRoute,
 }

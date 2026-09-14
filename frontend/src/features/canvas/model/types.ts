@@ -43,6 +43,9 @@ export type CanvasRoutingAuthorityMode = 'auto' | 'manual'
  * - `tree`     — `elk.mrtree`, one parent fanning to leaves.
  * - `cluster`  — `elk.force`, organic cluster of loosely-related children.
  * - `hub`      — `elk.radial`, central child surrounded by spokes.
+ * - `nested`   — no algorithm of its own: the root layout places the children
+ *                (`INCLUDE_CHILDREN`), which is the only mode in which edges
+ *                may cross the container wall.
  */
 export type CanvasGroupLayoutStrategy =
   | 'auto'
@@ -51,6 +54,7 @@ export type CanvasGroupLayoutStrategy =
   | 'tree'
   | 'cluster'
   | 'hub'
+  | 'nested'
 
 /**
  * @deprecated retained only for reading legacy persisted recipes.

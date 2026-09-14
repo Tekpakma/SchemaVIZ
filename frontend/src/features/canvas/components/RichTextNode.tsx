@@ -120,6 +120,119 @@ function drawServerScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
   }
 }
 
+function drawPolygonScene(
+  ctx: CanvasRenderingContext2D,
+  points: Array<[number, number]>,
+) {
+  points.forEach(([x, y], index) => {
+    if (index === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
+  ctx.closePath()
+}
+
+function drawHexagonScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const inset = Math.min(w * 0.15, h * 0.5)
+  drawPolygonScene(ctx, [
+    [inset, 0],
+    [w - inset, 0],
+    [w, h / 2],
+    [w - inset, h],
+    [inset, h],
+    [0, h / 2],
+  ])
+}
+
+function drawDiamondScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  drawPolygonScene(ctx, [
+    [w / 2, 0],
+    [w, h / 2],
+    [w / 2, h],
+    [0, h / 2],
+  ])
+}
+
+function drawShieldScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const shoulder = h * 0.14
+  const waist = h * 0.5
+  ctx.moveTo(w / 2, 0)
+  ctx.lineTo(w, shoulder)
+  ctx.lineTo(w, waist)
+  ctx.quadraticCurveTo(w, h * 0.82, w / 2, h)
+  ctx.quadraticCurveTo(0, h * 0.82, 0, waist)
+  ctx.lineTo(0, shoulder)
+  ctx.closePath()
+}
+
+function drawQueueScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  // A cylinder lying on its side: caps left and right.
+  const rx = Math.min(w * 0.1, 16)
+  ctx.moveTo(rx, 0)
+  ctx.lineTo(w - rx, 0)
+  ctx.ellipse(w - rx, h / 2, rx, h / 2, 0, -Math.PI / 2, Math.PI / 2, false)
+  ctx.lineTo(rx, h)
+  ctx.ellipse(rx, h / 2, rx, h / 2, 0, Math.PI / 2, (3 * Math.PI) / 2, false)
+  ctx.closePath()
+  // Visible left lid
+  ctx.moveTo(rx, 0)
+  ctx.ellipse(rx, h / 2, rx, h / 2, 0, -Math.PI / 2, Math.PI / 2, false)
+}
+
+function drawPersonScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const headR = Math.min(w, h) * 0.17
+  const headCy = headR + 2
+  const shoulders = headCy + headR + h * 0.06
+  ctx.moveTo(w / 2 + headR, headCy)
+  ctx.arc(w / 2, headCy, headR, 0, Math.PI * 2)
+  ctx.moveTo(w * 0.1, h)
+  ctx.quadraticCurveTo(w * 0.1, shoulders, w / 2, shoulders)
+  ctx.quadraticCurveTo(w * 0.9, shoulders, w * 0.9, h)
+  ctx.closePath()
+}
+
+function drawDocumentScene(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  const wave = h * 0.12
+  ctx.moveTo(0, 0)
+  ctx.lineTo(w, 0)
+  ctx.lineTo(w, h - wave)
+  ctx.quadraticCurveTo(w * 0.75, h - wave * 2, w / 2, h - wave)
+  ctx.quadraticCurveTo(w * 0.25, h, 0, h - wave)
+  ctx.closePath()
+}
+
+function drawNetworkScene(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const r = Math.min(12, w / 2, h / 2)
+  ctx.moveTo(r, 0)
+  ctx.arcTo(w, 0, w, h, r)
+  ctx.arcTo(w, h, 0, h, r)
+  ctx.arcTo(0, h, 0, 0, r)
+  ctx.arcTo(0, 0, w, 0, r)
+  ctx.closePath()
+}
+
+const CUSTOM_SHAPE_SCENES: Record<
+  string,
+  (ctx: CanvasRenderingContext2D, w: number, h: number) => void
+> = {
+  cylinder: drawCylinderScene,
+  database: drawCylinderScene,
+  cloud: drawCloudScene,
+  server: drawServerScene,
+  hexagon: drawHexagonScene,
+  diamond: drawDiamondScene,
+  shield: drawShieldScene,
+  queue: drawQueueScene,
+  person: drawPersonScene,
+  document: drawDocumentScene,
+  network: drawNetworkScene,
+}
+
+const NETWORK_DASH = [6, 4]
+
 const RichTextNodeSurface = memo(function RichTextNodeSurface({
   width,
   height,
@@ -133,6 +246,7 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
   const isCustomShape = shapeKey && shapeKey !== 'default' && shapeKey !== 'box'
 
   if (isCustomShape) {
+    const drawScene = CUSTOM_SHAPE_SCENES[shapeKey]
     return (
       <Shape
         width={width}
@@ -140,19 +254,15 @@ const RichTextNodeSurface = memo(function RichTextNodeSurface({
         fill={fill}
         opacity={opacity}
         stroke={stroke}
-        dash={dash}
+        dash={dash ?? (shapeKey === 'network' ? NETWORK_DASH : undefined)}
         strokeScaleEnabled={false}
         perfectDrawEnabled={false}
         listening
         sceneFunc={(context, shape) => {
           const ctx = context._context
           ctx.beginPath()
-          if (shapeKey === 'cylinder') {
-            drawCylinderScene(ctx, shape.width(), shape.height())
-          } else if (shapeKey === 'cloud') {
-            drawCloudScene(ctx, shape.width(), shape.height())
-          } else if (shapeKey === 'server') {
-            drawServerScene(ctx, shape.width(), shape.height())
+          if (drawScene) {
+            drawScene(ctx, shape.width(), shape.height())
           } else {
             // Fallback: rounded rect
             const w = shape.width()

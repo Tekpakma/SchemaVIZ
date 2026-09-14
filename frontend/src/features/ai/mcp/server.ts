@@ -63,11 +63,38 @@ async function callTool(
     emitCustomEvent: () => {},
   })
 
-  // MCP clients render content blocks; structuredContent carries the typed form.
-  return {
-    content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
-    structuredContent: output,
+  // A rendered preview is an image for the client, not text for the model:
+  // it leaves the JSON and becomes a separate content block.
+  const { previewSvg, rest } = splitPreview(output)
+  const content: Array<Record<string, unknown>> = [
+    { type: 'text', text: JSON.stringify(rest, null, 2) },
+  ]
+  if (previewSvg) {
+    content.push({
+      type: 'image',
+      data: Buffer.from(previewSvg, 'utf8').toString('base64'),
+      mimeType: 'image/svg+xml',
+    })
   }
+
+  // MCP clients render content blocks; structuredContent carries the typed form.
+  return { content, structuredContent: rest }
+}
+
+export function splitPreview(output: unknown): {
+  previewSvg: string | null
+  rest: unknown
+} {
+  if (
+    output &&
+    typeof output === 'object' &&
+    'previewSvg' in output &&
+    typeof output.previewSvg === 'string'
+  ) {
+    const { previewSvg, ...rest } = output
+    return { previewSvg, rest }
+  }
+  return { previewSvg: null, rest: output }
 }
 
 /**

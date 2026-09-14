@@ -12,13 +12,17 @@ import type {
   GenerationTemplateWriteRequest,
 } from '@/api/contracts'
 import type {
+  ExampleRecord,
   GroupMode,
   LayoutAlgorithm,
   RecipeData,
+  RecipeEdgeLabels,
   RecipeFilter,
+  RecipeGroupRule,
   RecipeLayer,
   RecipeLayoutDirection,
   RecipeModel,
+  RecipeProvenance,
   RecipeStyleDraft,
   TraversalEdge,
 } from './types'
@@ -52,7 +56,7 @@ type DefinitionStep = {
   relationship: string | null
   resolvedModelId: string
   visibility: 'visible' | 'hidden'
-  groupMode: 'none' | 'group' | 'breakout'
+  groupMode: GroupMode
   styleTemplateId: string | null
   label: string | null
   filter: unknown
@@ -333,6 +337,66 @@ function readLayersFromLayoutSettings(
 }
 
 // ---------------------------------------------------------------------------
+// Example records and provenance also live in layoutSettings: the definition
+// describes the structure only, but a generated draft should open with the
+// record it was made for and remember where it came from.
+// ---------------------------------------------------------------------------
+
+function readExamplesFromLayoutSettings(
+  layoutSettings: unknown,
+): ExampleRecord[] {
+  if (!layoutSettings || typeof layoutSettings !== 'object') return []
+  const raw = (layoutSettings as Record<string, unknown>).examples
+  if (!Array.isArray(raw)) return []
+
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const e = entry as Record<string, unknown>
+    if (typeof e.id !== 'string' || typeof e.idValue !== 'string') return []
+    return [
+      {
+        id: e.id,
+        idValue: e.idValue,
+        label: typeof e.label === 'string' ? e.label : e.idValue,
+        kind: typeof e.kind === 'string' ? e.kind : '',
+        isDefault: e.isDefault === true,
+      } satisfies ExampleRecord,
+    ]
+  })
+}
+
+function readEdgeLabelsFromLayoutSettings(
+  layoutSettings: unknown,
+): RecipeEdgeLabels | undefined {
+  if (!layoutSettings || typeof layoutSettings !== 'object') return undefined
+  const raw = (layoutSettings as Record<string, unknown>).edgeLabels
+  return raw === 'auto' || raw === 'none' || raw === 'all' ? raw : undefined
+}
+
+function readProvenanceFromLayoutSettings(
+  layoutSettings: unknown,
+): RecipeProvenance | null {
+  if (!layoutSettings || typeof layoutSettings !== 'object') return null
+  const raw = (layoutSettings as Record<string, unknown>).provenance
+  if (!raw || typeof raw !== 'object') return null
+  const p = raw as Record<string, unknown>
+  if (
+    (p.source !== 'assistant' && p.source !== 'mcp') ||
+    typeof p.createdAt !== 'string'
+  ) {
+    return null
+  }
+  return {
+    source: p.source,
+    createdAt: p.createdAt,
+    ...(typeof p.intent === 'string' ? { intent: p.intent } : {}),
+    ...(p.options && typeof p.options === 'object'
+      ? { options: p.options as Record<string, unknown> }
+      : {}),
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 function stringifyFilter(filter: unknown): string | null {
   if (filter == null) return null
@@ -357,7 +421,11 @@ export function createRecipeFromTemplate(
 ): RecipeData {
   const version = template.draftVersion ?? template.publishedVersion
   const steps = readOrderedDefinitionSteps(version?.definition)
-  const visibleSteps = steps.filter((step) => step.visibility !== 'hidden')
+  // Reference steps add a line, not a node: they become edges + rules below.
+  const referenceSteps = steps.filter((step) => step.groupMode === 'reference')
+  const visibleSteps = steps.filter(
+    (step) => step.visibility !== 'hidden' && step.groupMode !== 'reference',
+  )
   const stepsById = R.indexBy(steps, R.prop('id'))
 
   const layers: RecipeLayer[] = visibleSteps.map((step, index) => ({
@@ -387,55 +455,91 @@ export function createRecipeFromTemplate(
     }
   })
 
-  const edges: TraversalEdge[] = R.pipe(
-    visibleSteps,
-    R.flatMap((step) => {
-      if (!step.parentId || !step.relationship) return []
-      const parent = stepsById[step.parentId]
-      if (!parent) return []
+  // A reference step targets whichever visible step draws the same model.
+  const visibleStepIdByModel = new Map<string, string>()
+  for (const step of visibleSteps) {
+    if (!visibleStepIdByModel.has(step.resolvedModelId)) {
+      visibleStepIdByModel.set(step.resolvedModelId, step.id)
+    }
+  }
+  const referenceLinks = referenceSteps.flatMap((step) => {
+    const targetId = visibleStepIdByModel.get(step.resolvedModelId)
+    const parent = step.parentId ? stepsById[step.parentId] : undefined
+    if (!targetId || !parent || !step.relationship) return []
+    return [{ step, parent, targetId }]
+  })
 
-      return [
-        {
-          id: `edge-${step.id}`,
-          from: getStepLabel(parent),
-          to: getStepLabel(step),
-          fromModelId: parent.id,
-          toModelId: step.id,
-          via: step.relationship,
-          auto: true,
-          cost: 1,
-        },
-      ]
-    }),
-  )
+  const edges: TraversalEdge[] = [
+    ...R.pipe(
+      visibleSteps,
+      R.flatMap((step) => {
+        if (!step.parentId || !step.relationship) return []
+        const parent = stepsById[step.parentId]
+        if (!parent) return []
 
-  const groupRules = R.pipe(
-    visibleSteps,
-    R.flatMap((step) => {
-      if (!step.parentId) return []
-      const parent = stepsById[step.parentId]
-      if (!parent) return []
+        return [
+          {
+            id: `edge-${step.id}`,
+            from: getStepLabel(parent),
+            to: getStepLabel(step),
+            fromModelId: parent.id,
+            toModelId: step.id,
+            via: step.relationship,
+            auto: true,
+            cost: 1,
+          },
+        ]
+      }),
+    ),
+    ...referenceLinks.map(({ step, parent, targetId }) => ({
+      id: `edge-${step.id}`,
+      from: getStepLabel(parent),
+      to: getStepLabel(stepsById[targetId]!),
+      fromModelId: parent.id,
+      toModelId: targetId,
+      via: step.relationship!,
+      auto: false,
+      cost: 1,
+    })),
+  ]
 
-      const mode: GroupMode | null =
-        step.groupMode === 'breakout'
-          ? 'breakout'
-          : parent.groupMode === 'group' || step.groupMode === 'group'
-            ? 'group'
-            : null
-      if (!mode) return []
+  const groupRules: RecipeGroupRule[] = [
+    ...R.pipe(
+      visibleSteps,
+      R.flatMap((step) => {
+        if (!step.parentId) return []
+        const parent = stepsById[step.parentId]
+        if (!parent) return []
 
-      return [
-        {
-          id: `group-${step.id}`,
-          parentModelId: step.parentId,
-          childModelId: step.id,
-          via: step.relationship ?? '',
-          mode,
-          layout: { ...DEFAULT_RECIPE_GROUP_LAYOUT },
-        },
-      ]
-    }),
-  )
+        const mode: GroupMode | null =
+          step.groupMode === 'breakout'
+            ? 'breakout'
+            : parent.groupMode === 'group' || step.groupMode === 'group'
+              ? 'group'
+              : null
+        if (!mode) return []
+
+        return [
+          {
+            id: `group-${step.id}`,
+            parentModelId: step.parentId,
+            childModelId: step.id,
+            via: step.relationship ?? '',
+            mode,
+            layout: { ...DEFAULT_RECIPE_GROUP_LAYOUT },
+          },
+        ]
+      }),
+    ),
+    ...referenceLinks.map(({ step, parent, targetId }) => ({
+      id: `group-${step.id}`,
+      parentModelId: parent.id,
+      childModelId: targetId,
+      via: step.relationship!,
+      mode: 'reference' as const,
+      layout: { ...DEFAULT_RECIPE_GROUP_LAYOUT },
+    })),
+  ]
 
   const filters: RecipeFilter[] = R.pipe(
     visibleSteps,
@@ -476,6 +580,7 @@ export function createRecipeFromTemplate(
     title: template.name,
     layers: normalizedLayers,
     models,
+    examples: readExamplesFromLayoutSettings(version?.layoutSettings),
     edges: persistedEdges ?? edges,
     filters,
     groupRules,
@@ -486,6 +591,8 @@ export function createRecipeFromTemplate(
     shareSlug: template.shareSlug ?? '',
     promoteVisibility: template.scope === 'global' ? 'shared' : 'private',
     promoteAudience: template.scope === 'global' ? 'All users' : '',
+    provenance: readProvenanceFromLayoutSettings(version?.layoutSettings),
+    edgeLabels: readEdgeLabelsFromLayoutSettings(version?.layoutSettings),
   }
 }
 
@@ -611,8 +718,39 @@ export function recipeToInlineDefinition(
     }
   }
 
+  const referenceRuleKeys = new Set(
+    recipe.groupRules
+      .filter((rule) => rule.mode === 'reference')
+      .map((rule) => `${rule.parentModelId}|${rule.childModelId}|${rule.via}`),
+  )
+
   for (const edge of recipe.edges) {
     if (!edge.fromModelId || !edge.toModelId) continue
+
+    // A reference edge never adds a node: it becomes a leaf step the engine
+    // resolves to the record's existing node after the walk.
+    if (
+      referenceRuleKeys.has(`${edge.fromModelId}|${edge.toModelId}|${edge.via}`)
+    ) {
+      const parentStep = stepsById[edge.fromModelId]
+      const targetModel = modelsById[edge.toModelId]
+      if (!parentStep || !targetModel) continue
+      const stepId = `${edge.id}:ref`
+      parentStep.childIds = [...(parentStep.childIds ?? []), stepId]
+      stepsById[stepId] = {
+        id: stepId,
+        parentId: edge.fromModelId,
+        childIds: [],
+        relationship: edge.via,
+        resolvedModelId: targetModel.modelId,
+        visibility: 'visible',
+        groupMode: 'reference',
+        styleTemplateId: null,
+        label: null,
+        filter: null,
+      }
+      continue
+    }
 
     const routeSteps = edge.routeSteps?.length
       ? edge.routeSteps
@@ -749,6 +887,9 @@ export function recipeToGenerationTemplateWriteRequest(
       ...(persistedDrafts ? { styleDrafts: persistedDrafts } : {}),
       ...(persistedLayers ? { layers: persistedLayers } : {}),
       ...(recipe.edges.length > 0 ? { edges: recipe.edges } : {}),
+      ...(recipe.examples.length > 0 ? { examples: recipe.examples } : {}),
+      ...(recipe.provenance ? { provenance: recipe.provenance } : {}),
+      ...(recipe.edgeLabels ? { edgeLabels: recipe.edgeLabels } : {}),
     },
   }
 }

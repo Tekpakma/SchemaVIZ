@@ -2913,11 +2913,13 @@ components:
       - none
       - group
       - breakout
+      - reference
       type: string
       description: |-
         * `none` - none
         * `group` - group
         * `breakout` - breakout
+        * `reference` - reference
     GroupTemplate:
       type: object
       properties:

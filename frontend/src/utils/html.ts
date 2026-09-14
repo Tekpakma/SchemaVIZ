@@ -20,6 +20,8 @@ function decodeHtmlEntities(value: string) {
 export function extractPlainTextFromHtml(value: string) {
   const normalized = decodeHtmlEntities(
     value
+      // Inline stylesheets/scripts carry no visible text.
+      .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/(div|p|h[1-6]|li|tr|section)>/gi, '\n')
       .replace(/<li\b[^>]*>/gi, '- ')

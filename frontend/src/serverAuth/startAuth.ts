@@ -100,7 +100,7 @@ function getAuthSecret(): string {
   return 'schema-viz-dev-auth-secret-32chr'
 }
 
-function getAuthMode(): 'dev' | 'oidc' | 'session' {
+export function getAuthMode(): 'dev' | 'oidc' | 'session' {
   const configured = process.env.SCHEMA_VIZ_AUTH_MODE?.trim().toLowerCase()
   if (configured === 'dev' || configured === 'oidc') {
     return configured
@@ -424,7 +424,7 @@ function clientAuth(backend: StartAuthBackend): oauth.ClientAuth {
     : oauth.None()
 }
 
-function requestOrigin(request: Request): string {
+export function requestOrigin(request: Request): string {
   const url = new URL(request.url)
   const forwardedProto = request.headers.get('x-forwarded-proto')
   const forwardedHost = request.headers.get('x-forwarded-host')

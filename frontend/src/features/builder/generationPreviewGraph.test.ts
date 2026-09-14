@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GenerationRunResponse } from './generationPreviewQuery'
-import { getGenerationPreviewCanvasGraph } from './generationPreviewGraph'
+import {
+  bundleSharedLookupEdges,
+  getGenerationPreviewCanvasGraph,
+} from './generationPreviewGraph'
 import type { RecipeData } from './types'
 
 function createRecipe(overrides: Partial<RecipeData> = {}): RecipeData {
@@ -69,6 +72,84 @@ function createGenerationResponse(): GenerationRunResponse {
     groupTemplates: [],
   } as unknown as GenerationRunResponse
 }
+
+describe('bundleSharedLookupEdges', () => {
+  const node = (
+    id: string,
+    modelName: string,
+    parentId: string | null,
+    isGroup = false,
+  ) => ({
+    id,
+    appLabel: 'infra',
+    modelName,
+    recordPk: id,
+    label: id,
+    displayName: id,
+    fields: {},
+    styleTemplateId: null,
+    parentId,
+    isGroup,
+    stepUiIds: [],
+  })
+  // Engineering > Production > {Subnet A > app, Subnet B > web}
+  //             > Development > Subnet C > dev
+  // All three servers run the same template, only two use the same owner.
+  const nodes = [
+    node('eng', 'businessgroup', null, true),
+    node('prod', 'environment', 'eng', true),
+    node('dev', 'environment', 'eng', true),
+    node('subnet-a', 'subnet', 'prod', true),
+    node('subnet-b', 'subnet', 'prod', true),
+    node('subnet-c', 'subnet', 'dev', true),
+    node('app', 'server', 'subnet-a'),
+    node('web', 'server', 'subnet-b'),
+    node('dev-01', 'server', 'subnet-c'),
+    node('ubuntu', 'servertemplate', null),
+    node('alice', 'person', null),
+    node('bob', 'person', null),
+  ]
+
+  it('lifts a link shared by every record of a container to the outermost container', () => {
+    const edges = bundleSharedLookupEdges(
+      [
+        { source: 'app', target: 'ubuntu', relationship: 'template' },
+        { source: 'web', target: 'ubuntu', relationship: 'template' },
+        { source: 'dev-01', target: 'ubuntu', relationship: 'template' },
+      ],
+      nodes,
+    )
+
+    expect(edges).toEqual([
+      { source: 'eng', target: 'ubuntu', relationship: 'template' },
+    ])
+  })
+
+  it('stops at the container whose records disagree and keeps lone edges', () => {
+    const edges = bundleSharedLookupEdges(
+      [
+        { source: 'app', target: 'alice', relationship: 'owner' },
+        { source: 'web', target: 'alice', relationship: 'owner' },
+        { source: 'dev-01', target: 'bob', relationship: 'owner' },
+      ],
+      nodes,
+    )
+
+    expect(edges).toEqual([
+      { source: 'prod', target: 'alice', relationship: 'owner' },
+      { source: 'dev-01', target: 'bob', relationship: 'owner' },
+    ])
+  })
+
+  it('leaves links to nested records and from root-level records alone', () => {
+    const input = [
+      { source: 'app', target: 'subnet-b', relationship: 'peer' },
+      { source: 'alice', target: 'ubuntu', relationship: 'favourite' },
+    ]
+
+    expect(bundleSharedLookupEdges(input, nodes)).toEqual(input)
+  })
+})
 
 describe('generation preview graph', () => {
   it('includes layout algorithm changes in the remount key', () => {
@@ -286,6 +367,9 @@ describe('generation preview graph', () => {
       graph.nodes.find((node) => node.id === 'provider:1@root:node')
         ?.parentGroupId,
     ).toBeUndefined()
+    // The edge crosses the container wall, so it keeps its exact endpoints
+    // and every container switches to the nested strategy that lets ELK
+    // route between hierarchy levels.
     expect(graph.edges).toMatchObject([
       {
         sourceNodeId: 'network:1@business:1@root:group:group',
@@ -293,6 +377,11 @@ describe('generation preview graph', () => {
         label: 'provider',
       },
     ])
+    expect(
+      graph.nodes
+        .filter((node) => node.kind === 'group')
+        .map((node) => node.groupLayout),
+    ).toEqual([{ strategy: 'nested' }, { strategy: 'nested' }])
   })
   it('attaches recipe group layout policy to live generated group nodes', () => {
     const recipe = createRecipe({

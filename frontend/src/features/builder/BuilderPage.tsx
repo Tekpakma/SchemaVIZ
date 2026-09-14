@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import type { GenerationTemplateRead } from '@/api/contracts'
+import { BuilderAssistantPanel } from '@/features/ai/builder/BuilderAssistantPanel'
+import { useAssistantPanelStore } from '@/features/ai/builder/assistantState'
 import { createTemplateTextContent } from '@/features/lexical/templateTextContent'
 import { getBuilderRecipeSnapshot } from '@/store/builderStore'
 import type { WorkbenchTabId } from '@/store/workbenchStore'
@@ -141,6 +143,13 @@ function BuilderPageContent({
   const activeStepStatus = stepStatuses[activeStepIndex]!
   const canManageFeaturedTemplates =
     sessionState?.capabilities.canManageFeaturedTemplates ?? false
+  const assistantAvailable = sessionState?.aiEnabled ?? false
+  const assistantOpen = useAssistantPanelStore((state) => state.open)
+  const setAssistantOpen = useAssistantPanelStore((state) => state.setOpen)
+  const getRecipeSnapshot = useCallback(
+    () => getBuilderRecipeSnapshot(tabId) ?? recipeRef.current,
+    [tabId],
+  )
 
   function handleRegisterFlushInlineEdit(flush: FlushInlineNodeEdit | null) {
     flushInlineNodeEditRef.current = flush
@@ -272,6 +281,8 @@ function BuilderPageContent({
   // (avoiding a rerender cascade: commit -> draft changes -> new callback -> prop change)
   const styleDraftsRef = useRef(recipe.styleDrafts)
   const modelsRef = useRef(recipe.models)
+  const recipeRef = useRef(recipe)
+  recipeRef.current = recipe
 
   useEffect(() => {
     styleDraftsRef.current = recipe.styleDrafts
@@ -383,6 +394,8 @@ function BuilderPageContent({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
       <BuilderHeader
+        assistantAvailable={assistantAvailable}
+        assistantOpen={assistantOpen}
         exporting={exportMutation.isPending}
         importing={importMutation.isPending}
         saveError={saveError}
@@ -401,6 +414,7 @@ function BuilderPageContent({
           })
         }
         onTitleChange={actions.setTitle}
+        onToggleAssistant={() => setAssistantOpen(!assistantOpen)}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -433,6 +447,15 @@ function BuilderPageContent({
           selectedCanvasNodeId={selectedCanvasNodeId}
           stepCount={steps.length}
         />
+        {assistantAvailable && assistantOpen && (
+          <BuilderAssistantPanel
+            actions={actions}
+            activeExampleId={activeExampleId}
+            getRecipe={getRecipeSnapshot}
+            recipe={recipe}
+            onClose={() => setAssistantOpen(false)}
+          />
+        )}
       </div>
 
       <PublishRecipeDialog

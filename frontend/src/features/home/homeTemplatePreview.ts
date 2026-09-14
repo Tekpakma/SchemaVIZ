@@ -56,7 +56,7 @@ export type GenerationTemplateListWithSample = GenerationTemplateListOutput & {
 type DefinitionStep = {
   childIds: string[]
   filter: unknown
-  groupMode: 'none' | 'group' | 'breakout'
+  groupMode: 'none' | 'group' | 'breakout' | 'reference'
   id: string
   label: string | null
   parentId: string | null
@@ -129,7 +129,10 @@ function readOrderedSteps(version: TemplateVersion | null): DefinitionStep[] {
     visit(stepId)
   }
 
-  return orderedSteps.filter((step) => step.visibility !== 'hidden')
+  // Reference steps only add a line, never a node.
+  return orderedSteps.filter(
+    (step) => step.visibility !== 'hidden' && step.groupMode !== 'reference',
+  )
 }
 
 function getStepLabel(step: DefinitionStep) {

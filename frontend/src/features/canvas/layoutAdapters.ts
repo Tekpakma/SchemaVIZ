@@ -372,7 +372,10 @@ function hasInternalEdges(
   for (const edgeId of input.edgeOrder) {
     const edge = input.edgesById[edgeId]
     if (!edge) continue
-    if (childIdSet.has(edge.sourceNodeId) && childIdSet.has(edge.targetNodeId)) {
+    if (
+      childIdSet.has(edge.sourceNodeId) &&
+      childIdSet.has(edge.targetNodeId)
+    ) {
       return true
     }
   }
@@ -407,7 +410,9 @@ function createElkNode(
 
   // Group nodes delegate inner layout to ELK via SEPARATE_CHILDREN; ELK
   // computes both child positions and the group's own dimensions during
-  // the layout pass, so we don't preset width/height here.
+  // the layout pass, so we don't preset width/height here. An empty group
+  // has nothing to size itself from and keeps its own frame, otherwise ELK
+  // treats it as a point and neighbours are placed on top of it.
   let width: number | undefined = node.width
   let height: number | undefined = node.height
 
@@ -415,10 +420,13 @@ function createElkNode(
     const { layoutOptions: groupOptions } = resolveGroupLayoutOptions(
       node,
       hasInternalEdges(input, node.id, childIds),
+      getElkDirectionForCanvasFlowDirection(input.flowDirection),
     )
     Object.assign(layoutOptions, groupOptions)
-    width = undefined
-    height = undefined
+    if (children.length > 0) {
+      width = undefined
+      height = undefined
+    }
   }
 
   return {
@@ -483,7 +491,12 @@ function createElkEdge(
     ? [
         createElkPortId(
           edge.sourceNodeId,
-          resolveEdgePortSide(edge.sourcePort, 'source', flowDirection, layoutOptions),
+          resolveEdgePortSide(
+            edge.sourcePort,
+            'source',
+            flowDirection,
+            layoutOptions,
+          ),
         ),
       ]
     : [edge.sourceNodeId]
@@ -491,7 +504,12 @@ function createElkEdge(
     ? [
         createElkPortId(
           edge.targetNodeId,
-          resolveEdgePortSide(edge.targetPort, 'target', flowDirection, layoutOptions),
+          resolveEdgePortSide(
+            edge.targetPort,
+            'target',
+            flowDirection,
+            layoutOptions,
+          ),
         ),
       ]
     : [edge.targetNodeId]
@@ -552,11 +570,19 @@ export function createElkGraph(input: CanvasLayoutInput): ElkNode {
   // Non-directional algorithms (radial, force) use only their own config —
   // Layered defaults (elk.direction, elk.edgeRouting, layered.* spacing)
   // would conflict with how radial/force arrange nodes.
+  // `nested` groups only work when the root pass also includes descendants;
+  // otherwise ELK cannot find the endpoints of edges that cross a container.
+  const hasNestedGroups = Object.values(input.nodesById).some(
+    (node) => node.kind === 'group' && node.groupLayout?.strategy === 'nested',
+  )
   const rootLayoutOptions: LayoutOptions = directional
     ? {
         ...DEFAULT_ELK_LAYOUT_OPTIONS,
         ...input.layoutOptions,
         'elk.direction': getElkDirectionForCanvasFlowDirection(flowDirection),
+        ...(hasNestedGroups
+          ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' }
+          : {}),
       }
     : { ...input.layoutOptions }
 
@@ -661,7 +687,10 @@ function clipRoutePointToFrameBoundary(
   return clippedCandidate?.point ?? point
 }
 
-function getSectionPoints(edge: ElkExtendedEdge): Array<CanvasPoint> {
+function getSectionPoints(
+  edge: ElkExtendedEdge,
+  offset: CanvasPoint,
+): Array<CanvasPoint> {
   const section = edge.sections?.[0]
   if (!section) return []
 
@@ -670,14 +699,15 @@ function getSectionPoints(edge: ElkExtendedEdge): Array<CanvasPoint> {
     ...(section.bendPoints ?? []),
     section.endPoint,
   ].map((point) => ({
-    x: point.x,
-    y: point.y,
+    x: point.x + offset.x,
+    y: point.y + offset.y,
   }))
 }
 
 function getEdgeLabelPoint(
   edge: ElkExtendedEdge,
   routePoints: Array<CanvasPoint>,
+  offset: CanvasPoint,
 ): CanvasPoint | undefined {
   const label = edge.labels?.[0]
   if (typeof label?.x !== 'number' || typeof label.y !== 'number') {
@@ -689,8 +719,8 @@ function getEdgeLabelPoint(
   }
 
   return {
-    x: label.x + (label.width ?? 0) / 2,
-    y: label.y + (label.height ?? 0) / 2,
+    x: label.x + (label.width ?? 0) / 2 + offset.x,
+    y: label.y + (label.height ?? 0) / 2 + offset.y,
   }
 }
 
@@ -753,14 +783,24 @@ export function createGraphLayoutResult(
   const edgeRoutes = R.pipe(
     laidOutGraph.edges ?? [],
     R.flatMap((edge) => {
+      // With INCLUDE_CHILDREN ELK re-homes an edge to the lowest common
+      // ancestor of its endpoints and reports the route relative to that
+      // container, so it has to be shifted back into canvas coordinates.
+      const container =
+        edge.container && edge.container !== laidOutGraph.id
+          ? nodeFramesById[edge.container]
+          : undefined
+      const offset = container
+        ? { x: container.x, y: container.y }
+        : { x: 0, y: 0 }
       const points = clipEdgeRoutePoints(
         edge,
-        getSectionPoints(edge),
+        getSectionPoints(edge, offset),
         nodeFramesById,
       )
       if (points.length < 2 || !edge.id) return []
 
-      const labelPoint = getEdgeLabelPoint(edge, points)
+      const labelPoint = getEdgeLabelPoint(edge, points, offset)
 
       return [
         {

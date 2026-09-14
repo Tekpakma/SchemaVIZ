@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isMcpEnabled } from '@/features/ai/aiConfig'
 import type { AiToolContext } from '@/features/ai/tools'
 import { MCP_SERVER_INFO, dispatchMcpRequest } from '@/features/ai/mcp/server'
+import { requestOrigin } from '@/serverAuth/startAuth'
 
 function readBearerToken(request: Request): string | null {
   const header = request.headers.get('authorization')
@@ -49,6 +50,7 @@ export const Route = createFileRoute('/mcp')({
             user: { sub: 'mcp-client', name: 'MCP client' },
             accessToken: token,
           },
+          appOrigin: requestOrigin(request),
         }
 
         let message: Parameters<typeof dispatchMcpRequest>[0]

@@ -14,9 +14,19 @@ async function parseResponseBody(response: Response) {
   return text.length === 0 ? undefined : text
 }
 
-function resolveRequestUrl(url: string) {
+/**
+ * Generated operation paths are `/schema-viz/...`. In the browser they hit the
+ * Start proxy as-is; server code passes the Django base URL (which already
+ * ends in `/schema-viz`) and the prefix is swapped for it.
+ */
+function resolveRequestUrl(url: string, baseUrl?: string) {
   const normalizedPath = url.startsWith('/') ? url : `/${url}`
-  return normalizedPath
+  if (!baseUrl) return normalizedPath
+
+  const operationPath = normalizedPath.startsWith('/schema-viz/')
+    ? normalizedPath.slice('/schema-viz'.length)
+    : normalizedPath
+  return `${baseUrl.replace(/\/+$/, '')}${operationPath}`
 }
 
 function isUnsafeMethod(method: string | undefined) {
@@ -42,11 +52,16 @@ function createRequestHeaders(options: RequestInit) {
   return headers
 }
 
+export type SchemaVizFetchOptions = RequestInit & {
+  /** Absolute Django base URL for server-side calls that bypass the proxy. */
+  baseUrl?: string
+}
+
 export async function schemaVizFetch<T>(
   url: string,
-  options: RequestInit = {},
+  { baseUrl, ...options }: SchemaVizFetchOptions = {},
 ): Promise<T> {
-  const fullUrl = resolveRequestUrl(url)
+  const fullUrl = resolveRequestUrl(url, baseUrl)
   const response = await fetch(fullUrl, {
     ...options,
     credentials: options.credentials ?? 'include',

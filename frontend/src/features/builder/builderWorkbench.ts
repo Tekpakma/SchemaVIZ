@@ -17,6 +17,7 @@ import type {
   ExampleRecord,
   LayoutAlgorithm,
   RecipeData,
+  RecipeEdgeLabels,
   RecipeFilter,
   RecipeGroupRule,
   RecipeLayer,
@@ -75,6 +76,7 @@ export type BuilderDocumentActions = {
   setGroupLayout: (groupLayout: CanvasGroupLayoutPolicy) => void
   setLayoutAlgorithm: (algorithm: LayoutAlgorithm) => void
   setLayoutDirection: (direction: RecipeLayoutDirection) => void
+  setEdgeLabels: (mode: RecipeEdgeLabels) => void
 }
 
 export type BuilderOpenIntent =
@@ -347,6 +349,10 @@ export function useBuilderDocumentView(tabId: WorkbenchTabId | null) {
         },
         setLayoutDirection: (direction: RecipeLayoutDirection) => {
           builderActions.setLayoutDirection(tabId, direction)
+          markDirty()
+        },
+        setEdgeLabels: (mode: RecipeEdgeLabels) => {
+          builderActions.setEdgeLabels(tabId, mode)
           markDirty()
         },
       } satisfies BuilderDocumentActions,

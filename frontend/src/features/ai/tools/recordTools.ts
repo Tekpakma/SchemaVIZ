@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import * as z from 'zod'
 import { toolDefinition } from '@tanstack/ai'
 
 import {
@@ -37,9 +37,7 @@ export const findRecordsDef = toolDefinition({
   }),
   outputSchema: z.object({
     totalMatches: z.number(),
-    returned: z.array(
-      z.object({ recordId: z.string(), label: z.string() }),
-    ),
+    returned: z.array(z.object({ recordId: z.string(), label: z.string() })),
   }),
 })
 

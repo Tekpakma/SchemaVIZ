@@ -611,6 +611,52 @@ describe('layoutAdapters', () => {
     ])
   })
 
+  it('shifts routes ELK reports relative to a containing group into canvas space', () => {
+    // With INCLUDE_CHILDREN an edge between two children of the same group
+    // is re-homed to that group and its section is relative to the group.
+    const laidOutGraph: ElkNode = {
+      id: 'root',
+      children: [
+        {
+          id: 'group',
+          x: 100,
+          y: 50,
+          width: 300,
+          height: 200,
+          children: [
+            { id: 'a', x: 20, y: 40, width: 60, height: 40 },
+            { id: 'b', x: 200, y: 40, width: 60, height: 40 },
+          ],
+        },
+      ],
+      edges: [
+        {
+          id: 'edge',
+          sources: ['a'],
+          targets: ['b'],
+          container: 'group',
+          sections: [
+            {
+              id: 'section',
+              startPoint: { x: 80, y: 60 },
+              endPoint: { x: 200, y: 60 },
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(createGraphLayoutResult(laidOutGraph).edgeRoutes).toEqual([
+      {
+        id: 'edge',
+        points: [
+          { x: 180, y: 110 },
+          { x: 300, y: 110 },
+        ],
+      },
+    ])
+  })
+
   it('adapts schema graph groups, model nodes, and relation kinds', () => {
     const graph = createSchemaCanvasGraph({
       schemaHash: 'hash',

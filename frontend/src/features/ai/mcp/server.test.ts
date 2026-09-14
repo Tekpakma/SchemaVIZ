@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { schemaVizModelsList } from '@/api/generated/schema-viz'
 
 import type { AiToolContext } from '../tools'
-import { dispatchMcpRequest } from './server'
+import { dispatchMcpRequest, splitPreview } from './server'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGenerationRunsCreate: vi.fn(),
   schemaVizGenerationRunsValidateCreate: vi.fn(),
+  schemaVizGenerationTemplatesCreate: vi.fn(),
+  schemaVizGenerationTemplatesPublishCreate: vi.fn(),
+  schemaVizGenerationTemplatesRetrieve: vi.fn(),
+  schemaVizGenerationTemplatesUpdate: vi.fn(),
   schemaVizGraphRetrieve: vi.fn(),
   schemaVizModelDetailsRetrieve: vi.fn(),
   schemaVizModelsList: vi.fn(),
@@ -64,6 +68,8 @@ describe('mcp dispatch', () => {
     const names = response.result.tools.map((tool) => tool.name)
     expect(names).toContain('listModels')
     expect(names).toContain('createDiagram')
+    expect(names).toContain('publishDiagram')
+    expect(names[0]).toBe('drawDiagram')
 
     const listModels = response.result.tools.find(
       (tool) => tool.name === 'listModels',
@@ -132,6 +138,19 @@ describe('mcp dispatch', () => {
     )) as { result: { isError: boolean } }
 
     expect(response.result.isError).toBe(true)
+  })
+
+  it('separates a previewSvg from the JSON the model reads', () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"/>'
+
+    expect(splitPreview({ status: 'ok', previewSvg: svg })).toEqual({
+      previewSvg: svg,
+      rest: { status: 'ok' },
+    })
+    expect(splitPreview({ status: 'ok' })).toEqual({
+      previewSvg: null,
+      rest: { status: 'ok' },
+    })
   })
 
   it('rejects an unknown method with a protocol error', async () => {

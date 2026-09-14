@@ -7,7 +7,7 @@
  */
 import * as zod from 'zod';
 
-export const GroupModeEnum = zod.enum(['none', 'group', 'breakout']).describe('\* `none` - none\n\* `group` - group\n\* `breakout` - breakout')
+export const GroupModeEnum = zod.enum(['none', 'group', 'breakout', 'reference']).describe('\* `none` - none\n\* `group` - group\n\* `breakout` - breakout\n\* `reference` - reference')
 
 export type GroupModeEnum = zod.input<typeof GroupModeEnum>;
 export type GroupModeEnumOutput = zod.output<typeof GroupModeEnum>;

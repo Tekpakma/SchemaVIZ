@@ -141,6 +141,94 @@ describe('builder template recipe conversion', () => {
     })
   })
 
+  it('round-trips reference steps as edges plus reference rules', () => {
+    const recipe = createRecipeFromTemplate(
+      createTemplate({
+        draftVersion: {
+          id: '018f3b2e-8a9a-7c6d-9e0f-abcdefabcdef',
+          versionNumber: 1,
+          rootModel: 'infra.Environment',
+          createdBy: null,
+          createdAt: '2026-05-13T12:00:00+00:00',
+          layoutSettings: {},
+          definition: {
+            rootStepId: 'environment',
+            stepsById: {
+              environment: {
+                resolvedModelId: 'infra.Environment',
+                childIds: ['network', 'server'],
+              },
+              network: {
+                parentId: 'environment',
+                relationship: 'network',
+                resolvedModelId: 'infra.Network',
+                childIds: ['subnet'],
+              },
+              subnet: {
+                parentId: 'network',
+                relationship: 'subnets',
+                resolvedModelId: 'infra.Subnet',
+                childIds: [],
+                groupMode: 'group',
+              },
+              server: {
+                parentId: 'environment',
+                relationship: 'servers',
+                resolvedModelId: 'infra.Server',
+                childIds: ['server-subnet'],
+                groupMode: 'group',
+              },
+              'server-subnet': {
+                parentId: 'server',
+                relationship: 'subnet',
+                resolvedModelId: 'infra.Subnet',
+                childIds: [],
+                groupMode: 'reference',
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    // The reference step is a line, not a fifth model.
+    expect(recipe.models.map((model) => model.id)).toEqual([
+      'environment',
+      'network',
+      'subnet',
+      'server',
+    ])
+    expect(recipe.edges).toContainEqual(
+      expect.objectContaining({
+        id: 'edge-server-subnet',
+        fromModelId: 'server',
+        toModelId: 'subnet',
+        via: 'subnet',
+      }),
+    )
+    expect(recipe.groupRules).toContainEqual(
+      expect.objectContaining({
+        parentModelId: 'server',
+        childModelId: 'subnet',
+        via: 'subnet',
+        mode: 'reference',
+      }),
+    )
+
+    const source = recipeToInlineDefinition(recipe)
+    const steps = source!.inlineDefinition.stepsById
+    expect(steps['edge-server-subnet:ref']).toMatchObject({
+      parentId: 'server',
+      relationship: 'subnet',
+      resolvedModelId: 'infra.Subnet',
+      groupMode: 'reference',
+    })
+    expect(steps['server']!.childIds).toContain('edge-server-subnet:ref')
+    // The referenced step itself is untouched; its parent stays the container.
+    expect(steps['subnet']).toMatchObject({ parentId: 'network' })
+    expect(steps['network']).toMatchObject({ groupMode: 'group' })
+  })
+
   it('converts builder recipes to backend write payloads', () => {
     const recipe: RecipeData = {
       ...createRecipeFromTemplate(

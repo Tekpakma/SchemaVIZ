@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "schema-viz": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp",
+      "headers": { "Authorization": "Bearer ${input:schemaVizToken}" }
+    }
+  },
+  "inputs": [
+    {
+      "id": "schemaVizToken",
+      "type": "promptString",
+      "description": "SchemaVIZ MCP token (manage.py create_mcp_token)",
+      "password": true
+    }
+  ]
+}

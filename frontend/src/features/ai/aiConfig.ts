@@ -9,6 +9,7 @@
 
 import { getStartAuthBackend } from '@/serverAuth/startAuth'
 import type { StartAuthContext } from '@/serverAuth/startAuth'
+import { getForwardedBackendHeaders } from '@/features/canvas/layout.server'
 
 export const DEFAULT_AI_MODEL = 'gpt-4o'
 
@@ -34,10 +35,8 @@ async function fetchDjangoAiConfig(
   auth: StartAuthContext,
 ): Promise<DjangoAiConfig | null> {
   const { backendBaseUrl } = getStartAuthBackend()
-  const headers: Record<string, string> = { accept: 'application/json' }
-  if (auth.accessToken) {
-    headers.authorization = `Bearer ${auth.accessToken}`
-  }
+  // Forwarded headers cover both bearer sessions and Django session cookies.
+  const headers = getForwardedBackendHeaders(auth)
 
   try {
     const response = await fetch(`${backendBaseUrl}/session/ai-config/`, {
@@ -67,9 +66,12 @@ export async function resolveAiConfig(
     enabled: remote?.enabled !== false,
     apiKey: remote?.apiKey?.trim() || envValue('SCHEMA_VIZ_AI_API_KEY'),
     baseUrl:
-      remote?.baseUrl?.trim() || envValue('SCHEMA_VIZ_AI_BASE_URL') || undefined,
+      remote?.baseUrl?.trim() ||
+      envValue('SCHEMA_VIZ_AI_BASE_URL') ||
+      undefined,
     model:
-      remote?.model?.trim() || envValue('SCHEMA_VIZ_AI_MODEL') ||
+      remote?.model?.trim() ||
+      envValue('SCHEMA_VIZ_AI_MODEL') ||
       DEFAULT_AI_MODEL,
   }
 }

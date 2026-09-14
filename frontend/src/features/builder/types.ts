@@ -8,12 +8,7 @@ import type {
 import type { LayoutAlgorithm } from '@/features/elk/algorithms'
 
 export type RecipeStepKind =
-  | 'layers'
-  | 'traversal'
-  | 'filters'
-  | 'grouping'
-  | 'style'
-  | 'layout'
+  'layers' | 'traversal' | 'filters' | 'grouping' | 'style' | 'layout'
 
 export type { LayoutAlgorithm }
 export type RecipeLayoutDirection = CanvasFlowDirection
@@ -75,7 +70,8 @@ export interface TraversalEdge {
 
 export type TraversalRouteStep = SchemaRoute['route'][number]
 
-export type GroupMode = 'none' | 'group' | 'breakout'
+/** `reference` draws a line to the record where it already is instead of a new node. */
+export type GroupMode = 'none' | 'group' | 'breakout' | 'reference'
 
 export interface RecipeGroupRule {
   id: string
@@ -106,6 +102,16 @@ export interface RecipeStep {
   detail: ParseKeys<'translation'>
 }
 
+/** Where a recipe came from when it was not built by hand. */
+export interface RecipeProvenance {
+  source: 'assistant' | 'mcp'
+  createdAt: string
+  /** The user's request in their own words. */
+  intent?: string
+  /** Tool options the diagram was generated from. */
+  options?: Record<string, unknown>
+}
+
 // TODO: Align with backend GenerationTemplate model once API is wired
 // The backend GenerationTemplate (god node, 105 edges) holds the full
 // recipe definition including version, scope, publishedBy, etc.
@@ -126,4 +132,9 @@ export interface RecipeData {
   promoteTarget: string
   promoteVisibility: string
   promoteAudience: string
+  provenance?: RecipeProvenance | null
+  /** Which relationship names to print on edges; undefined behaves like 'all'. */
+  edgeLabels?: RecipeEdgeLabels
 }
+
+export type RecipeEdgeLabels = 'auto' | 'none' | 'all'

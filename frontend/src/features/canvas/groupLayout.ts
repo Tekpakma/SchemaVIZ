@@ -15,7 +15,7 @@ import type {
 // (and honors child→child edges when present, which the old code couldn't).
 // ---------------------------------------------------------------------------
 
-type ResolvedStrategy = Exclude<CanvasGroupLayoutStrategy, 'auto'>
+type ResolvedStrategy = Exclude<CanvasGroupLayoutStrategy, 'auto' | 'nested'>
 
 type ResolvedGroupLayoutPolicy = {
   strategy: CanvasGroupLayoutStrategy
@@ -131,7 +131,7 @@ function detectStrategy(hasInternalEdges: boolean): ResolvedStrategy {
 function resolveEffectiveStrategy(
   policy: ResolvedGroupLayoutPolicy,
   hasInternalEdges: boolean,
-): ResolvedStrategy {
+): ResolvedStrategy | 'nested' {
   return policy.strategy === 'auto'
     ? detectStrategy(hasInternalEdges)
     : policy.strategy
@@ -139,23 +139,37 @@ function resolveEffectiveStrategy(
 
 export type GroupLayoutResolution = {
   layoutOptions: LayoutOptions
-  strategy: ResolvedStrategy
+  strategy: ResolvedStrategy | 'nested'
 }
 
 /**
  * Returns ELK layout options to apply to a group ElkNode. The group runs its
  * own ELK algorithm via `SEPARATE_CHILDREN`; ELK computes child positions
  * and group dimensions during the same `elk.layout()` pass — callers must
- * NOT preset width/height/x/y on the group or its children.
+ * NOT preset width/height/x/y on the group or its children. `nested` groups
+ * instead stay inside the root pass (`INCLUDE_CHILDREN`).
  */
 export function resolveGroupLayoutOptions(
   group: CanvasGroupNode,
   hasInternalEdges: boolean,
+  direction: 'RIGHT' | 'LEFT' | 'DOWN' | 'UP' = 'RIGHT',
 ): GroupLayoutResolution {
   const policy = resolveGroupLayoutPolicy(group.groupLayout)
   const strategy = resolveEffectiveStrategy(policy, hasInternalEdges)
-  const algorithm = ELK_ALGORITHM_BY_STRATEGY[strategy]
   const topPadding = getGroupTopPadding(group, policy)
+
+  if (strategy === 'nested') {
+    return {
+      strategy,
+      layoutOptions: {
+        'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+        'elk.padding': getGroupPaddingOption(topPadding, policy),
+        'elk.spacing.nodeNode': String(policy.gapX),
+      },
+    }
+  }
+
+  const algorithm = ELK_ALGORITHM_BY_STRATEGY[strategy]
 
   const layoutOptions: LayoutOptions = {
     'elk.algorithm': algorithm,
@@ -169,10 +183,11 @@ export function resolveGroupLayoutOptions(
     layoutOptions['elk.aspectRatio'] = String(policy.aspectRatio)
   }
 
-  // layered inside a group: keep edge routing orthogonal to match the parent.
+  // layered inside a group: orthogonal routing like the parent, flowing the
+  // same way as the canvas so containers fill the page in that direction.
   if (algorithm === 'layered') {
     layoutOptions['elk.edgeRouting'] = 'ORTHOGONAL'
-    layoutOptions['elk.direction'] = 'RIGHT'
+    layoutOptions['elk.direction'] = direction
   }
 
   return { layoutOptions, strategy }

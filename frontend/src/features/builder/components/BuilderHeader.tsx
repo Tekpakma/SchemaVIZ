@@ -5,6 +5,7 @@ import {
   FileUp,
   Loader2,
   Save,
+  Sparkles,
   UploadCloud,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -12,8 +13,11 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { HomeLink } from '@/components/router/RouterLink'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 
 type BuilderHeaderProps = {
+  assistantAvailable?: boolean
+  assistantOpen?: boolean
   saveError?: string | null
   exporting?: boolean
   importing?: boolean
@@ -24,9 +28,12 @@ type BuilderHeaderProps = {
   onPublish: () => void
   onSave: () => void
   onTitleChange: (title: string) => void
+  onToggleAssistant?: () => void
 }
 
 export function BuilderHeader({
+  assistantAvailable = false,
+  assistantOpen = false,
   exporting = false,
   importing = false,
   onExport,
@@ -34,6 +41,7 @@ export function BuilderHeader({
   onPublish,
   onSave,
   onTitleChange,
+  onToggleAssistant,
   saveError,
   saving = false,
   title,
@@ -87,6 +95,19 @@ export function BuilderHeader({
             <FileUp className="size-3.5" />
           )}
         </Button>
+        {assistantAvailable && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t('assistant.toggle')}
+            aria-pressed={assistantOpen}
+            title={t('assistant.toggle')}
+            className={cn(assistantOpen && 'bg-accent text-brand')}
+            onClick={onToggleAssistant}
+          >
+            <Sparkles className="size-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"

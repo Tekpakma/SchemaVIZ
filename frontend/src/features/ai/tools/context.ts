@@ -1,4 +1,6 @@
 import type { StartAuthContext } from '@/serverAuth/startAuth'
+import { getStartAuthBackend } from '@/serverAuth/startAuth'
+import type { SchemaVizFetchOptions } from '@/api/fetch'
 import { getForwardedBackendHeaders } from '@/features/canvas/layout.server'
 
 /**
@@ -7,10 +9,23 @@ import { getForwardedBackendHeaders } from '@/features/canvas/layout.server'
  */
 export type AiToolContext = {
   auth: StartAuthContext
+  /** Public origin of this app; without it tools hand back relative links. */
+  appOrigin?: string
 }
 
-export function backendRequestInit(context: AiToolContext): RequestInit {
-  return { headers: getForwardedBackendHeaders(context.auth) }
+// Tools run on the server, so the generated client must talk to Django
+// directly instead of the browser-facing proxy path.
+export function backendRequestInit(
+  context: AiToolContext,
+): SchemaVizFetchOptions {
+  return {
+    headers: getForwardedBackendHeaders(context.auth),
+    baseUrl: getStartAuthBackend().backendBaseUrl,
+  }
+}
+
+export function appUrl(context: AiToolContext, path: string): string {
+  return context.appOrigin ? new URL(path, context.appOrigin).toString() : path
 }
 
 // Generated clients return a success|error union discriminated by status.

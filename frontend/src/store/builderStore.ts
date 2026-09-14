@@ -9,6 +9,7 @@ import type {
   RecipeGroupRule,
   RecipeLayer,
   RecipeLayoutDirection,
+  RecipeEdgeLabels,
   RecipeModel,
   RecipeStep,
   RecipeStyleDraft,
@@ -147,6 +148,7 @@ type BuilderActions = {
     tabId: WorkbenchTabId,
     direction: RecipeLayoutDirection,
   ) => void
+  setEdgeLabels: (tabId: WorkbenchTabId, mode: RecipeEdgeLabels) => void
 }
 
 function createInitialRecipe(): RecipeData {
@@ -324,6 +326,9 @@ function seedBuilderDocument(
   if (document.isSeeded) return false
 
   document.recipe = cloneRecipe(recipe)
+  // A template saved with a default record opens straight into live preview.
+  document.activeExampleId =
+    recipe.examples.find((example) => example.isDefault)?.id ?? null
   document.isSeeded = true
   return true
 }
@@ -790,6 +795,15 @@ const useBuilderStore = create<BuilderState>()(
             },
             false,
             'builder/setLayoutDirection',
+          ),
+
+        setEdgeLabels: (tabId, mode) =>
+          set(
+            (state) => {
+              ensureBuilderDocument(state, tabId).recipe.edgeLabels = mode
+            },
+            false,
+            'builder/setEdgeLabels',
           ),
       },
     })),

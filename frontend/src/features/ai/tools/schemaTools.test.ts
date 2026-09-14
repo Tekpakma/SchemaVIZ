@@ -67,7 +67,9 @@ describe('schema tools', () => {
 
     expect(modelsListMock).toHaveBeenCalledWith(
       { appLabel: undefined, excludeDjango: true },
-      { headers: { authorization: 'Bearer test-token' } },
+      expect.objectContaining({
+        headers: { authorization: 'Bearer test-token' },
+      }),
     )
   })
 
@@ -136,7 +138,9 @@ describe('schema tools', () => {
 
     expect(graphRetrieveMock).toHaveBeenCalledWith(
       { includeFields: false, apps: 'infrastructure' },
-      { headers: { authorization: 'Bearer test-token' } },
+      expect.objectContaining({
+        headers: { authorization: 'Bearer test-token' },
+      }),
     )
   })
 })

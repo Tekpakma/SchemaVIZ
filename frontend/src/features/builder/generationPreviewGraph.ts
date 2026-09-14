@@ -41,11 +41,97 @@ import { DEFAULT_RECIPE_GROUP_LAYOUT } from './types'
 
 const GENERATION_GROUP_LABEL_HEIGHT = 28
 const LAYER_GROUP_X_HINT_SPACING = 300
+/** Text templates may print the record's display name via `{{$display}}`. */
+const DISPLAY_NAME_FIELD = '$display'
 
 type GeneratedPreviewNode = NonNullable<GenerationRunResult['nodes']>[number]
+type GeneratedPreviewEdge = NonNullable<GenerationRunResult['edges']>[number]
 type NodeDimensions = {
   height?: number
   width?: number
+}
+
+/**
+ * When every record of one model inside a container points at the same
+ * root-level lookup (all servers of an environment run the same template,
+ * both networks sit in the same region), that link is a property of the
+ * container. One edge from the outermost such container replaces the fan of
+ * identical lines; records that disagree keep their own edge.
+ */
+export function bundleSharedLookupEdges(
+  edges: ReadonlyArray<GeneratedPreviewEdge>,
+  nodes: ReadonlyArray<GeneratedPreviewNode>,
+): Array<GeneratedPreviewEdge> {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  const childIdsByParent = new Map<string, Array<string>>()
+  for (const node of nodes) {
+    if (!node.parentId) continue
+    const siblings = childIdsByParent.get(node.parentId) ?? []
+    siblings.push(node.id)
+    childIdsByParent.set(node.parentId, siblings)
+  }
+  const modelOf = (id: string) => {
+    const node = nodesById.get(id)
+    return node ? `${node.appLabel}.${node.modelName}` : ''
+  }
+  const isLookup = (id: string) => {
+    const node = nodesById.get(id)
+    return Boolean(node && !node.parentId && !node.isGroup)
+  }
+
+  const descendantsOfModel = (containerId: string, model: string) => {
+    const found = new Set<string>()
+    const stack = [...(childIdsByParent.get(containerId) ?? [])]
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      if (modelOf(id) === model) found.add(id)
+      stack.push(...(childIdsByParent.get(id) ?? []))
+    }
+    return found
+  }
+
+  const candidates = new Map<string, Array<GeneratedPreviewEdge>>()
+  const result: Array<GeneratedPreviewEdge> = []
+  for (const edge of edges) {
+    if (!nodesById.get(edge.source)?.parentId || !isLookup(edge.target)) {
+      result.push(edge)
+      continue
+    }
+    const key = `${edge.relationship}|${edge.target}|${modelOf(edge.source)}`
+    const group = candidates.get(key) ?? []
+    group.push(edge)
+    candidates.set(key, group)
+  }
+
+  const rootContainerIds = nodes
+    .filter((node) => node.isGroup && !node.parentId)
+    .map((node) => node.id)
+
+  for (const group of candidates.values()) {
+    const first = group[0]!
+    const model = modelOf(first.source)
+    const sources = new Set(group.map((edge) => edge.source))
+    const covered = new Set<string>()
+
+    const visit = (containerId: string) => {
+      const records = descendantsOfModel(containerId, model)
+      if (records.size >= 2 && [...records].every((id) => sources.has(id))) {
+        result.push({ ...first, source: containerId })
+        for (const id of records) covered.add(id)
+        return
+      }
+      for (const childId of childIdsByParent.get(containerId) ?? []) {
+        if (nodesById.get(childId)?.isGroup) visit(childId)
+      }
+    }
+    for (const rootId of rootContainerIds) visit(rootId)
+
+    for (const edge of group) {
+      if (!covered.has(edge.source)) result.push(edge)
+    }
+  }
+
+  return result
 }
 
 function getTemplateAccent(template: StyleTemplate | null | undefined) {
@@ -56,6 +142,47 @@ function getTemplateAccent(template: StyleTemplate | null | undefined) {
   const candidate =
     styles.accentColor ?? styles.borderColor ?? styles.backgroundColor
   return typeof candidate === 'string' ? candidate : undefined
+}
+
+/** A draft may pin its own accent (per model) instead of the layer swatch. */
+function getDraftAccent(draft: RecipeStyleDraft | null) {
+  const data = draft?.typeSpecificData
+  if (!data || typeof data !== 'object') return undefined
+  const accent = (data as Record<string, unknown>).accent
+  return typeof accent === 'string' && /^#[0-9a-f]{6}$/i.test(accent)
+    ? accent
+    : undefined
+}
+
+function withDisplayName(node: GeneratedPreviewNode) {
+  return { [DISPLAY_NAME_FIELD]: node.displayName, ...node.fields }
+}
+
+function normalizeLabelWord(value: string) {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1$2')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/(ies|es|s)$/, '')
+}
+
+/**
+ * 'auto' drops labels that only repeat the target model ("servers" on an edge
+ * into Server), which is most of them in a generated landscape.
+ */
+function getEdgeLabel(
+  relationship: string | undefined,
+  targetModelName: string | undefined,
+  mode: RecipeData['edgeLabels'],
+) {
+  if (!relationship) return undefined
+  if (mode === 'none') return undefined
+  if (mode !== 'auto' || !targetModelName) return relationship
+  const rel = normalizeLabelWord(relationship)
+  const target = normalizeLabelWord(targetModelName)
+  return rel === target || (rel.length >= 4 && target.endsWith(rel))
+    ? undefined
+    : relationship
 }
 
 function readNodeDimensions(value: unknown): NodeDimensions {
@@ -155,7 +282,7 @@ function getNodeStyleContent({
       accent: recipeAccent ?? getTemplateAccent(styleTemplate),
       dimensions: readNodeDimensions(draft.dimensions),
       html: builderEditableTemplateNodeHtml(
-        renderTemplateTextContent(draft.textContent, node.fields),
+        renderTemplateTextContent(draft.textContent, withDisplayName(node)),
         recipeAccent ?? getTemplateAccent(styleTemplate),
       ),
     }
@@ -166,7 +293,10 @@ function getNodeStyleContent({
       accent: recipeAccent ?? getTemplateAccent(styleTemplate),
       dimensions: readNodeDimensions(styleTemplate.dimensions),
       html: builderEditableTemplateNodeHtml(
-        renderTemplateTextContent(styleTemplate.textContent, node.fields),
+        renderTemplateTextContent(
+          styleTemplate.textContent,
+          withDisplayName(node),
+        ),
         recipeAccent ?? getTemplateAccent(styleTemplate),
       ),
     }
@@ -199,7 +329,7 @@ function getGroupLabelContent({
   return {
     html: draft?.textContent
       ? builderEditableTemplateNodeHtml(
-          renderTemplateTextContent(textContent, node.fields),
+          renderTemplateTextContent(textContent, withDisplayName(node)),
           recipeAccent,
         )
       : builderPreviewGroupLabelHtml(label, recipeAccent),
@@ -229,6 +359,8 @@ function getGenerationPreviewRecipeKeyParts(recipe: RecipeData | undefined) {
     recipe.layoutAlgorithm,
     'layoutDirection',
     recipe.layoutDirection,
+    'edgeLabels',
+    recipe.edgeLabels ?? 'all',
     'groupLayout',
     JSON.stringify(recipe.groupLayout),
     ...recipe.layers.flatMap((layer) => ['layer', layer.id, layer.label]),
@@ -332,6 +464,46 @@ function getRecipeGroupLayoutForGeneratedGroup(
   return matchingRule?.layout ?? groupLayout
 }
 
+function ancestorChain(
+  nodeId: string,
+  parentNodeIdByNodeId: Map<string, string>,
+): Array<string> {
+  const chain = [nodeId]
+  const visited = new Set(chain)
+  let current = parentNodeIdByNodeId.get(nodeId)
+  while (current && !visited.has(current)) {
+    chain.push(current)
+    visited.add(current)
+    current = parentNodeIdByNodeId.get(current)
+  }
+  return chain
+}
+
+/**
+ * Lifts both endpoints until they share a parent (or both sit at root). Edges
+ * between siblings stay exact; only edges crossing container walls move to
+ * the containers themselves.
+ */
+function promoteToSiblingLevel(
+  sourceId: string,
+  targetId: string,
+  parentNodeIdByNodeId: Map<string, string>,
+): [string, string] {
+  const sourceChain = ancestorChain(sourceId, parentNodeIdByNodeId)
+  const targetChain = ancestorChain(targetId, parentNodeIdByNodeId)
+  for (const source of sourceChain) {
+    for (const target of targetChain) {
+      if (
+        source !== target &&
+        parentNodeIdByNodeId.get(source) === parentNodeIdByNodeId.get(target)
+      ) {
+        return [source, target]
+      }
+    }
+  }
+  return [sourceId, targetId]
+}
+
 export function getGenerationPreviewCanvasGraph(
   response: GenerationRunResponse | GenerationRunResult,
   recipe?: RecipeData,
@@ -347,7 +519,7 @@ export function getGenerationPreviewCanvasGraph(
     ),
   )
   const nodes = result.nodes ?? []
-  const resultEdges = result.edges ?? []
+  const resultEdges = bundleSharedLookupEdges(result.edges ?? [], nodes)
   const layers = getGenerationPreviewLayers(recipe, nodes)
 
   // Track group ordering for INTERACTIVE layering hints
@@ -365,7 +537,8 @@ export function getGenerationPreviewCanvasGraph(
         node,
         recipeModel,
       )
-      const recipeAccent = getRecipeAccent(recipe, recipeModel)
+      const recipeAccent =
+        getDraftAccent(recipeDraft) ?? getRecipeAccent(recipe, recipeModel)
       const label = node.displayName || node.label || ''
       const labelContent = getGroupLabelContent({
         draft: recipeDraft,
@@ -392,6 +565,10 @@ export function getGenerationPreviewCanvasGraph(
         contentHeight: GENERATION_GROUP_LABEL_HEIGHT,
         groupLayout: getRecipeGroupLayoutForGeneratedGroup(recipe, node),
         version: 1,
+        // Containers keep the model colour on their border; shapes do not apply.
+        ...(recipeAccent
+          ? { styleOverrides: { borderColor: recipeAccent } }
+          : {}),
       })
     } else {
       const recipeModel = getRecipeModelForGeneratedNode(recipe, node)
@@ -400,7 +577,8 @@ export function getGenerationPreviewCanvasGraph(
         node,
         recipeModel,
       )
-      const recipeAccent = getRecipeAccent(recipe, recipeModel)
+      const recipeAccent =
+        getDraftAccent(recipeDraft) ?? getRecipeAccent(recipe, recipeModel)
       const styleTemplate = node.styleTemplateId
         ? styleTemplatesById.get(node.styleTemplateId)
         : null
@@ -435,16 +613,51 @@ export function getGenerationPreviewCanvasGraph(
 
   const allNodes = [...groupNodes, ...modelNodes]
   const parentNodeIdByNodeId = getParentNodeIdByNodeId(allNodes)
+  const modelNameByNodeId = new Map(
+    nodes.map((node) => [node.id, node.modelName]),
+  )
+
+  // Edges that cross a container wall (a server inside its environment
+  // pointing at a subnet inside its network) can only be routed when every
+  // container is laid out by the root ELK pass; that costs the compact
+  // rectpacking of edge-free groups, so it is only switched on when needed.
+  const crossesHierarchy = resultEdges.some(
+    (edge) =>
+      parentNodeIdByNodeId.get(edge.source) !==
+        parentNodeIdByNodeId.get(edge.target) &&
+      isRenderableCanvasEdge(
+        { sourceNodeId: edge.source, targetNodeId: edge.target },
+        parentNodeIdByNodeId,
+      ),
+  )
+  if (crossesHierarchy) {
+    for (const group of groupNodes) {
+      if (group.kind === 'group') group.groupLayout = { strategy: 'nested' }
+    }
+  }
+
+  const seenEdgeKeys = new Set<string>()
   const edges: CanvasEdge[] = resultEdges.flatMap((edge, index) => {
+    const [sourceNodeId, targetNodeId] = crossesHierarchy
+      ? [edge.source, edge.target]
+      : promoteToSiblingLevel(edge.source, edge.target, parentNodeIdByNodeId)
+    const dedupeKey = `${sourceNodeId}->${targetNodeId}`
+    if (seenEdgeKeys.has(dedupeKey)) return []
+
     const canvasEdge: CanvasEdge = {
       id: `gen-edge-${index}-${edge.source}-${edge.target}`,
-      sourceNodeId: edge.source,
-      targetNodeId: edge.target,
+      sourceNodeId,
+      targetNodeId,
       kind: 'default',
-      label: edge.relationship || undefined,
+      label: getEdgeLabel(
+        edge.relationship,
+        modelNameByNodeId.get(edge.target),
+        recipe?.edgeLabels,
+      ),
     }
 
     if (!isRenderableCanvasEdge(canvasEdge, parentNodeIdByNodeId)) return []
+    seenEdgeKeys.add(dedupeKey)
     return [canvasEdge]
   })
 

@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { BoxesIcon, GroupIcon, NetworkIcon } from 'lucide-react'
+import { BoxesIcon, GroupIcon, Link2Icon, NetworkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { cn } from '@/lib/utils'
@@ -20,7 +20,7 @@ interface GroupingStepProps {
   models: RecipeModel[]
 }
 
-const GROUP_MODES: GroupMode[] = ['none', 'group', 'breakout']
+const GROUP_MODES: GroupMode[] = ['none', 'group', 'breakout', 'reference']
 
 function getModelDisplayName(models: RecipeModel[], modelId: string) {
   return (
@@ -61,6 +61,8 @@ function getModeIcon(mode: GroupMode) {
       return <GroupIcon className="size-3" aria-hidden="true" />
     case 'breakout':
       return <BoxesIcon className="size-3" aria-hidden="true" />
+    case 'reference':
+      return <Link2Icon className="size-3" aria-hidden="true" />
     default:
       return <NetworkIcon className="size-3" aria-hidden="true" />
   }
