@@ -1,4 +1,4 @@
-import { renderToStaticMarkup } from 'react-dom/server'
+﻿import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -21,8 +21,18 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
 
-const stagedev = { id: 'stagedev', label: 'Stage Dev', readOnly: false }
-const prod = { id: 'prod', label: 'COSMOS', readOnly: true }
+const stagedev = {
+  id: 'stagedev',
+  label: 'Stage Dev',
+  readOnly: false,
+  isDefault: true,
+}
+const prod = {
+  id: 'prod',
+  label: 'COSMOS',
+  readOnly: true,
+  isDefault: false,
+}
 
 function sessionWith(
   source: typeof stagedev | typeof prod,

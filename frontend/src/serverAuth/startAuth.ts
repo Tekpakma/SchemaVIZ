@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+﻿import { randomBytes } from 'node:crypto'
 import * as oauth from 'oauth4webapi'
 import { sealData, unsealData } from 'iron-session'
 
@@ -12,9 +12,9 @@ import {
   SOURCE_COOKIE,
   findStartAuthSource,
   getDefaultStartAuthSource,
-  getStartAuthSources,
   isReadOnlyRequestAllowed,
   toPublicSource,
+  toPublicSources,
 } from './sources'
 import type {
   PublicStartAuthSource,
@@ -252,12 +252,13 @@ function publicSession(
   source: StartAuthSource,
 ): PublicStartAuthSession {
   const mode = getAuthMode()
+  const defaultSourceId = getDefaultStartAuthSource().id
   return {
     mode,
     authRequired: mode === 'oidc',
     user,
-    source: toPublicSource(source),
-    sources: getStartAuthSources().map(toPublicSource),
+    source: toPublicSource(source, defaultSourceId),
+    sources: toPublicSources(),
     auth: {
       providerLabel: source.oidc?.providerLabel ?? source.label,
       loginUrl: '/_schema-viz/auth/login',

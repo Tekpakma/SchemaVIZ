@@ -6,6 +6,7 @@ const StartAuthSourceSchema = z.object({
   label: z.string(),
   description: z.string().optional(),
   readOnly: z.boolean(),
+  isDefault: z.boolean().default(false),
 })
 
 export type StartAuthSource = z.infer<typeof StartAuthSourceSchema>

@@ -62,13 +62,16 @@ then appears in the navbar.
 | `oidc` | `issuer`, `clientId`, optional `clientSecret`, `scope`, `providerLabel`. |
 | `readOnly` | `true` blocks every request that could change data (see below). Default `false`. |
 
-- The first source is the default. Set `SCHEMA_VIZ_DEFAULT_SOURCE` to an `id` to change that.
+- **Default source:** the source a user gets until they pick another one. Set it
+  explicitly with `SCHEMA_VIZ_DEFAULT_SOURCE=<id>`; without it the first source in the list
+  is the default. An id that is not in the list is a configuration error (the auth endpoints
+  answer `500` and the health check fails) instead of silently using another backend.
+  The picker marks the default source. MCP (`/mcp`) always uses it.
 - Without `SCHEMA_VIZ_SOURCES` the single-backend variables are used and no picker is shown.
 - Every source has its own sign-in session, so switching does not sign the user out of the others.
   The chosen source is remembered in the `sv_source` cookie and validated against the configured list on every request.
 - Each backend needs an OAuth2 application with the redirect URI `https://<this-host>/_schema-viz/auth/callback`.
 - `SCHEMA_VIZ_SOURCES` is read on the server only. The browser never sees issuers or client IDs.
-- MCP (`/mcp`) always uses the default source.
 
 ### Read-only sources
 
