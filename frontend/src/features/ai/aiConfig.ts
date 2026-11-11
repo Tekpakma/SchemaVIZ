@@ -7,7 +7,6 @@
  * browser or included in an error response.
  */
 
-import { getStartAuthBackend } from '@/serverAuth/startAuth'
 import type { StartAuthContext } from '@/serverAuth/startAuth'
 import { getForwardedBackendHeaders } from '@/features/canvas/layout.server'
 
@@ -34,7 +33,7 @@ function envValue(name: string): string {
 async function fetchDjangoAiConfig(
   auth: StartAuthContext,
 ): Promise<DjangoAiConfig | null> {
-  const { backendBaseUrl } = getStartAuthBackend()
+  const { backendBaseUrl } = auth.source
   // Forwarded headers cover both bearer sessions and Django session cookies.
   const headers = getForwardedBackendHeaders(auth)
 

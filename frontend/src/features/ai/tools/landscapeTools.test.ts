@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { schemaVizGraphRetrieve } from '@/api/generated/schema-viz'
 
 import type { AiToolContext } from './context'
 import { buildLandscapeSpec, suggestDiagram } from './landscapeTools'
+import { TEST_SOURCE } from '@/serverAuth/testing'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGraphRetrieve: vi.fn(),
@@ -330,6 +331,7 @@ describe('suggestDiagram', () => {
   const context: AiToolContext = {
     auth: {
       kind: 'dev',
+      source: TEST_SOURCE,
       user: { sub: 'tester', name: 'Tester' },
       accessToken: 'test-token',
     },
@@ -340,7 +342,7 @@ describe('suggestDiagram', () => {
     vi.clearAllMocks()
   })
 
-  it('loads the compact graph with the caller’s credentials', async () => {
+  it('loads the compact graph with the callerâ€™s credentials', async () => {
     graphMock.mockResolvedValue({
       data: { schemaHash: 'x', groups: [], ...graph },
       headers: new Headers(),

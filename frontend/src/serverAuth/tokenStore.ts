@@ -6,6 +6,8 @@ import type { StartAuthUser } from './startAuth'
 
 export type StartAuthTokenRecord = {
   sessionId: string
+  /** The source the session belongs to; absent in records written before sources existed. */
+  sourceId?: string
   user: StartAuthUser
   refreshToken: string
   idToken?: string

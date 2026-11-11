@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { schemaVizModelsList } from '@/api/generated/schema-viz'
 
 import type { AiToolContext } from '../tools'
 import { dispatchMcpRequest, splitPreview } from './server'
+import { TEST_SOURCE } from '@/serverAuth/testing'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGenerationRunsCreate: vi.fn(),
@@ -28,6 +29,7 @@ const modelsListMock = vi.mocked(schemaVizModelsList)
 const context: AiToolContext = {
   auth: {
     kind: 'browser',
+    source: TEST_SOURCE,
     user: { sub: 'mcp-client', name: 'MCP client' },
     accessToken: 'test-token',
   },

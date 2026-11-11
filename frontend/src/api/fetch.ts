@@ -1,5 +1,6 @@
 import { parse as parseCookie } from 'cookie-es'
 
+import { isReadOnlyRequestAllowed } from './readOnly'
 import { redirectToLogin } from './sourceAuth'
 
 async function parseResponseBody(response: Response) {
@@ -55,12 +56,27 @@ function createRequestHeaders(options: RequestInit) {
 export type SchemaVizFetchOptions = RequestInit & {
   /** Absolute Django base URL for server-side calls that bypass the proxy. */
   baseUrl?: string
+  /** Refuses calls that could change data, for read-only sources. */
+  readOnly?: boolean
 }
 
 export async function schemaVizFetch<T>(
   url: string,
-  { baseUrl, ...options }: SchemaVizFetchOptions = {},
+  { baseUrl, readOnly, ...options }: SchemaVizFetchOptions = {},
 ): Promise<T> {
+  if (readOnly) {
+    const operationPath = url.startsWith('/schema-viz/')
+      ? url.slice('/schema-viz'.length)
+      : url
+    if (!isReadOnlyRequestAllowed(options.method, operationPath)) {
+      return {
+        data: { detail: 'This source is read-only.' },
+        status: 403,
+        headers: new Headers(),
+      } as T
+    }
+  }
+
   const fullUrl = resolveRequestUrl(url, baseUrl)
   const response = await fetch(fullUrl, {
     ...options,
