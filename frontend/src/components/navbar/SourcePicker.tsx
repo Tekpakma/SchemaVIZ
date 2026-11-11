@@ -39,6 +39,23 @@ function ReadOnlyTag({ className }: { className?: string }) {
   )
 }
 
+function SourceTags({ source }: { source: StartAuthSource }) {
+  const { t } = useTranslation()
+
+  if (!source.isDefault && !source.readOnly) return null
+
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {source.isDefault ? (
+        <span className="rounded-full border border-border px-1.5 py-px text-[10.5px] font-medium text-muted-foreground">
+          {t('source.default')}
+        </span>
+      ) : null}
+      {source.readOnly ? <ReadOnlyTag /> : null}
+    </span>
+  )
+}
+
 /**
  * Lets the user pick which backend this SchemaViz talks to. It only appears
  * when the deployment lists more than one source.
@@ -96,7 +113,7 @@ export function SourcePicker() {
                     </span>
                   ) : null}
                 </span>
-                {source.readOnly ? <ReadOnlyTag /> : null}
+                <SourceTags source={source} />
               </Button>
             ))}
           </div>

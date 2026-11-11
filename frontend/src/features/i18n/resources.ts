@@ -17,6 +17,7 @@ export const resources = {
       },
       source: {
         active: 'Aktiv',
+        default: 'Standard',
         label: 'Datenquelle',
         readOnly: 'Nur lesen',
         readOnlyBanner:
@@ -690,6 +691,7 @@ export const resources = {
       },
       source: {
         active: 'Active',
+        default: 'Default',
         label: 'Data source',
         readOnly: 'Read-only',
         readOnlyBanner:

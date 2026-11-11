@@ -119,19 +119,64 @@ afterEach(() => {
 })
 
 describe('source selection', () => {
-  it('reports the sources and the default one without any cookie', async () => {
+  it('reports the sources and which one is the default', async () => {
     const response = await handleStartAuthRequest(
       new Request('http://app.test/_schema-viz/auth/session'),
     )
     const body = await response!.json()
 
-    expect(body.source).toMatchObject({ id: 'stagedev', readOnly: false })
-    expect(body.sources.map((source: { id: string }) => source.id)).toEqual([
-      'stagedev',
-      'qas',
-      'prod',
+    expect(body.source).toMatchObject({ id: 'stagedev', isDefault: true })
+    expect(
+      body.sources.map((source: { id: string; isDefault: boolean }) => [
+        source.id,
+        source.isDefault,
+      ]),
+    ).toEqual([
+      ['stagedev', true],
+      ['qas', false],
+      ['prod', false],
     ])
     expect(JSON.stringify(body)).not.toContain('draw-prod')
+  })
+
+  it('uses the configured default when the user has not picked a source', async () => {
+    process.env.SCHEMA_VIZ_DEFAULT_SOURCE = 'prod'
+
+    const response = await handleStartAuthRequest(
+      new Request('http://app.test/_schema-viz/auth/session'),
+    )
+    const body = await response!.json()
+
+    expect(body.source).toMatchObject({
+      id: 'prod',
+      isDefault: true,
+      readOnly: true,
+    })
+  })
+
+  it('shows a picked source as not default', async () => {
+    const response = await handleStartAuthRequest(
+      new Request('http://app.test/_schema-viz/auth/session', {
+        headers: { cookie: 'sv_source=qas' },
+      }),
+    )
+
+    expect((await response!.json()).source).toMatchObject({
+      id: 'qas',
+      isDefault: false,
+    })
+  })
+
+  it('does not guess a backend when the configured default is unknown', async () => {
+    process.env.SCHEMA_VIZ_DEFAULT_SOURCE = 'typo'
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const response = await handleStartAuthRequest(
+      new Request('http://app.test/_schema-viz/auth/session'),
+    )
+
+    expect(response?.status).toBe(500)
+    expect((await response!.json()).error).toContain('SCHEMA_VIZ_DEFAULT_SOURCE')
   })
 
   it('follows the sv_source cookie and flags a read-only source', async () => {

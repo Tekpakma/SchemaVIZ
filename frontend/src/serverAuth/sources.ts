@@ -30,6 +30,8 @@ export type PublicStartAuthSource = {
   label: string
   description?: string
   readOnly: boolean
+  /** The source used when a user has not picked one. */
+  isDefault: boolean
 }
 
 export const DEFAULT_SOURCE_ID = 'default'
@@ -161,10 +163,22 @@ export function getStartAuthSources(): Array<StartAuthSource> {
 
 export function getDefaultStartAuthSource(): StartAuthSource {
   const sources = getStartAuthSources()
-  const preferred = process.env.SCHEMA_VIZ_DEFAULT_SOURCE?.trim()
   const first = sources[0]
   if (!first) throw new Error('No SchemaViz source is configured.')
-  return (preferred && sources.find((source) => source.id === preferred)) || first
+
+  const preferred = process.env.SCHEMA_VIZ_DEFAULT_SOURCE?.trim()
+  if (!preferred) return first
+
+  const configured = sources.find((source) => source.id === preferred)
+  if (!configured) {
+    // A silent fallback would land users on a backend nobody chose.
+    throw new Error(
+      `SCHEMA_VIZ_DEFAULT_SOURCE "${preferred}" is not a configured source (${sources
+        .map((source) => source.id)
+        .join(', ')}).`,
+    )
+  }
+  return configured
 }
 
 export function findStartAuthSource(
@@ -174,13 +188,24 @@ export function findStartAuthSource(
   return getStartAuthSources().find((source) => source.id === id) ?? null
 }
 
-export function toPublicSource(source: StartAuthSource): PublicStartAuthSource {
+export function toPublicSource(
+  source: StartAuthSource,
+  defaultSourceId: string,
+): PublicStartAuthSource {
   return {
     id: source.id,
     label: source.label,
     description: source.description,
     readOnly: source.readOnly,
+    isDefault: source.id === defaultSourceId,
   }
+}
+
+export function toPublicSources(): Array<PublicStartAuthSource> {
+  const defaultSourceId = getDefaultStartAuthSource().id
+  return getStartAuthSources().map((source) =>
+    toPublicSource(source, defaultSourceId),
+  )
 }
 
 export function __resetStartAuthSourcesCacheForTests(): void {

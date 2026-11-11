@@ -8,6 +8,7 @@ import {
   getStartAuthSources,
   parseStartAuthSources,
   toPublicSource,
+  toPublicSources,
 } from './sources'
 
 const KEYS = [
@@ -147,12 +148,29 @@ describe('default and lookup', () => {
     expect(getDefaultStartAuthSource().id).toBe('stagedev')
   })
 
-  it('honours SCHEMA_VIZ_DEFAULT_SOURCE and ignores unknown values', () => {
+  it('honours SCHEMA_VIZ_DEFAULT_SOURCE', () => {
     process.env.SCHEMA_VIZ_DEFAULT_SOURCE = 'prod'
-    expect(getDefaultStartAuthSource().id).toBe('prod')
 
+    expect(getDefaultStartAuthSource().id).toBe('prod')
+  })
+
+  it('fails instead of silently falling back when the default is unknown', () => {
     process.env.SCHEMA_VIZ_DEFAULT_SOURCE = 'nope'
-    expect(getDefaultStartAuthSource().id).toBe('stagedev')
+
+    expect(() => getDefaultStartAuthSource()).toThrow(
+      'SCHEMA_VIZ_DEFAULT_SOURCE "nope" is not a configured source (stagedev, prod)',
+    )
+  })
+
+  it('marks exactly the default source as default in the public list', () => {
+    process.env.SCHEMA_VIZ_DEFAULT_SOURCE = 'prod'
+
+    expect(
+      toPublicSources().map((source) => [source.id, source.isDefault]),
+    ).toEqual([
+      ['stagedev', false],
+      ['prod', true],
+    ])
   })
 
   it('finds sources by id only', () => {
@@ -163,13 +181,14 @@ describe('default and lookup', () => {
   })
 
   it('never exposes OIDC settings to the browser', () => {
-    const publicSource = toPublicSource(findStartAuthSource('prod')!)
+    const publicSource = toPublicSource(findStartAuthSource('prod')!, 'stagedev')
 
     expect(publicSource).toEqual({
       id: 'prod',
       label: 'COSMOS',
       description: 'Production data',
       readOnly: true,
+      isDefault: false,
     })
     expect(JSON.stringify(publicSource)).not.toContain('prod.example')
   })
