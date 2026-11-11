@@ -7,6 +7,22 @@ import {
   resetDefaultStartAuthTokenStoreForTests,
 } from './tokenStore'
 import type { StartAuthTokenRecord, StartAuthTokenStore } from './tokenStore'
+import {
+  DEFAULT_SOURCE_ID,
+  SOURCE_COOKIE,
+  findStartAuthSource,
+  getDefaultStartAuthSource,
+  getStartAuthSources,
+  isReadOnlyRequestAllowed,
+  toPublicSource,
+} from './sources'
+import type {
+  PublicStartAuthSource,
+  StartAuthBackend,
+  StartAuthSource,
+} from './sources'
+
+export type { PublicStartAuthSource, StartAuthBackend, StartAuthSource }
 
 type OidcTokens = {
   access_token?: string
@@ -28,24 +44,12 @@ type SessionCookiePayload = {
   createdAt: number
 }
 
-export type StartAuthBackend = {
-  label: string
-  description?: string
-  backendBaseUrl: string
-  basePath?: string
-  oidc?: {
-    issuer: string
-    clientId: string
-    clientSecret?: string
-    scope: string
-    providerLabel?: string
-  }
-}
-
 export type PublicStartAuthSession = {
   mode: 'dev' | 'oidc' | 'session'
   authRequired: boolean
   user: StartAuthUser | null
+  source: PublicStartAuthSource
+  sources: Array<PublicStartAuthSource>
   auth: {
     providerLabel: string
     loginUrl: string
@@ -58,12 +62,15 @@ export type StartAuthContext = {
   sessionId?: string
   user: StartAuthUser
   accessToken?: string
+  /** The backend this request is served against. */
+  source: StartAuthSource
 }
 
 type TransactionCookie = {
   state: string
   codeVerifier: string
   next: string
+  sourceId: string
   createdAt: number
 }
 
@@ -73,11 +80,11 @@ type OAuthOverrides = {
   processRefreshTokenResponse?: typeof oauth.processRefreshTokenResponse
 }
 
-const SESSION_COOKIE = 'sv_session'
+const LEGACY_SESSION_COOKIE = 'sv_session'
 const TX_COOKIE = 'sv_start_oidc_tx'
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
+const SOURCE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 const TX_MAX_AGE_SECONDS = 60 * 10
-const DEFAULT_SCOPE = 'openid profile email'
 const ACCESS_TOKEN_REFRESH_BUFFER_MS = 30_000
 const DJANGO_SESSION_AUTH_MODES = new Set(['session', 'django-session'])
 
@@ -165,20 +172,53 @@ function clearCookie(name: string): string {
   return serializeCookie(name, '', { maxAge: 0 })
 }
 
-async function readSessionCookie(
-  request: Request,
-): Promise<SessionCookiePayload | null> {
-  return unseal<SessionCookiePayload>(parseCookies(request)[SESSION_COOKIE])
+/**
+ * Every source keeps its own session, so switching sources does not sign the
+ * user out of the others. The default single-source setup keeps the cookie
+ * name that existed before sources were introduced.
+ */
+function sessionCookieName(source: StartAuthSource): string {
+  return source.id === DEFAULT_SOURCE_ID
+    ? LEGACY_SESSION_COOKIE
+    : `${LEGACY_SESSION_COOKIE}_${source.id}`
 }
 
-async function sealSessionCookie(sessionId: string): Promise<string> {
+async function readSessionCookie(
+  request: Request,
+  source: StartAuthSource,
+): Promise<SessionCookiePayload | null> {
+  return unseal<SessionCookiePayload>(
+    parseCookies(request)[sessionCookieName(source)],
+  )
+}
+
+async function sealSessionCookie(
+  sessionId: string,
+  source: StartAuthSource,
+): Promise<string> {
   const sealed = await seal<SessionCookiePayload>(
     { sessionId, createdAt: Date.now() },
     SESSION_MAX_AGE_SECONDS,
   )
-  return serializeCookie(SESSION_COOKIE, sealed, {
+  return serializeCookie(sessionCookieName(source), sealed, {
     maxAge: SESSION_MAX_AGE_SECONDS,
   })
+}
+
+function sourceCookie(source: StartAuthSource): string {
+  return serializeCookie(SOURCE_COOKIE, source.id, {
+    maxAge: SOURCE_COOKIE_MAX_AGE_SECONDS,
+  })
+}
+
+/**
+ * The source of a request is the one named in the `sv_source` cookie. The
+ * cookie is only a preference: it is validated against the configured list on
+ * every request, so an unknown value falls back to the default source.
+ */
+export function resolveRequestSource(request: Request): StartAuthSource {
+  const fromCookie = findStartAuthSource(parseCookies(request)[SOURCE_COOKIE])
+  return fromCookie ?? getDefaultStartAuthSource()
 }
 
 function redirect(
@@ -202,44 +242,24 @@ function json(
   return new Response(JSON.stringify(data), { ...init, headers })
 }
 
-function normalizeBackendBaseUrl(value?: string): string {
-  const configured =
-    value?.trim() || process.env.SCHEMA_VIZ_SERVER_BASE_URL?.trim()
-  if (configured) return configured.replace(/\/+$/g, '')
-  return 'http://localhost:8000/schema-viz'
+/** The backend used when no request context says otherwise (single-source setups, MCP). */
+export function getStartAuthBackend(): StartAuthSource {
+  return getDefaultStartAuthSource()
 }
 
-export function getStartAuthBackend(): StartAuthBackend {
-  const issuer = process.env.SCHEMA_VIZ_OIDC_ISSUER?.trim()
-  const clientId = process.env.SCHEMA_VIZ_OIDC_CLIENT_ID?.trim()
-  return {
-    label: process.env.SCHEMA_VIZ_BACKEND_LABEL?.trim() || 'Schema Viz',
-    description:
-      process.env.SCHEMA_VIZ_BACKEND_DESCRIPTION?.trim() || undefined,
-    backendBaseUrl: normalizeBackendBaseUrl(),
-    basePath: process.env.SCHEMA_VIZ_BASE_PATH?.trim() || undefined,
-    oidc:
-      issuer && clientId
-        ? {
-            issuer: issuer.replace(/\/+$/g, ''),
-            clientId,
-            clientSecret: process.env.SCHEMA_VIZ_OIDC_CLIENT_SECRET?.trim(),
-            scope: process.env.SCHEMA_VIZ_OIDC_SCOPE?.trim() || DEFAULT_SCOPE,
-            providerLabel: process.env.SCHEMA_VIZ_OIDC_PROVIDER_LABEL?.trim(),
-          }
-        : undefined,
-  }
-}
-
-function publicSession(user: StartAuthUser | null): PublicStartAuthSession {
-  const backend = getStartAuthBackend()
+function publicSession(
+  user: StartAuthUser | null,
+  source: StartAuthSource,
+): PublicStartAuthSession {
   const mode = getAuthMode()
   return {
     mode,
     authRequired: mode === 'oidc',
     user,
+    source: toPublicSource(source),
+    sources: getStartAuthSources().map(toPublicSource),
     auth: {
-      providerLabel: backend.oidc?.providerLabel ?? backend.label,
+      providerLabel: source.oidc?.providerLabel ?? source.label,
       loginUrl: '/_schema-viz/auth/login',
       logoutUrl: '/_schema-viz/auth/logout',
     },
@@ -250,7 +270,7 @@ function getDjangoSessionLoginUrl(request: Request): string {
   const configured = process.env.SCHEMA_VIZ_DJANGO_LOGIN_URL?.trim()
   if (configured) return new URL(configured, request.url).toString()
 
-  const backend = getStartAuthBackend()
+  const backend = resolveRequestSource(request)
   const backendUrl = new URL(backend.backendBaseUrl, request.url)
   return new URL('/django/admin/login/', backendUrl.origin).toString()
 }
@@ -335,7 +355,8 @@ export async function invalidateAccessToken(sessionId: string): Promise<void> {
 async function refreshTokenRecord(
   record: StartAuthTokenRecord,
 ): Promise<StartAuthTokenRecord | null> {
-  const backend = getStartAuthBackend()
+  const backend =
+    findStartAuthSource(record.sourceId) ?? getDefaultStartAuthSource()
   if (!backend.oidc) return null
 
   try {
@@ -489,6 +510,7 @@ export async function handleStartAuthRequest(
     if (action === 'callback') return await handleCallback(request)
     if (action === 'logout') return await handleLogout(request)
     if (action === 'session') return await handleSession(request)
+    if (action === 'source') return handleSourceSwitch(request)
     return json({ error: 'Not found' }, { status: 404 })
   } catch (error) {
     if (error instanceof Response) return error
@@ -499,9 +521,33 @@ export async function handleStartAuthRequest(
   }
 }
 
+/** Source named by `?source=`, falling back to the one in the cookie. */
+function resolveRequestedSource(
+  request: Request,
+  url: URL,
+): StartAuthSource | null {
+  const requested = url.searchParams.get('source')
+  if (requested) return findStartAuthSource(requested)
+  return resolveRequestSource(request)
+}
+
+function handleSourceSwitch(request: Request): Response {
+  const url = new URL(request.url)
+  const source = findStartAuthSource(url.searchParams.get('source'))
+  if (!source) {
+    return json({ error: 'Unknown source.' }, { status: 400 })
+  }
+
+  const next = safeNext(request, url.searchParams.get('next'))
+  return redirect(next, [sourceCookie(source)])
+}
+
 async function handleLogin(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const backend = getStartAuthBackend()
+  const backend = resolveRequestedSource(request, url)
+  if (!backend) {
+    return json({ error: 'Unknown source.' }, { status: 400 })
+  }
   const next = safeNext(request, url.searchParams.get('next'))
   const mode = getAuthMode()
 
@@ -511,7 +557,10 @@ async function handleLogin(request: Request): Promise<Response> {
 
   if (mode === 'dev' && !backend.oidc) {
     const sessionId = randomBytes(24).toString('base64url')
-    return redirect(next, [await sealSessionCookie(sessionId)])
+    return redirect(next, [
+      sourceCookie(backend),
+      await sealSessionCookie(sessionId, backend),
+    ])
   }
 
   if (!backend.oidc) {
@@ -527,6 +576,7 @@ async function handleLogin(request: Request): Promise<Response> {
     state,
     codeVerifier,
     next,
+    sourceId: backend.id,
     createdAt: Date.now(),
   }
 
@@ -563,7 +613,12 @@ async function handleCallback(request: Request): Promise<Response> {
     ])
   }
 
-  const backend = getStartAuthBackend()
+  const backend = findStartAuthSource(tx.sourceId)
+  if (!backend) {
+    return json({ error: 'Unknown source.' }, { status: 400 }, [
+      clearCookie(TX_COOKIE),
+    ])
+  }
   if (!backend.oidc) {
     return json({ error: 'OIDC is not configured.' }, { status: 400 })
   }
@@ -618,6 +673,7 @@ async function handleCallback(request: Request): Promise<Response> {
   const now = Date.now()
   await getTokenStore().write({
     sessionId,
+    sourceId: backend.id,
     user,
     refreshToken: tokens.refresh_token ?? '',
     idToken: tokens.id_token,
@@ -632,7 +688,8 @@ async function handleCallback(request: Request): Promise<Response> {
 
   return redirect(tx.next || '/', [
     clearCookie(TX_COOKIE),
-    await sealSessionCookie(sessionId),
+    sourceCookie(backend),
+    await sealSessionCookie(sessionId, backend),
   ])
 }
 
@@ -674,9 +731,9 @@ async function loadUser(
 
 async function handleLogout(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const backend = getStartAuthBackend()
+  const backend = resolveRequestSource(request)
   const next = safeNext(request, url.searchParams.get('next'))
-  const session = await readSessionCookie(request)
+  const session = await readSessionCookie(request, backend)
   const tokenRecord = session
     ? await getTokenStore().read(session.sessionId)
     : null
@@ -684,7 +741,7 @@ async function handleLogout(request: Request): Promise<Response> {
     await getTokenStore().delete(session.sessionId)
   }
 
-  const clearedCookie = clearCookie(SESSION_COOKIE)
+  const clearedCookie = clearCookie(sessionCookieName(backend))
   if (backend.oidc && tokenRecord?.idToken) {
     const as = await discoverAuthServer(backend)
     if (as.end_session_endpoint) {
@@ -701,43 +758,59 @@ async function handleLogout(request: Request): Promise<Response> {
   return redirect(next, [clearedCookie])
 }
 
+/** A record only counts for the source its cookie belongs to. */
+function recordBelongsToSource(
+  record: StartAuthTokenRecord,
+  source: StartAuthSource,
+): boolean {
+  return !record.sourceId || record.sourceId === source.id
+}
+
 async function handleSession(request: Request): Promise<Response> {
   const mode = getAuthMode()
+  const source = resolveRequestSource(request)
   if (mode === 'dev') {
-    return json(publicSession(devUser()))
+    return json(publicSession(devUser(), source))
   }
   if (mode === 'session') {
-    return json(publicSession(null))
+    return json(publicSession(null, source))
   }
 
-  const session = await readSessionCookie(request)
-  const tokenRecord = session
+  const session = await readSessionCookie(request, source)
+  const storedRecord = session
     ? await getTokenStore().read(session.sessionId)
     : null
+  const tokenRecord =
+    storedRecord && recordBelongsToSource(storedRecord, source)
+      ? storedRecord
+      : null
   if (session && !tokenRecord) {
-    return json(publicSession(null), {}, [clearCookie(SESSION_COOKIE)])
+    return json(publicSession(null, source), {}, [
+      clearCookie(sessionCookieName(source)),
+    ])
   }
-  return json(publicSession(tokenRecord?.user ?? null))
+  return json(publicSession(tokenRecord?.user ?? null, source))
 }
 
 export async function authenticateBrowserRequest(
   request: Request,
 ): Promise<StartAuthContext | null> {
   const mode = getAuthMode()
+  const source = resolveRequestSource(request)
   if (mode === 'dev') {
-    return { kind: 'dev', user: devUser() }
+    return { kind: 'dev', user: devUser(), source }
   }
   if (mode === 'session') {
     return null
   }
 
-  const session = await readSessionCookie(request)
+  const session = await readSessionCookie(request, source)
   if (!session) {
     return null
   }
 
   const record = await getTokenStore().read(session.sessionId)
-  if (!record) {
+  if (!record || !recordBelongsToSource(record, source)) {
     const url = new URL(request.url)
     console.warn(
       `[startAuth] Auth failed for ${url.pathname} | session record missing`,
@@ -759,6 +832,7 @@ export async function authenticateBrowserRequest(
     sessionId: session.sessionId,
     user: record.user,
     accessToken,
+    source,
   }
 }
 
@@ -771,16 +845,24 @@ export async function proxySchemaVizRequest(
 
   const authMode = getAuthMode()
   const context = await authenticateBrowserRequest(request)
+  const source = context?.source ?? resolveRequestSource(request)
   if (!context && authMode === 'oidc') {
-    const staleSession = await readSessionCookie(request)
+    const staleSession = await readSessionCookie(request, source)
     return json(
       { detail: 'Authentication credentials were not provided.' },
       { status: 401 },
-      staleSession ? [clearCookie(SESSION_COOKIE)] : [],
+      staleSession ? [clearCookie(sessionCookieName(source))] : [],
     )
   }
 
-  const backend = getStartAuthBackend()
+  if (source.readOnly && !isProxyRequestAllowedOnReadOnlySource(request, operationPath)) {
+    return json(
+      { detail: `${source.label} is read-only. This request would change data.` },
+      { status: 403 },
+    )
+  }
+
+  const backend = source
   const targetUrl = new URL(
     `${backend.backendBaseUrl}${operationPath}${url.search}`,
     request.url,
@@ -844,6 +926,26 @@ function matchProxyPath(pathname: string): string | null {
   return null
 }
 
+const METHOD_OVERRIDE_HEADERS = [
+  'x-http-method-override',
+  'x-http-method',
+  'x-method-override',
+]
+
+/**
+ * A read-only source must not be reachable by tunnelling a write through a
+ * harmless-looking request, so method override headers are refused outright.
+ */
+function isProxyRequestAllowedOnReadOnlySource(
+  request: Request,
+  operationPath: string,
+): boolean {
+  if (METHOD_OVERRIDE_HEADERS.some((name) => request.headers.has(name))) {
+    return false
+  }
+  return isReadOnlyRequestAllowed(request.method, operationPath)
+}
+
 function buildProxyHeaders(input: Headers): Headers {
   const headers = new Headers()
   input.forEach((value, key) => {
@@ -879,6 +981,10 @@ export function __setStartAuthTestOverrides(overrides: {
 
 export async function __createStartAuthSessionCookieForTests(
   sessionId: string,
+  sourceId?: string,
 ): Promise<string> {
-  return sealSessionCookie(sessionId)
+  const source =
+    (sourceId ? findStartAuthSource(sourceId) : null) ??
+    getDefaultStartAuthSource()
+  return sealSessionCookie(sessionId, source)
 }

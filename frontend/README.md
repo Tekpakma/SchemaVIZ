@@ -23,6 +23,65 @@ Log in to Django at `http://127.0.0.1:8000/django/admin/login/`, then open the f
 
 If your Django login lives somewhere else, set `SCHEMA_VIZ_DJANGO_LOGIN_URL`.
 
+## Multiple Backend Sources
+
+By default the frontend talks to one backend, configured with
+`SCHEMA_VIZ_SERVER_BASE_URL` and the `SCHEMA_VIZ_OIDC_*` variables. To let users
+choose between several backends (for example to try new features against
+Stage Dev, QAS or a sandbox), set `SCHEMA_VIZ_SOURCES` to a JSON list. A picker
+then appears in the navbar.
+
+```json
+[
+  {
+    "id": "stagedev",
+    "label": "COSMOS Stage Dev",
+    "serverBaseUrl": "https://stagedev-cosmos.example/django/schema-viz",
+    "oidc": {
+      "issuer": "https://stagedev-cosmos.example/django/oauth",
+      "clientId": "draw",
+      "providerLabel": "Stage Dev"
+    }
+  },
+  {
+    "id": "prod",
+    "label": "COSMOS",
+    "description": "Production data",
+    "readOnly": true,
+    "serverBaseUrl": "https://cosmos.example/django/schema-viz",
+    "oidc": { "issuer": "https://cosmos.example/django/oauth", "clientId": "draw" }
+  }
+]
+```
+
+| Field | Notes |
+| --- | --- |
+| `id` | Required. 1-32 characters of `a-z`, `0-9`, `-`. Used in cookie names and URLs. |
+| `label`, `description` | Shown in the picker. |
+| `serverBaseUrl` | Django base URL of the backend (ends in `/schema-viz`). |
+| `oidc` | `issuer`, `clientId`, optional `clientSecret`, `scope`, `providerLabel`. |
+| `readOnly` | `true` blocks every request that could change data (see below). Default `false`. |
+
+- The first source is the default. Set `SCHEMA_VIZ_DEFAULT_SOURCE` to an `id` to change that.
+- Without `SCHEMA_VIZ_SOURCES` the single-backend variables are used and no picker is shown.
+- Every source has its own sign-in session, so switching does not sign the user out of the others.
+  The chosen source is remembered in the `sv_source` cookie and validated against the configured list on every request.
+- Each backend needs an OAuth2 application with the redirect URI `https://<this-host>/_schema-viz/auth/callback`.
+- `SCHEMA_VIZ_SOURCES` is read on the server only. The browser never sees issuers or client IDs.
+- MCP (`/mcp`) always uses the default source.
+
+### Read-only sources
+
+On a `readOnly` source the server proxy and the server-side AI tools only forward
+`GET`, `HEAD` and `OPTIONS` plus the POST endpoints that merely query data
+(`/query/*`, `/export/`, `/route/probe/`, `/template-compatibility/`,
+`/template-uniqueness/`, `/generation-runs/` and `/generation-runs/validate/`).
+Saving drawings, templates, preferences and similar writes answer `403`.
+Method override headers are refused. The allow-list is in `src/api/readOnly.ts`.
+
+This is enforced by the frontend server. For hard guarantees on production data also
+give the OAuth client used for that source a read-only scope or account in the backend.
+
 # Building For Production
 
 To build this application for production:

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   schemaVizGraphRetrieve,
@@ -6,6 +6,7 @@ import {
 } from '@/api/generated/schema-viz'
 import type { AiToolContext } from './context'
 import { getSchemaDigest, listModels } from './schemaTools'
+import { TEST_SOURCE } from '@/serverAuth/testing'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGraphRetrieve: vi.fn(),
@@ -23,6 +24,7 @@ const modelsListMock = vi.mocked(schemaVizModelsList)
 const context: AiToolContext = {
   auth: {
     kind: 'dev',
+    source: TEST_SOURCE,
     user: { sub: 'tester', name: 'Tester' },
     accessToken: 'test-token',
   },

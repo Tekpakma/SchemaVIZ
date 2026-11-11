@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   schemaVizGenerationRunsCreate,
@@ -13,6 +13,7 @@ import {
 import type { AiToolContext } from './context'
 import { drawDiagram } from './drawTools'
 import { renderGenerationSvg } from '../preview/renderGenerationSvg.server'
+import { TEST_SOURCE } from '@/serverAuth/testing'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGenerationRunsCreate: vi.fn(),
@@ -51,6 +52,7 @@ function ok(data: unknown, status = 200): never {
 const context: AiToolContext = {
   auth: {
     kind: 'dev',
+    source: TEST_SOURCE,
     user: { sub: 'tester', name: 'Tester' },
     accessToken: 'test-token',
   },

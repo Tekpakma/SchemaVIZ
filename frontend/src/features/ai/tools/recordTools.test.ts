@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   schemaVizQueryRecordCreate,
@@ -7,6 +7,7 @@ import {
 
 import type { AiToolContext } from './context'
 import { findRecords, getRecord } from './recordTools'
+import { TEST_SOURCE } from '@/serverAuth/testing'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizQueryRecordCreate: vi.fn(),
@@ -23,6 +24,7 @@ const recordMock = vi.mocked(schemaVizQueryRecordCreate)
 const context: AiToolContext = {
   auth: {
     kind: 'dev',
+    source: TEST_SOURCE,
     user: { sub: 'tester', name: 'Tester' },
     accessToken: 'test-token',
   },

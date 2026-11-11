@@ -1,5 +1,4 @@
 import type { StartAuthContext } from '@/serverAuth/startAuth'
-import { getStartAuthBackend } from '@/serverAuth/startAuth'
 import type { SchemaVizFetchOptions } from '@/api/fetch'
 import { getForwardedBackendHeaders } from '@/features/canvas/layout.server'
 
@@ -20,7 +19,8 @@ export function backendRequestInit(
 ): SchemaVizFetchOptions {
   return {
     headers: getForwardedBackendHeaders(context.auth),
-    baseUrl: getStartAuthBackend().backendBaseUrl,
+    baseUrl: context.auth.source.backendBaseUrl,
+    readOnly: context.auth.source.readOnly,
   }
 }
 

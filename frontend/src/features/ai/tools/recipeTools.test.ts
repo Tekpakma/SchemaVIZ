@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   schemaVizGenerationRunsCreate,
@@ -17,6 +17,7 @@ import {
   specToRecipe,
   validateDiagram,
 } from './recipeTools'
+import { TEST_SOURCE } from '@/serverAuth/testing'
 
 vi.mock('@/api/generated/schema-viz', () => ({
   schemaVizGenerationRunsCreate: vi.fn(),
@@ -69,6 +70,7 @@ function templateResponse(
 const context: AiToolContext = {
   auth: {
     kind: 'dev',
+    source: TEST_SOURCE,
     user: { sub: 'tester', name: 'Tester' },
     accessToken: 'test-token',
   },

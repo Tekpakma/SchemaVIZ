@@ -13,6 +13,7 @@ function createSession(
     mode: 'oidc',
     authRequired: true,
     user: null,
+    sources: [],
     auth: {
       providerLabel: 'Local Django OAuth',
       loginUrl: '/_schema-viz/auth/login',

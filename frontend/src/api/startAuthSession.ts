@@ -1,6 +1,15 @@
 import { queryOptions } from '@tanstack/react-query'
 import * as z from 'zod'
 
+const StartAuthSourceSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  readOnly: z.boolean(),
+})
+
+export type StartAuthSource = z.infer<typeof StartAuthSourceSchema>
+
 export const StartAuthSessionSchema = z.object({
   mode: z.enum(['dev', 'oidc', 'session']),
   authRequired: z.boolean(),
@@ -12,6 +21,9 @@ export const StartAuthSessionSchema = z.object({
     })
     .passthrough()
     .nullable(),
+  // Older servers do not send sources; the UI then shows no picker.
+  source: StartAuthSourceSchema.optional(),
+  sources: z.array(StartAuthSourceSchema).default([]),
   auth: z.object({
     providerLabel: z.string(),
     loginUrl: z.string(),

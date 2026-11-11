@@ -26,6 +26,7 @@ import {
   authenticateBrowserRequest,
   getAuthMode,
   requestOrigin,
+  resolveRequestSource,
 } from '@/serverAuth/startAuth'
 import type { StartAuthContext } from '@/serverAuth/startAuth'
 
@@ -34,9 +35,12 @@ import type { StartAuthContext } from '@/serverAuth/startAuth'
 const MAX_TOOL_ROUNDS = 12
 
 /** Django session mode carries no token; the cookie travels via forwarded headers. */
-const SESSION_MODE_USER: StartAuthContext = {
-  kind: 'browser',
-  user: { sub: 'django-session', name: 'Session user' },
+function sessionModeUser(request: Request): StartAuthContext {
+  return {
+    kind: 'browser',
+    user: { sub: 'django-session', name: 'Session user' },
+    source: resolveRequestSource(request),
+  }
 }
 
 function jsonError(status: number, message: string) {
@@ -69,7 +73,7 @@ export const Route = createFileRoute('/api/ai/chat')({
       POST: async ({ request }) => {
         const auth =
           (await authenticateBrowserRequest(request)) ??
-          (getAuthMode() === 'session' ? SESSION_MODE_USER : null)
+          (getAuthMode() === 'session' ? sessionModeUser(request) : null)
         if (!auth) return jsonError(401, 'Authentication required')
 
         let config: ResolvedAiConfig

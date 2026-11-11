@@ -7,6 +7,7 @@ import { NavbarSearch } from './NavbarSearch'
 // TODO: uncomment when Landscapes / Shared / Drafts tabs are routed
 // import { NavigationTabs } from './NavigationTabs'
 import { Settings } from './Settings'
+import { SourcePicker } from './SourcePicker'
 
 export function Navbar() {
   const [commandCenterOpen, setCommandCenterOpen] = useState(false)
@@ -33,6 +34,7 @@ export function Navbar() {
           <span className="absolute right-[7px] top-1.5 size-1.5 rounded-full border-[1.5px] border-background bg-brand" />
         </Button> */}
 
+          <SourcePicker />
           <Settings />
 
           {/* TODO: uncomment when "New" action is wired */}

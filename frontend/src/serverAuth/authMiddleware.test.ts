@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+﻿import { describe, expect, it, vi } from 'vitest'
 
 import { authFunctionMiddleware } from './authMiddleware'
 import type { StartAuthContext } from './startAuth'
+import { TEST_SOURCE } from './testing'
 
 type AuthFunctionServerOptions = Parameters<
   NonNullable<typeof authFunctionMiddleware.options.server>
@@ -38,6 +39,7 @@ describe('authFunctionMiddleware', () => {
     const auth: StartAuthContext = {
       accessToken: 'access-token',
       kind: 'browser',
+      source: TEST_SOURCE,
       sessionId: 'session-1',
       user: {
         name: 'Test User',

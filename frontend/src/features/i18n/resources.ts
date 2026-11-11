@@ -15,6 +15,14 @@ export const resources = {
       preferences: {
         label: 'Einstellungen',
       },
+      source: {
+        active: 'Aktiv',
+        label: 'Datenquelle',
+        readOnly: 'Nur lesen',
+        readOnlyBanner:
+          'Diese Datenquelle ist schreibgeschützt. Speichern und Ändern sind deaktiviert.',
+        switch: 'Datenquelle wechseln',
+      },
       about: {
         app: 'App',
         backend: 'Backend',
@@ -679,6 +687,14 @@ export const resources = {
       },
       preferences: {
         label: 'Preferences',
+      },
+      source: {
+        active: 'Active',
+        label: 'Data source',
+        readOnly: 'Read-only',
+        readOnlyBanner:
+          'This data source is read-only. Saving and editing are disabled.',
+        switch: 'Switch data source',
       },
       about: {
         app: 'App',
